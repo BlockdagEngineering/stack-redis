@@ -761,6 +761,34 @@ def effective_connected_miner_count(
     )
 
 
+def pool_metrics_accepted_block_submissions(pool_metrics: Mapping[str, Any]) -> float:
+    block_outcomes = pool_metrics.get("block_submit_outcomes") if isinstance(pool_metrics, Mapping) else {}
+    if not isinstance(block_outcomes, Mapping):
+        return 0.0
+    return sum(
+        _float_metric(value)
+        for key, value in block_outcomes.items()
+        if str(key).startswith("accepted:")
+    )
+
+
+def selected_backend_mining_safe(selected_source_health: Mapping[str, Any] | None) -> bool:
+    if not isinstance(selected_source_health, Mapping) or not selected_source_health:
+        return False
+    if selected_source_health.get("healthy") is False:
+        return False
+    if selected_source_health.get("node_mineable") is not True:
+        return False
+    if selected_source_health.get("node_submit_ready") is not True:
+        return False
+    if selected_source_health.get("node_p2p_mining_fresh") is not True:
+        return False
+    peer_lead = safe_float(selected_source_health.get("node_p2p_best_peer_lead_blocks"), 0.0)
+    if peer_lead is not None and peer_lead > 10:
+        return False
+    return True
+
+
 def miner_failures_block_stack(
     miner_failures: list[str],
     connected_miners: int,
@@ -3875,7 +3903,7 @@ def collect_pool_prometheus_metrics(containers: dict[str, dict[str, Any]]) -> di
                 "pool_rpc_backend_template_age_seconds",
                 "pool_rpc_backend_ws_connected",
             }:
-                backend = labels.get("backend")
+                backend = labels.get("backend") or labels.get("node")
                 if not backend:
                     continue
                 row = source_backend_health.setdefault(backend, {})
@@ -3892,7 +3920,7 @@ def collect_pool_prometheus_metrics(containers: dict[str, dict[str, Any]]) -> di
                 elif metric_name == "pool_rpc_backend_ws_connected":
                     row["ws_connected"] = value > 0
             elif metric_name.startswith("pool_rpc_backend_node_health_"):
-                backend = labels.get("backend")
+                backend = labels.get("backend") or labels.get("node")
                 if not backend:
                     continue
                 row = source_backend_health.setdefault(backend, {})
@@ -5228,8 +5256,10 @@ def build_catchup_policy(
     peer_catchup = lag > 0
     io_pressure_reasons = catchup_io_pressure_reasons(host_pressure)
     backend_unready_reasons = selected_backend_unready_reasons(selected_source_health or {})
-    mining_ready_for_policy = bool(mining_ready) if mining_ready is not None else not bool(
-        backend_unready_reasons
+    mining_ready_for_policy = (
+        bool(mining_ready)
+        if mining_ready is not None
+        else bool(selected_source_health and not backend_unready_reasons)
     )
     backend_unready_under_pressure = bool(
         io_pressure_reasons
@@ -5242,7 +5272,11 @@ def build_catchup_policy(
         and not mining_ready_for_policy
         and ((peer_catchup and lag >= CATCHUP_IO_PRESSURE_MIN_LAG_BLOCKS) or backend_unready_under_pressure)
     )
-    lag_threshold_active = bool(lag > CATCHUP_PAUSE_THRESHOLD_BLOCKS and (status != "synced" or not mining_ready_for_policy))
+    lag_threshold_active = bool(
+        lag > CATCHUP_PAUSE_THRESHOLD_BLOCKS
+        and status != "synced"
+        and not mining_ready_for_policy
+    )
     active = bool(CATCHUP_PAUSE_ENABLED and (io_pressure_active or lag_threshold_active))
     pool_running = bool((containers.get(POOL_CONTAINER) or {}).get("running")) if isinstance(containers, Mapping) else False
     trigger = ("io_pressure" if io_pressure_active else ("lag_threshold" if lag_threshold_active else "")) if active else ""
@@ -5673,28 +5707,7 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
     running_pool_containers = [name for name in POOL_CONTAINERS if containers.get(name, {}).get("running")]
     pool_log = docker_logs_many(running_pool_containers, lines=180) if include_logs and running_pool_containers else ""
     pool = parse_pool_log(pool_log)
-    pool_metrics = collect_pool_prometheus_metrics(containers) if include_logs else {
-        "generated_at": now_iso(),
-        "status": "skipped",
-        "error": "logs excluded from status collection",
-        "containers": {},
-        "active_connections": None,
-        "selected_backend": "",
-        "block_submit_outcomes": {},
-        "block_submit_backend_outcomes": {},
-        "blocks": {},
-        "blocks_rejected_by_node": {},
-        "shares_accepted_total": 0.0,
-        "shares_rejected_by_reason": {},
-        "share_processing": {},
-        "loss_ledger": {},
-        "submit_stall_recoveries": {},
-        "submit_stall_recoveries_total": 0.0,
-        "source_job_health": {},
-        "source_backend_health": {},
-        "selected_backend_source_health": {},
-        "template_conversion_stall": {},
-    }
+    pool_metrics = collect_pool_prometheus_metrics(containers)
     pool["metrics"] = pool_metrics
     pool["selected_backend"] = pool_metrics.get("selected_backend") or ""
     pool["metrics_active_connections"] = pool_metrics.get("active_connections")
@@ -5901,10 +5914,22 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
             ("last_valid_share_age_seconds", 60),
         )
     )
+    selected_source_mining_safe = selected_backend_mining_safe(selected_source_health)
+    metrics_accepted_block_submissions = pool_metrics_accepted_block_submissions(pool_metrics)
+    metrics_accepted_shares = _float_metric(pool_metrics.get("shares_accepted_total"))
+    if connected_miners > 0 and metrics_accepted_shares > 0:
+        pool_has_recent_share_activity = True
     pool_has_recent_paid_work = bool(
-        safe_int(pool.get("block_submit_success_count"), 0) > 0
-        and pool.get("last_block_submit_age_seconds") is not None
-        and int(pool.get("last_block_submit_age_seconds") or 0) <= 60
+        (
+            safe_int(pool.get("block_submit_success_count"), 0) > 0
+            and pool.get("last_block_submit_age_seconds") is not None
+            and int(pool.get("last_block_submit_age_seconds") or 0) <= 60
+        )
+        or (
+            connected_miners > 0
+            and selected_source_mining_safe
+            and metrics_accepted_block_submissions > 0
+        )
     )
     pool_initial_download_transient = bool(
         pool.get("initial_download")
@@ -5954,6 +5979,8 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
     sync_health["pool_has_recent_share_activity"] = pool_has_recent_share_activity
     sync_health["pool_has_recent_paid_work"] = pool_has_recent_paid_work
     sync_health["pool_has_recent_mining"] = pool_has_recent_paid_work
+    sync_health["pool_metrics_accepted_block_submissions"] = _prometheus_json_number(metrics_accepted_block_submissions)
+    sync_health["selected_backend_mining_safe"] = selected_source_mining_safe
     if connected_miners > 0 and pool_has_recent_paid_work and sync_warnings:
         advisory_sync_warnings = [
             item for item in sync_warnings
@@ -6221,7 +6248,7 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
         if active_import_nodes:
             sync_health["node_importing_nodes"] = active_import_nodes
     catchup_mining_ready = bool(
-        sync_progress.get("status") == "synced"
+        (sync_progress.get("status") == "synced" or selected_source_mining_safe or pool_has_recent_paid_work)
         and not selected_source_unready_reasons
         and source_job_health_ok is not False
         and not pool.get("initial_download")
@@ -7666,6 +7693,10 @@ def node_sync_progress(source: str, url: str, timeout: float = NODE_CHAIN_RPC_TI
         if evm_lag.get("chain_syncing") is True:
             sync_current = safe_int(evm_lag.get("sync_current_block"), sync_current)
             sync_highest = safe_int(evm_lag.get("sync_highest_block"), sync_highest)
+        if native_template_health_is_mining_safe(template_health) and not (
+            evm_lag.get("public_chain_diverged") or evm_lag.get("solo_mining_suspected")
+        ):
+            return native_template_health_synced_progress(source, template_health, current, chain, evm_lag)
         if chain.get("chain_syncing") is True or evm_lag.get("chain_syncing") is True:
             evm_block = safe_int(evm_lag.get("evm_block_count"), None)
             progress_current = sync_current if sync_current is not None else evm_block if evm_block is not None else current
@@ -7694,8 +7725,6 @@ def node_sync_progress(source: str, url: str, timeout: float = NODE_CHAIN_RPC_TI
                 **chain,
                 **evm_lag,
             }
-        if native_template_health_is_mining_safe(template_health):
-            return native_template_health_synced_progress(source, template_health, current, chain, evm_lag)
         native_template_sync = native_template_health_sync_progress(source, template_health, current)
         if native_template_sync:
             native_template_sync.update(chain)

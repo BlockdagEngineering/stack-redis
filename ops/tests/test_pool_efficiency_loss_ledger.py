@@ -208,6 +208,30 @@ pool_shares_rejected_total{pool_id="0",reason="invalidated_job"} 15
         self.assertEqual(payload["loss_ledger"]["severity"], "critical")
         self.assertEqual(payload["loss_ledger"]["share_outcomes"]["accepted_ratio_percent"], 25.0)
 
+    def test_pool_metrics_accept_node_label_for_backend_health(self) -> None:
+        metrics = """
+pool_active_connections 3
+pool_rpc_backend_selected{node="node",pool_id="0"} 1
+pool_rpc_backend_healthy{node="node",pool_id="0"} 1
+pool_rpc_backend_node_health_mineable{node="node",pool_id="0"} 1
+pool_rpc_backend_node_health_submit_ready{node="node",pool_id="0"} 1
+pool_rpc_backend_node_health_p2p_mining_fresh{node="node",pool_id="0"} 1
+pool_rpc_backend_node_health_p2p_best_peer_lead_blocks{node="node",pool_id="0"} 0
+pool_job_health_ok{pool_id="0"} 1
+pool_job_health_ready_miners{pool_id="0"} 3
+pool_block_submit_outcomes_total{outcome="accepted",pool_id="0",reason="ok"} 4
+"""
+        pool_ops.fetch_text_url = lambda *_args, **_kwargs: metrics
+
+        payload = pool_ops.collect_pool_prometheus_metrics(
+            {"asic-pool": {"running": True, "network_ips": ["10.0.0.2"]}}
+        )
+
+        self.assertEqual(payload["selected_backend"], "node")
+        self.assertTrue(payload["selected_backend_source_health"]["healthy"])
+        self.assertTrue(payload["selected_backend_source_health"]["node_mineable"])
+        self.assertTrue(pool_ops.selected_backend_mining_safe(payload["selected_backend_source_health"]))
+
 
 if __name__ == "__main__":
     unittest.main()

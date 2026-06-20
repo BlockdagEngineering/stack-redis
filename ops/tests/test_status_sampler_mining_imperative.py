@@ -373,7 +373,7 @@ class StatusSamplerMiningImperativeTests(unittest.TestCase):
         self.assertFalse(self.pool_compose_start_seen(commands))
         self.assertEqual(repair["actions"], [])
 
-    def test_catchup_policy_pauses_on_syncing_even_when_mining_ready(self) -> None:
+    def test_catchup_policy_does_not_pause_on_syncing_when_mining_ready(self) -> None:
         payload = self.stopped_pool_payload(sync_status="syncing", remaining_blocks=5)
         payload["overall"] = "ok"
         payload["sync_warnings"] = []
@@ -383,9 +383,9 @@ class StatusSamplerMiningImperativeTests(unittest.TestCase):
 
         policy = status_sampler.catchup_policy_from_payload(payload)
 
-        self.assertTrue(policy["active"])
-        self.assertTrue(policy["syncing_active"])
-        self.assertEqual(policy["trigger"], "node_syncing")
+        self.assertFalse(policy["active"])
+        self.assertFalse(policy["syncing_active"])
+        self.assertEqual(policy["trigger"], "")
         self.assertEqual(policy["lag_blocks"], 5)
 
     def test_syncing_node_leaves_running_pool_up_below_lag_threshold(self) -> None:
@@ -415,10 +415,10 @@ class StatusSamplerMiningImperativeTests(unittest.TestCase):
             status_sampler.PROJECT_ROOT = pathlib.Path(tmp)
             repair = status_sampler.mining_imperative_repair(payload)
 
-        self.assertIn(f"template_pause:{status_sampler.POOL_CONTAINER}:catchup_pause", repair["actions"])
+        self.assertNotIn(f"template_pause:{status_sampler.POOL_CONTAINER}:catchup_pause", repair["actions"])
         self.assertNotIn(f"stopped_container:{status_sampler.POOL_CONTAINER}:catchup_pause", repair["actions"])
-        self.assertIn("applied_catchup_node_runtime", repair["actions"])
-        self.assertEqual(env_updates["BDAG_ENABLE_NODE_MINING"], "0")
+        self.assertNotIn("applied_catchup_node_runtime", repair["actions"])
+        self.assertNotIn("BDAG_ENABLE_NODE_MINING", env_updates)
         self.assertFalse(any(command[-2:] == ["stop", status_sampler.POOL_CONTAINER] for command in commands))
 
     def test_catchup_pause_leaves_pool_running_and_removes_node_mining_churn(self) -> None:

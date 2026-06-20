@@ -567,12 +567,14 @@ def catchup_policy_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
     lag = catchup_lag_blocks(payload)
     sync = dict_value(payload.get("sync_progress"))
     sync_status = str(sync.get("status") or "").strip().lower()
+    mining_ready = bool(policy.get("mining_ready", payload.get("can_mine") is True))
     syncing_active = bool(
         policy.get("syncing_active")
         or (
             CATCHUP_PAUSE_ON_SYNCING
             and sync_status in {"syncing", "catchup_pause"}
             and lag > 0
+            and not mining_ready
         )
     )
     io_pressure_reasons = policy.get("io_pressure_reasons")
@@ -580,7 +582,6 @@ def catchup_policy_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
         io_pressure_reasons = catchup_io_pressure_reasons(payload)
     io_pressure_enabled = bool(policy.get("io_pressure_pause_enabled", CATCHUP_IO_PRESSURE_PAUSE_ENABLED))
     io_min_lag = safe_int(policy.get("io_pressure_min_lag_blocks"), CATCHUP_IO_PRESSURE_MIN_LAG_BLOCKS)
-    mining_ready = bool(policy.get("mining_ready", payload.get("can_mine") is True))
     backend_unready_under_pressure = bool(
         policy.get("backend_unready_under_pressure")
         or (io_pressure_reasons and not mining_ready and payload.get("can_mine") is False)
@@ -591,7 +592,11 @@ def catchup_policy_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
         and not mining_ready
         and (lag >= io_min_lag or backend_unready_under_pressure)
     )
-    lag_threshold_active = bool(lag > threshold and (not chain_ready_for_mining(payload) or not mining_ready))
+    lag_threshold_active = bool(
+        lag > threshold
+        and not mining_ready
+        and not chain_ready_for_mining(payload)
+    )
     active = bool(policy.get("active")) if "active" in policy else False
     if not active:
         active = bool(CATCHUP_PAUSE_ENABLED and (syncing_active or io_pressure_active or lag_threshold_active))
