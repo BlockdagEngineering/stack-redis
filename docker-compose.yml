@@ -208,7 +208,7 @@ services:
       BDAG_ASIC_LAN_CIDRS: ${BDAG_ASIC_LAN_CIDRS:-}
       POOL_ASIC_MAC_OVERRIDES: ${POOL_ASIC_MAC_OVERRIDES:-}
       POOL_ASIC_MAC_ALLOWLIST: ${POOL_ASIC_MAC_ALLOWLIST:-}
-      WALLET_RPC_URL:     ${WALLET_RPC_URL:-}
+      WALLET_RPC_URL:     ${WALLET_RPC_URL:-http://127.0.0.1:${EVM_HTTP_PORT:-18545}}
       POOL_PRIVATE_KEY:   ${POOL_PRIVATE_KEY:-}
       POOL_COINBASE_ADDRESS: ${POOL_COINBASE_ADDRESS:-}
       MINING_POOL_ADDRESS: ${MINING_POOL_ADDRESS:?set MINING_POOL_ADDRESS to a non-zero payout address}
@@ -235,7 +235,7 @@ services:
       target: watchdog
     restart: unless-stopped
     logging: *mining-logging
-    user: "1001:969"
+    user: "${BDAG_OPS_UID:-1000}:${BDAG_OPS_GID:-1000}"
     group_add:
       - "${BDAG_DOCKER_SOCKET_GID:-0}"
     tmpfs:
@@ -282,7 +282,7 @@ services:
       target: sentinel
     restart: unless-stopped
     logging: *mining-logging
-    user: "1001:969"
+    user: "${BDAG_OPS_UID:-1000}:${BDAG_OPS_GID:-1000}"
     group_add:
       - "${BDAG_DOCKER_SOCKET_GID:-0}"
     tmpfs:
