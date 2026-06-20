@@ -44,6 +44,41 @@ class OptimizationMeasurementTests(unittest.TestCase):
         self.assertEqual(sample["adaptive_workers"]["global_rpc"], 6)
         self.assertEqual(sample["dashboard_latency_ms"], 3.1)
 
+    def test_pool_metrics_parser_extracts_mining_quality_fields(self) -> None:
+        metrics = measurement.parse_prometheus_metrics(
+            """
+pool_active_connections{pool_id="0"} 2
+pool_job_health_ready_miners{pool_id="0"} 2
+pool_block_submit_outcomes_total{outcome="accepted",pool_id="0",reason="ok"} 38
+pool_block_submit_outcomes_total{outcome="rejected",pool_id="0",reason="tip-overdue"} 1
+pool_block_submit_outcomes_total{outcome="rejected-local",pool_id="0",reason="stale-parent"} 2
+pool_blocks_found_total{pool_id="0"} 41
+pool_shares_accepted_total{pool_id="0"} 156
+pool_shares_rejected_total{pool_id="0",reason="invalidated_job"} 38
+pool_rpc_backend_node_health_mineable{node="node",pool_id="0"} 1
+pool_rpc_backend_node_health_submit_ready{node="node",pool_id="0"} 1
+pool_rpc_backend_node_health_p2p_mining_fresh{node="node",pool_id="0"} 1
+pool_rpc_backend_node_health_p2p_fresh_consensus_peer_count{node="node",pool_id="0"} 4
+pool_template_conversion_stall_failure_ratio{pool_id="0"} 7.5
+pool_template_conversion_stall_window_candidates{kind="accepted",pool_id="0"} 38
+pool_template_conversion_stall_window_candidates{kind="failed",pool_id="0"} 3
+pool_template_conversion_stall_window_candidates{kind="total",pool_id="0"} 41
+"""
+        )
+
+        sample = measurement.flatten_pool_metrics(metrics, latency_ms=2.5)
+
+        self.assertEqual(sample["pool_active_connections"], 2)
+        self.assertEqual(sample["pool_job_health_ready_miners"], 2)
+        self.assertEqual(sample["pool_block_submit_accepted_total"], 38)
+        self.assertEqual(sample["pool_block_submit_rejected_total"], 3)
+        self.assertEqual(sample["pool_backend_mineable"], 1)
+        self.assertEqual(sample["pool_backend_submit_ready"], 1)
+        self.assertEqual(sample["pool_backend_p2p_mining_fresh"], 1)
+        self.assertEqual(sample["pool_backend_p2p_fresh_consensus_peer_count"], 4)
+        self.assertEqual(sample["pool_template_conversion_failure_ratio"], 7.5)
+        self.assertEqual(sample["pool_template_conversion_window_total"], 41)
+
     def test_summarize_samples_reports_block_rate_and_worker_ranges(self) -> None:
         samples = [
             {
@@ -62,6 +97,16 @@ class OptimizationMeasurementTests(unittest.TestCase):
                 "iowait_percent": 1.0,
                 "adaptive_workers": {"global_rpc": 6},
                 "host_profile": {"profile": "pi5", "os": "linux", "arch": "arm64"},
+                "pool_active_connections": 2,
+                "pool_job_health_ready_miners": 2,
+                "pool_backend_p2p_mining_fresh": 1,
+                "pool_backend_p2p_fresh_consensus_peer_count": 4,
+                "pool_block_submit_accepted_total": 10,
+                "pool_block_submit_rejected_total": 3,
+                "pool_blocks_found_total": 13,
+                "pool_shares_accepted_total": 100,
+                "pool_shares_rejected_total": 10,
+                "pool_template_conversion_failure_ratio": 7.5,
             },
             {
                 "sampled_at": "2026-05-26T00:00:10+00:00",
@@ -79,6 +124,16 @@ class OptimizationMeasurementTests(unittest.TestCase):
                 "iowait_percent": 2.0,
                 "adaptive_workers": {"global_rpc": 3},
                 "host_profile": {"profile": "pi5", "os": "linux", "arch": "arm64"},
+                "pool_active_connections": 2,
+                "pool_job_health_ready_miners": 1,
+                "pool_backend_p2p_mining_fresh": 1,
+                "pool_backend_p2p_fresh_consensus_peer_count": 3,
+                "pool_block_submit_accepted_total": 18,
+                "pool_block_submit_rejected_total": 4,
+                "pool_blocks_found_total": 22,
+                "pool_shares_accepted_total": 140,
+                "pool_shares_rejected_total": 17,
+                "pool_template_conversion_failure_ratio": 9.5,
             },
         ]
 
@@ -89,6 +144,14 @@ class OptimizationMeasurementTests(unittest.TestCase):
         self.assertEqual(summary["blocks_per_second"], 2.0)
         self.assertEqual(summary["chain_rpc_latency_ms_p95"], 7.0)
         self.assertEqual(summary["adaptive_worker_ranges"]["global_rpc"], {"min": 3, "max": 6})
+        self.assertEqual(summary["pool_block_submit_accepted_delta"], 8)
+        self.assertEqual(summary["pool_block_submit_rejected_delta"], 1)
+        self.assertEqual(summary["pool_blocks_found_delta"], 9)
+        self.assertEqual(summary["pool_shares_accepted_delta"], 40)
+        self.assertEqual(summary["pool_shares_rejected_delta"], 7)
+        self.assertEqual(summary["pool_ready_miners_min"], 1)
+        self.assertEqual(summary["pool_fresh_consensus_peers_min"], 3)
+        self.assertEqual(summary["pool_template_conversion_failure_ratio_max"], 9.5)
 
 
 if __name__ == "__main__":

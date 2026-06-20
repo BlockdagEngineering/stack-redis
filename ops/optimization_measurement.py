@@ -5,12 +5,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import time
 import urllib.request
 from pathlib import Path
 from typing import Any
 
 from pool_ops import RUNTIME_DIR, collect_status_cached, host_runtime_profile, now_iso, seconds_since_epoch
+
+DEFAULT_POOL_METRICS_URL = "http://127.0.0.1:9090/metrics"
+METRIC_RE = re.compile(r"^([a-zA-Z_:][a-zA-Z0-9_:]*)(?:\{([^}]*)\})?\s+([-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)$")
+LABEL_RE = re.compile(r'([a-zA-Z_][a-zA-Z0-9_]*)="((?:[^"\\]|\\.)*)"')
 
 
 def percentile(values: list[float], pct: float) -> float | None:
@@ -37,7 +42,102 @@ def fetch_status_url(url: str, timeout: float) -> tuple[dict[str, Any], float]:
     return payload if isinstance(payload, dict) else {}, round((time.monotonic() - started) * 1000, 3)
 
 
-def collect_status_sample(status_url: str | None = None, timeout: float = 8.0) -> dict[str, Any]:
+def fetch_text_url(url: str, timeout: float) -> tuple[str, float]:
+    started = time.monotonic()
+    with urllib.request.urlopen(url, timeout=timeout) as response:
+        return response.read().decode("utf-8", "replace"), round((time.monotonic() - started) * 1000, 3)
+
+
+def parse_prometheus_metrics(text: str) -> dict[tuple[str, tuple[tuple[str, str], ...]], float]:
+    metrics: dict[tuple[str, tuple[tuple[str, str], ...]], float] = {}
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        match = METRIC_RE.match(line)
+        if not match:
+            continue
+        name, raw_labels, raw_value = match.groups()
+        labels = tuple(sorted((item.group(1), bytes(item.group(2), "utf-8").decode("unicode_escape")) for item in LABEL_RE.finditer(raw_labels or "")))
+        metrics[(name, labels)] = float(raw_value)
+    return metrics
+
+
+def metric_labels_match(labels: tuple[tuple[str, str], ...], wanted: dict[str, str]) -> bool:
+    found = dict(labels)
+    return all(found.get(key) == value for key, value in wanted.items())
+
+
+def metric_sum(metrics: dict[tuple[str, tuple[tuple[str, str], ...]], float], name: str, labels: dict[str, str] | None = None) -> float | None:
+    values = [
+        value
+        for (metric_name, metric_labels), value in metrics.items()
+        if metric_name == name and (not labels or metric_labels_match(metric_labels, labels))
+    ]
+    if not values:
+        return None
+    return round(sum(values), 6)
+
+
+def metric_max(metrics: dict[tuple[str, tuple[tuple[str, str], ...]], float], name: str) -> float | None:
+    values = [value for (metric_name, _), value in metrics.items() if metric_name == name]
+    if not values:
+        return None
+    return round(max(values), 6)
+
+
+def flatten_pool_metrics(metrics: dict[tuple[str, tuple[tuple[str, str], ...]], float], latency_ms: float | None = None, error: str | None = None) -> dict[str, Any]:
+    block_rejected = 0.0
+    block_rejected_seen = False
+    for (name, labels), value in metrics.items():
+        if name != "pool_block_submit_outcomes_total":
+            continue
+        label_map = dict(labels)
+        if label_map.get("outcome") != "accepted":
+            block_rejected += value
+            block_rejected_seen = True
+
+    return {
+        "pool_metrics_latency_ms": latency_ms,
+        "pool_metrics_error": error,
+        "pool_active_connections": metric_sum(metrics, "pool_active_connections"),
+        "pool_job_health_ok": metric_max(metrics, "pool_job_health_ok"),
+        "pool_job_health_authorized_miners": metric_sum(metrics, "pool_job_health_authorized_miners"),
+        "pool_job_health_ready_miners": metric_sum(metrics, "pool_job_health_ready_miners"),
+        "pool_blocks_found_total": metric_sum(metrics, "pool_blocks_found_total"),
+        "pool_block_submit_accepted_total": metric_sum(metrics, "pool_block_submit_outcomes_total", {"outcome": "accepted"}),
+        "pool_block_submit_rejected_total": round(block_rejected, 6) if block_rejected_seen else None,
+        "pool_shares_accepted_total": metric_sum(metrics, "pool_shares_accepted_total"),
+        "pool_shares_rejected_total": metric_sum(metrics, "pool_shares_rejected_total"),
+        "pool_backend_mineable": metric_max(metrics, "pool_rpc_backend_node_health_mineable"),
+        "pool_backend_submit_ready": metric_max(metrics, "pool_rpc_backend_node_health_submit_ready"),
+        "pool_backend_p2p_mining_fresh": metric_max(metrics, "pool_rpc_backend_node_health_p2p_mining_fresh"),
+        "pool_backend_p2p_consensus_peer_count": metric_max(metrics, "pool_rpc_backend_node_health_p2p_consensus_peer_count"),
+        "pool_backend_p2p_fresh_consensus_peer_count": metric_max(metrics, "pool_rpc_backend_node_health_p2p_fresh_consensus_peer_count"),
+        "pool_backend_p2p_best_peer_lead_blocks": metric_max(metrics, "pool_rpc_backend_node_health_p2p_best_peer_lead_blocks"),
+        "pool_backend_p2p_best_peer_graph_state_age_seconds": metric_max(metrics, "pool_rpc_backend_node_health_p2p_best_peer_graph_state_age_seconds"),
+        "pool_template_conversion_failure_ratio": metric_max(metrics, "pool_template_conversion_stall_failure_ratio"),
+        "pool_template_conversion_window_total": metric_sum(metrics, "pool_template_conversion_stall_window_candidates", {"kind": "total"}),
+        "pool_template_conversion_window_failed": metric_sum(metrics, "pool_template_conversion_stall_window_candidates", {"kind": "failed"}),
+        "pool_template_conversion_window_accepted": metric_sum(metrics, "pool_template_conversion_stall_window_candidates", {"kind": "accepted"}),
+    }
+
+
+def collect_pool_metrics_sample(metrics_url: str | None, timeout: float) -> dict[str, Any]:
+    if not metrics_url:
+        return {}
+    try:
+        text, latency_ms = fetch_text_url(metrics_url, min(timeout, 3.0))
+        return flatten_pool_metrics(parse_prometheus_metrics(text), latency_ms=latency_ms)
+    except Exception as exc:  # noqa: BLE001 - measurement must not fail when metrics are absent.
+        return flatten_pool_metrics({}, error=str(exc))
+
+
+def collect_status_sample(
+    status_url: str | None = None,
+    timeout: float = 8.0,
+    pool_metrics_url: str | None = DEFAULT_POOL_METRICS_URL,
+) -> dict[str, Any]:
     started = time.monotonic()
     dashboard_latency_ms = None
     if status_url:
@@ -47,7 +147,9 @@ def collect_status_sample(status_url: str | None = None, timeout: float = 8.0) -
         status = collect_status_cached(include_logs=False)
         source = "local-collector"
     collection_ms = round((time.monotonic() - started) * 1000, 3)
-    return flatten_status_sample(status, source, collection_ms, dashboard_latency_ms)
+    sample = flatten_status_sample(status, source, collection_ms, dashboard_latency_ms)
+    sample.update(collect_pool_metrics_sample(pool_metrics_url, timeout))
+    return sample
 
 
 def flatten_status_sample(
@@ -120,6 +222,15 @@ def summarize_samples(samples: list[dict[str, Any]]) -> dict[str, Any]:
     def values(field: str) -> list[float]:
         return [value for value in (number(sample.get(field)) for sample in samples) if value is not None]
 
+    def counter_delta(field: str) -> float | None:
+        first_value = number(first.get(field))
+        last_value = number(last.get(field))
+        if first_value is None or last_value is None:
+            return None
+        if last_value < first_value:
+            return round(last_value, 6)
+        return round(last_value - first_value, 6)
+
     worker_ranges: dict[str, dict[str, int]] = {}
     for sample in samples:
         workers = sample.get("adaptive_workers") if isinstance(sample.get("adaptive_workers"), dict) else {}
@@ -150,8 +261,20 @@ def summarize_samples(samples: list[dict[str, Any]]) -> dict[str, Any]:
         "remaining_blocks_last": last.get("remaining_blocks"),
         "connected_miners_max": max(values("connected_miners") or [0]),
         "managed_miners_max": max(values("managed_miners") or [0]),
+        "pool_active_connections_max": max(values("pool_active_connections") or [0]),
+        "pool_ready_miners_min": min(values("pool_job_health_ready_miners") or [0]),
+        "pool_ready_miners_max": max(values("pool_job_health_ready_miners") or [0]),
+        "pool_backend_p2p_fresh_min": min(values("pool_backend_p2p_mining_fresh") or [0]),
+        "pool_fresh_consensus_peers_min": min(values("pool_backend_p2p_fresh_consensus_peer_count") or [0]),
+        "pool_block_submit_accepted_delta": counter_delta("pool_block_submit_accepted_total"),
+        "pool_block_submit_rejected_delta": counter_delta("pool_block_submit_rejected_total"),
+        "pool_blocks_found_delta": counter_delta("pool_blocks_found_total"),
+        "pool_shares_accepted_delta": counter_delta("pool_shares_accepted_total"),
+        "pool_shares_rejected_delta": counter_delta("pool_shares_rejected_total"),
+        "pool_template_conversion_failure_ratio_max": percentile(values("pool_template_conversion_failure_ratio"), 100),
         "collection_ms_p95": percentile(values("collection_ms"), 95),
         "dashboard_latency_ms_p95": percentile(values("dashboard_latency_ms"), 95),
+        "pool_metrics_latency_ms_p95": percentile(values("pool_metrics_latency_ms"), 95),
         "chain_rpc_latency_ms_p95": percentile(values("chain_rpc_latency_ms_max"), 95),
         "iowait_percent_max": percentile(values("iowait_percent"), 100),
         "io_some_avg10_max": percentile(values("io_some_avg10"), 100),
@@ -179,8 +302,19 @@ def render_html_report(summary: dict[str, Any], samples: list[dict[str, Any]]) -
         ("Sync statuses", ", ".join(summary.get("sync_status_values") or [])),
         ("Block delta", summary.get("block_delta")),
         ("Blocks/sec", summary.get("blocks_per_second")),
+        ("Pool accepted blocks delta", summary.get("pool_block_submit_accepted_delta")),
+        ("Pool rejected blocks delta", summary.get("pool_block_submit_rejected_delta")),
+        ("Pool found blocks delta", summary.get("pool_blocks_found_delta")),
+        ("Pool accepted shares delta", summary.get("pool_shares_accepted_delta")),
+        ("Pool rejected shares delta", summary.get("pool_shares_rejected_delta")),
+        ("Pool active connections max", summary.get("pool_active_connections_max")),
+        ("Pool ready miners min/max", f"{summary.get('pool_ready_miners_min')} / {summary.get('pool_ready_miners_max')}"),
+        ("Pool P2P fresh min", summary.get("pool_backend_p2p_fresh_min")),
+        ("Pool fresh consensus peers min", summary.get("pool_fresh_consensus_peers_min")),
+        ("Pool conversion failure max %", summary.get("pool_template_conversion_failure_ratio_max")),
         ("Collection p95 ms", summary.get("collection_ms_p95")),
         ("Dashboard p95 ms", summary.get("dashboard_latency_ms_p95")),
+        ("Pool metrics p95 ms", summary.get("pool_metrics_latency_ms_p95")),
         ("Chain RPC p95 ms", summary.get("chain_rpc_latency_ms_p95")),
         ("I/O wait max %", summary.get("iowait_percent_max")),
         ("IO PSI avg10 max", summary.get("io_some_avg10_max")),
@@ -205,6 +339,9 @@ def render_html_report(summary: dict[str, Any], samples: list[dict[str, Any]]) -
         f"<td>{html_escape(sample.get('remaining_blocks'))}</td>"
         f"<td>{html_escape(sample.get('chain_rpc_latency_ms_max'))}</td>"
         f"<td>{html_escape(sample.get('iowait_percent'))}</td>"
+        f"<td>{html_escape(sample.get('pool_block_submit_accepted_total'))}</td>"
+        f"<td>{html_escape(sample.get('pool_job_health_ready_miners'))}</td>"
+        f"<td>{html_escape(sample.get('pool_backend_p2p_mining_fresh'))}</td>"
         "</tr>"
         for sample in last_samples
     )
@@ -226,7 +363,7 @@ def render_html_report(summary: dict[str, Any], samples: list[dict[str, Any]]) -
   <h2>Adaptive Worker Ranges</h2>
   <table><tr><th>Kind</th><th>Min</th><th>Max</th></tr>{worker_rows}</table>
   <h2>Recent Samples</h2>
-  <table><tr><th>Time</th><th>Overall</th><th>Mode</th><th>Sync</th><th>Block</th><th>Remaining</th><th>RPC ms</th><th>IO wait %</th></tr>{sample_rows}</table>
+  <table><tr><th>Time</th><th>Overall</th><th>Mode</th><th>Sync</th><th>Block</th><th>Remaining</th><th>RPC ms</th><th>IO wait %</th><th>Accepted Blocks</th><th>Ready Miners</th><th>P2P Fresh</th></tr>{sample_rows}</table>
 </body>
 </html>
 """
@@ -241,7 +378,7 @@ def run_measurement(args: argparse.Namespace) -> dict[str, Any]:
     samples: list[dict[str, Any]] = []
     deadline = time.monotonic() + max(0.0, args.duration_seconds)
     while True:
-        sample = collect_status_sample(args.status_url, timeout=args.timeout_seconds)
+        sample = collect_status_sample(args.status_url, timeout=args.timeout_seconds, pool_metrics_url=args.pool_metrics_url)
         samples.append(sample)
         with jsonl_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(sample, sort_keys=True) + "\n")
@@ -269,10 +406,14 @@ def main() -> int:
     parser.add_argument("--interval-seconds", type=float, default=10.0)
     parser.add_argument("--timeout-seconds", type=float, default=8.0)
     parser.add_argument("--status-url", help="optional dashboard /api/status URL to measure HTTP latency")
+    parser.add_argument("--pool-metrics-url", default=DEFAULT_POOL_METRICS_URL, help="optional pool Prometheus /metrics URL")
+    parser.add_argument("--no-pool-metrics", action="store_true", help="skip pool Prometheus metrics collection")
     parser.add_argument("--label", default="baseline")
     parser.add_argument("--output-dir", default=str(RUNTIME_DIR / "measurements"))
     parser.add_argument("--json", action="store_true", help="print JSON summary")
     args = parser.parse_args()
+    if args.no_pool_metrics:
+        args.pool_metrics_url = None
     result = run_measurement(args)
     if args.json:
         print(json.dumps(result, indent=2, sort_keys=True))

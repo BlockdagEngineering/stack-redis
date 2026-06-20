@@ -310,7 +310,8 @@ migrate_runtime_compose() {
   for key in \
     POOL_SUBMIT_STALE_BLOCK_CANDIDATES \
     POOL_SUBMIT_BLOCK_HEADER_V2_ENABLED \
-    POOL_STALE_RACE_CLIENT_RESEND_THRESHOLD
+    POOL_STALE_RACE_CLIENT_RESEND_THRESHOLD \
+    POOL_STALE_RACE_CLIENT_RECONNECT_THRESHOLD
   do
     if ! grep -q "${key}:" "$compose"; then
       missing=1

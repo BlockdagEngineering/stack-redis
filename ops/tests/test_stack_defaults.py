@@ -37,6 +37,32 @@ class StackDefaultsTests(unittest.TestCase):
         )
         self.assertIn(expected, compose)
 
+    def test_stale_race_reconnect_is_disabled_by_default(self) -> None:
+        defaults = parse_env(ROOT_DIR / "ops/config/stack-defaults.env")
+        compose = (ROOT_DIR / "docker-compose.yml").read_text(encoding="utf-8")
+
+        self.assertEqual(defaults["POOL_STALE_RACE_CLIENT_RECONNECT_THRESHOLD"], "0")
+        self.assertIn(
+            "POOL_STALE_RACE_CLIENT_RECONNECT_THRESHOLD: "
+            "${POOL_STALE_RACE_CLIENT_RECONNECT_THRESHOLD:-0}",
+            compose,
+        )
+
+    def test_evm_head_guard_is_advisory_by_default(self) -> None:
+        defaults = parse_env(ROOT_DIR / "ops/config/stack-defaults.env")
+        env_example = parse_env(ROOT_DIR / ".env.example")
+        portable = parse_env(ROOT_DIR / "ops/portable.env.example")
+        compose = (ROOT_DIR / "docker-compose.yml").read_text(encoding="utf-8")
+
+        self.assertEqual(defaults["POOL_RPC_ROUTER_EVM_HEAD_GUARD_ENABLED"], "false")
+        self.assertEqual(env_example["POOL_RPC_ROUTER_EVM_HEAD_GUARD_ENABLED"], "false")
+        self.assertEqual(portable["POOL_RPC_ROUTER_EVM_HEAD_GUARD_ENABLED"], "false")
+        self.assertIn(
+            "POOL_RPC_ROUTER_EVM_HEAD_GUARD_ENABLED: "
+            "${POOL_RPC_ROUTER_EVM_HEAD_GUARD_ENABLED:-false}",
+            compose,
+        )
+
     def test_pool_database_defaults_match_compose(self) -> None:
         defaults = parse_env(ROOT_DIR / "ops/config/stack-defaults.env")
         env_example = parse_env(ROOT_DIR / ".env.example")
