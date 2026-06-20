@@ -16,11 +16,19 @@ class OptimizationMeasurementTests(unittest.TestCase):
             "overall": "syncing",
             "mode": "sync_only_no_miners",
             "can_mine": False,
+            "can_accept_shares": True,
+            "can_submit_blocks": False,
             "sync_progress": {
                 "status": "syncing",
                 "current_block": 10,
                 "highest_block": 15,
+                "current_block_source": "eth_syncing",
                 "remaining_blocks": 5,
+                "native_is_current": True,
+                "chain_syncing": True,
+                "mining_advisory_sync": True,
+                "p2p_connections": 8,
+                "p2p_network_gap": 0,
                 "nodes": {
                     "primary": {"chain_rpc_latency_ms": 12.5},
                     "secondary": {"chain_rpc_latency_ms": 8.0},
@@ -39,7 +47,15 @@ class OptimizationMeasurementTests(unittest.TestCase):
 
         self.assertEqual(sample["sync_status"], "syncing")
         self.assertEqual(sample["current_block"], 10)
+        self.assertEqual(sample["current_block_source"], "eth_syncing")
         self.assertEqual(sample["remaining_blocks"], 5)
+        self.assertTrue(sample["native_is_current"])
+        self.assertTrue(sample["chain_syncing"])
+        self.assertTrue(sample["mining_advisory_sync"])
+        self.assertEqual(sample["p2p_connections"], 8)
+        self.assertEqual(sample["p2p_network_gap"], 0)
+        self.assertTrue(sample["can_accept_shares"])
+        self.assertFalse(sample["can_submit_blocks"])
         self.assertEqual(sample["chain_rpc_latency_ms_max"], 12.5)
         self.assertEqual(sample["adaptive_workers"]["global_rpc"], 6)
         self.assertEqual(sample["dashboard_latency_ms"], 3.1)
@@ -87,9 +103,17 @@ pool_template_conversion_stall_window_candidates{kind="total",pool_id="0"} 41
                 "source": "fixture",
                 "overall": "syncing",
                 "mode": "sync_only_no_miners",
+                "can_mine": False,
+                "can_submit_blocks": False,
                 "sync_status": "syncing",
                 "current_block": 1000,
+                "current_block_source": "native",
                 "remaining_blocks": 50,
+                "native_is_current": False,
+                "chain_syncing": True,
+                "mining_advisory_sync": False,
+                "p2p_connections": 6,
+                "p2p_network_gap": 3,
                 "connected_miners": 0,
                 "managed_miners": 0,
                 "collection_ms": 10.0,
@@ -99,8 +123,11 @@ pool_template_conversion_stall_window_candidates{kind="total",pool_id="0"} 41
                 "host_profile": {"profile": "pi5", "os": "linux", "arch": "arm64"},
                 "pool_active_connections": 2,
                 "pool_job_health_ready_miners": 2,
+                "pool_backend_mineable": 1,
+                "pool_backend_submit_ready": 1,
                 "pool_backend_p2p_mining_fresh": 1,
                 "pool_backend_p2p_fresh_consensus_peer_count": 4,
+                "pool_backend_p2p_best_peer_lead_blocks": 2,
                 "pool_block_submit_accepted_total": 10,
                 "pool_block_submit_rejected_total": 3,
                 "pool_blocks_found_total": 13,
@@ -114,9 +141,17 @@ pool_template_conversion_stall_window_candidates{kind="total",pool_id="0"} 41
                 "source": "fixture",
                 "overall": "ok",
                 "mode": "ready_no_miners",
+                "can_mine": True,
+                "can_submit_blocks": True,
                 "sync_status": "synced",
                 "current_block": 1020,
+                "current_block_source": "native",
                 "remaining_blocks": 0,
+                "native_is_current": True,
+                "chain_syncing": True,
+                "mining_advisory_sync": True,
+                "p2p_connections": 8,
+                "p2p_network_gap": 0,
                 "connected_miners": 0,
                 "managed_miners": 0,
                 "collection_ms": 20.0,
@@ -126,8 +161,11 @@ pool_template_conversion_stall_window_candidates{kind="total",pool_id="0"} 41
                 "host_profile": {"profile": "pi5", "os": "linux", "arch": "arm64"},
                 "pool_active_connections": 2,
                 "pool_job_health_ready_miners": 1,
+                "pool_backend_mineable": 1,
+                "pool_backend_submit_ready": 0,
                 "pool_backend_p2p_mining_fresh": 1,
                 "pool_backend_p2p_fresh_consensus_peer_count": 3,
+                "pool_backend_p2p_best_peer_lead_blocks": 0,
                 "pool_block_submit_accepted_total": 18,
                 "pool_block_submit_rejected_total": 4,
                 "pool_blocks_found_total": 22,
@@ -141,17 +179,59 @@ pool_template_conversion_stall_window_candidates{kind="total",pool_id="0"} 41
 
         self.assertEqual(summary["sample_count"], 2)
         self.assertEqual(summary["block_delta"], 20)
+        self.assertTrue(summary["block_delta_valid"])
         self.assertEqual(summary["blocks_per_second"], 2.0)
+        self.assertEqual(summary["current_block_source_first"], "native")
+        self.assertEqual(summary["current_block_source_last"], "native")
+        self.assertEqual(summary["can_submit_blocks_values"], ["false", "true"])
+        self.assertEqual(summary["native_is_current_values"], ["false", "true"])
+        self.assertEqual(summary["chain_syncing_values"], ["true"])
+        self.assertEqual(summary["mining_advisory_sync_values"], ["false", "true"])
+        self.assertEqual(summary["p2p_connections_min"], 6)
+        self.assertEqual(summary["p2p_network_gap_max"], 3)
         self.assertEqual(summary["chain_rpc_latency_ms_p95"], 7.0)
         self.assertEqual(summary["adaptive_worker_ranges"]["global_rpc"], {"min": 3, "max": 6})
+        self.assertEqual(summary["pool_backend_mineable_min"], 1)
+        self.assertEqual(summary["pool_backend_submit_ready_min"], 0)
+        self.assertEqual(summary["pool_backend_peer_lead_max"], 2)
         self.assertEqual(summary["pool_block_submit_accepted_delta"], 8)
         self.assertEqual(summary["pool_block_submit_rejected_delta"], 1)
+        self.assertEqual(summary["pool_block_submit_rejected_per_accepted"], 0.125)
+        self.assertEqual(summary["pool_accepted_blocks_per_hour"], 2880.0)
         self.assertEqual(summary["pool_blocks_found_delta"], 9)
         self.assertEqual(summary["pool_shares_accepted_delta"], 40)
         self.assertEqual(summary["pool_shares_rejected_delta"], 7)
+        self.assertEqual(summary["pool_share_reject_ratio"], 0.148936)
         self.assertEqual(summary["pool_ready_miners_min"], 1)
         self.assertEqual(summary["pool_fresh_consensus_peers_min"], 3)
         self.assertEqual(summary["pool_template_conversion_failure_ratio_max"], 9.5)
+
+    def test_summarize_samples_marks_mixed_block_sources_untrusted(self) -> None:
+        samples = [
+            {
+                "sampled_at": "2026-05-26T00:00:00+00:00",
+                "sampled_epoch": 100,
+                "source": "fixture",
+                "current_block": 2000,
+                "current_block_source": "eth_syncing",
+                "adaptive_workers": {},
+            },
+            {
+                "sampled_at": "2026-05-26T00:00:10+00:00",
+                "sampled_epoch": 110,
+                "source": "fixture",
+                "current_block": 1995,
+                "current_block_source": "native",
+                "adaptive_workers": {},
+            },
+        ]
+
+        summary = measurement.summarize_samples(samples)
+
+        self.assertIsNone(summary["block_delta"])
+        self.assertFalse(summary["block_delta_valid"])
+        self.assertEqual(summary["block_delta_warning"], "current_block source changed or moved backwards")
+        self.assertIsNone(summary["blocks_per_second"])
 
 
 if __name__ == "__main__":

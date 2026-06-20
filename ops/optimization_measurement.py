@@ -170,6 +170,8 @@ def flatten_status_sample(
     ]
     current_block = number(sync.get("current_block"))
     highest_block = number(sync.get("highest_block"))
+    p2p_connections = number(sync.get("p2p_connections"))
+    p2p_network_gap = number(sync.get("p2p_network_gap"))
     adaptive_workers = adaptive.get("workers") if isinstance(adaptive.get("workers"), dict) else {}
     return {
         "sampled_at": now_iso(),
@@ -180,10 +182,18 @@ def flatten_status_sample(
         "overall": status.get("overall"),
         "mode": status.get("mode"),
         "can_mine": status.get("can_mine"),
+        "can_accept_shares": status.get("can_accept_shares"),
+        "can_submit_blocks": status.get("can_submit_blocks"),
         "sync_status": sync.get("status"),
         "current_block": int(current_block) if current_block is not None else None,
         "highest_block": int(highest_block) if highest_block is not None else None,
+        "current_block_source": sync.get("current_block_source"),
         "remaining_blocks": int(number(sync.get("remaining_blocks")) or 0) if sync.get("remaining_blocks") is not None else None,
+        "native_is_current": sync.get("native_is_current"),
+        "chain_syncing": sync.get("chain_syncing"),
+        "mining_advisory_sync": sync.get("mining_advisory_sync"),
+        "p2p_connections": int(p2p_connections) if p2p_connections is not None else None,
+        "p2p_network_gap": int(p2p_network_gap) if p2p_network_gap is not None else None,
         "chain_rpc_latency_ms_max": max(chain_latencies) if chain_latencies else None,
         "chain_rpc_latency_ms_avg": round(sum(chain_latencies) / len(chain_latencies), 3) if chain_latencies else None,
         "connected_miners": int(number(miner.get("connected_count")) or 0),
@@ -212,11 +222,18 @@ def summarize_samples(samples: list[dict[str, Any]]) -> dict[str, Any]:
     elapsed = max(0, float(last.get("sampled_epoch") or 0) - float(first.get("sampled_epoch") or 0))
     first_block = number(first.get("current_block"))
     last_block = number(last.get("current_block"))
+    first_block_source = str(first.get("current_block_source") or "")
+    last_block_source = str(last.get("current_block_source") or "")
+    block_source_changed = bool(first_block_source and last_block_source and first_block_source != last_block_source)
     block_delta = None
     blocks_per_second = None
+    block_delta_valid = False
     if first_block is not None and last_block is not None:
-        block_delta = int(last_block - first_block)
-        if elapsed > 0:
+        raw_block_delta = int(last_block - first_block)
+        block_delta_valid = bool(raw_block_delta >= 0 and not block_source_changed)
+        if block_delta_valid:
+            block_delta = raw_block_delta
+        if elapsed > 0 and block_delta is not None:
             blocks_per_second = round(block_delta / elapsed, 4)
 
     def values(field: str) -> list[float]:
@@ -230,6 +247,21 @@ def summarize_samples(samples: list[dict[str, Any]]) -> dict[str, Any]:
         if last_value < first_value:
             return round(last_value, 6)
         return round(last_value - first_value, 6)
+
+    def bool_values(field: str) -> list[str]:
+        found: set[str] = set()
+        for sample in samples:
+            value = sample.get(field)
+            if isinstance(value, bool):
+                found.add("true" if value else "false")
+            elif value is not None:
+                found.add(str(value))
+        return sorted(found)
+
+    accepted_delta = counter_delta("pool_block_submit_accepted_total")
+    rejected_delta = counter_delta("pool_block_submit_rejected_total")
+    shares_accepted_delta = counter_delta("pool_shares_accepted_total")
+    shares_rejected_delta = counter_delta("pool_shares_rejected_total")
 
     worker_ranges: dict[str, dict[str, int]] = {}
     for sample in samples:
@@ -255,22 +287,41 @@ def summarize_samples(samples: list[dict[str, Any]]) -> dict[str, Any]:
         "mode_values": sorted({str(sample.get("mode")) for sample in samples if sample.get("mode")}),
         "sync_status_values": sorted({str(sample.get("sync_status")) for sample in samples if sample.get("sync_status")}),
         "block_delta": block_delta,
+        "block_delta_valid": block_delta_valid,
+        "block_delta_warning": "current_block source changed or moved backwards" if not block_delta_valid and first_block is not None and last_block is not None else "",
         "blocks_per_second": blocks_per_second,
         "current_block_first": first.get("current_block"),
         "current_block_last": last.get("current_block"),
+        "current_block_source_first": first.get("current_block_source"),
+        "current_block_source_last": last.get("current_block_source"),
         "remaining_blocks_last": last.get("remaining_blocks"),
+        "can_mine_values": bool_values("can_mine"),
+        "can_submit_blocks_values": bool_values("can_submit_blocks"),
+        "native_is_current_values": bool_values("native_is_current"),
+        "chain_syncing_values": bool_values("chain_syncing"),
+        "mining_advisory_sync_values": bool_values("mining_advisory_sync"),
+        "p2p_connections_min": min(values("p2p_connections") or [0]),
+        "p2p_network_gap_max": percentile(values("p2p_network_gap"), 100),
         "connected_miners_max": max(values("connected_miners") or [0]),
         "managed_miners_max": max(values("managed_miners") or [0]),
         "pool_active_connections_max": max(values("pool_active_connections") or [0]),
         "pool_ready_miners_min": min(values("pool_job_health_ready_miners") or [0]),
         "pool_ready_miners_max": max(values("pool_job_health_ready_miners") or [0]),
+        "pool_backend_mineable_min": min(values("pool_backend_mineable") or [0]),
+        "pool_backend_submit_ready_min": min(values("pool_backend_submit_ready") or [0]),
         "pool_backend_p2p_fresh_min": min(values("pool_backend_p2p_mining_fresh") or [0]),
+        "pool_backend_peer_lead_max": percentile(values("pool_backend_p2p_best_peer_lead_blocks"), 100),
         "pool_fresh_consensus_peers_min": min(values("pool_backend_p2p_fresh_consensus_peer_count") or [0]),
-        "pool_block_submit_accepted_delta": counter_delta("pool_block_submit_accepted_total"),
-        "pool_block_submit_rejected_delta": counter_delta("pool_block_submit_rejected_total"),
+        "pool_block_submit_accepted_delta": accepted_delta,
+        "pool_block_submit_rejected_delta": rejected_delta,
+        "pool_block_submit_rejected_per_accepted": round(rejected_delta / accepted_delta, 6) if accepted_delta and rejected_delta is not None else None,
+        "pool_accepted_blocks_per_hour": round(accepted_delta * 3600.0 / elapsed, 3) if accepted_delta is not None and elapsed > 0 else None,
         "pool_blocks_found_delta": counter_delta("pool_blocks_found_total"),
-        "pool_shares_accepted_delta": counter_delta("pool_shares_accepted_total"),
-        "pool_shares_rejected_delta": counter_delta("pool_shares_rejected_total"),
+        "pool_shares_accepted_delta": shares_accepted_delta,
+        "pool_shares_rejected_delta": shares_rejected_delta,
+        "pool_share_reject_ratio": round(shares_rejected_delta / max(1.0, shares_accepted_delta + shares_rejected_delta), 6)
+        if shares_accepted_delta is not None and shares_rejected_delta is not None
+        else None,
         "pool_template_conversion_failure_ratio_max": percentile(values("pool_template_conversion_failure_ratio"), 100),
         "collection_ms_p95": percentile(values("collection_ms"), 95),
         "dashboard_latency_ms_p95": percentile(values("dashboard_latency_ms"), 95),
@@ -300,16 +351,30 @@ def render_html_report(summary: dict[str, Any], samples: list[dict[str, Any]]) -
         ("Source", summary.get("source")),
         ("Modes", ", ".join(summary.get("mode_values") or [])),
         ("Sync statuses", ", ".join(summary.get("sync_status_values") or [])),
+        ("Can submit values", ", ".join(summary.get("can_submit_blocks_values") or [])),
+        ("Native current values", ", ".join(summary.get("native_is_current_values") or [])),
+        ("Mining advisory sync values", ", ".join(summary.get("mining_advisory_sync_values") or [])),
         ("Block delta", summary.get("block_delta")),
+        ("Block delta valid", summary.get("block_delta_valid")),
+        ("Block delta warning", summary.get("block_delta_warning")),
+        ("Current block source first/last", f"{summary.get('current_block_source_first')} / {summary.get('current_block_source_last')}"),
         ("Blocks/sec", summary.get("blocks_per_second")),
         ("Pool accepted blocks delta", summary.get("pool_block_submit_accepted_delta")),
         ("Pool rejected blocks delta", summary.get("pool_block_submit_rejected_delta")),
+        ("Pool rejected / accepted", summary.get("pool_block_submit_rejected_per_accepted")),
+        ("Pool accepted blocks / hour", summary.get("pool_accepted_blocks_per_hour")),
         ("Pool found blocks delta", summary.get("pool_blocks_found_delta")),
         ("Pool accepted shares delta", summary.get("pool_shares_accepted_delta")),
         ("Pool rejected shares delta", summary.get("pool_shares_rejected_delta")),
+        ("Pool share reject ratio", summary.get("pool_share_reject_ratio")),
         ("Pool active connections max", summary.get("pool_active_connections_max")),
         ("Pool ready miners min/max", f"{summary.get('pool_ready_miners_min')} / {summary.get('pool_ready_miners_max')}"),
+        ("Pool backend mineable min", summary.get("pool_backend_mineable_min")),
+        ("Pool backend submit-ready min", summary.get("pool_backend_submit_ready_min")),
         ("Pool P2P fresh min", summary.get("pool_backend_p2p_fresh_min")),
+        ("Pool backend peer lead max", summary.get("pool_backend_peer_lead_max")),
+        ("P2P connections min", summary.get("p2p_connections_min")),
+        ("P2P network gap max", summary.get("p2p_network_gap_max")),
         ("Pool fresh consensus peers min", summary.get("pool_fresh_consensus_peers_min")),
         ("Pool conversion failure max %", summary.get("pool_template_conversion_failure_ratio_max")),
         ("Collection p95 ms", summary.get("collection_ms_p95")),
@@ -335,12 +400,17 @@ def render_html_report(summary: dict[str, Any], samples: list[dict[str, Any]]) -
         f"<td>{html_escape(sample.get('overall'))}</td>"
         f"<td>{html_escape(sample.get('mode'))}</td>"
         f"<td>{html_escape(sample.get('sync_status'))}</td>"
+        f"<td>{html_escape(sample.get('can_submit_blocks'))}</td>"
+        f"<td>{html_escape(sample.get('native_is_current'))}</td>"
+        f"<td>{html_escape(sample.get('mining_advisory_sync'))}</td>"
         f"<td>{html_escape(sample.get('current_block'))}</td>"
+        f"<td>{html_escape(sample.get('current_block_source'))}</td>"
         f"<td>{html_escape(sample.get('remaining_blocks'))}</td>"
         f"<td>{html_escape(sample.get('chain_rpc_latency_ms_max'))}</td>"
         f"<td>{html_escape(sample.get('iowait_percent'))}</td>"
         f"<td>{html_escape(sample.get('pool_block_submit_accepted_total'))}</td>"
         f"<td>{html_escape(sample.get('pool_job_health_ready_miners'))}</td>"
+        f"<td>{html_escape(sample.get('pool_backend_submit_ready'))}</td>"
         f"<td>{html_escape(sample.get('pool_backend_p2p_mining_fresh'))}</td>"
         "</tr>"
         for sample in last_samples
@@ -363,7 +433,7 @@ def render_html_report(summary: dict[str, Any], samples: list[dict[str, Any]]) -
   <h2>Adaptive Worker Ranges</h2>
   <table><tr><th>Kind</th><th>Min</th><th>Max</th></tr>{worker_rows}</table>
   <h2>Recent Samples</h2>
-  <table><tr><th>Time</th><th>Overall</th><th>Mode</th><th>Sync</th><th>Block</th><th>Remaining</th><th>RPC ms</th><th>IO wait %</th><th>Accepted Blocks</th><th>Ready Miners</th><th>P2P Fresh</th></tr>{sample_rows}</table>
+  <table><tr><th>Time</th><th>Overall</th><th>Mode</th><th>Sync</th><th>Can Submit</th><th>Native Current</th><th>Advisory Sync</th><th>Block</th><th>Block Source</th><th>Remaining</th><th>RPC ms</th><th>IO wait %</th><th>Accepted Blocks</th><th>Ready Miners</th><th>Submit Ready</th><th>P2P Fresh</th></tr>{sample_rows}</table>
 </body>
 </html>
 """

@@ -202,6 +202,13 @@ pool metrics stream. A fresh accepted-block delta may bridge that transient only
 when P2P freshness, peer lead, ready miners, and template age are also safe; it
 must not be replaced with a lifetime accepted-block total.
 
+ASIC MAC identity must not be pinned to stale IP addresses. During the live
+recovery, `POOL_ASIC_MAC_OVERRIDES` still mapped a previous DHCP assignment, so
+two active Stratum lanes were reported with the same MAC even though the host ARP
+table had the correct current IP-to-MAC mapping. Pool releases must prefer a
+complete live ARP/neighbor entry over an override and use overrides only as a
+fallback when the container cannot see LAN neighbors.
+
 During the fixed run, the pool correctly moved from zero ready miners while the
 node was behind peers to four ready miners after native health returned
 `submit_ready=true`.
