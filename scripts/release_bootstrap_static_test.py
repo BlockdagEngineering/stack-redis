@@ -110,6 +110,22 @@ class BootstrapPeerDefaultTests(unittest.TestCase):
         self.assertIn("BOOTSTRAP_PEER_ADDRESSES: ${BOOTSTRAP_PEER_ADDRESSES:-}", compose)
         self.assertIn(f"addpeer={self.LIVE_PUBLIC_BOOTSTRAP_PEER}", node_conf)
 
+    def test_release_defaults_keep_compose_and_node_config_on_p2p_port_8150(self) -> None:
+        env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
+        compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+        node_conf = (ROOT / "node.conf.example").read_text(encoding="utf-8")
+
+        self.assertRegex(env_example, r"(?m)^P2P_PORT=8150$")
+        self.assertIn("P2P_PORT: ${P2P_PORT:-8150}", compose)
+        self.assertRegex(node_conf, r"(?m)^port=8150$")
+        self.assertNotRegex(node_conf, r"(?m)^port=8154$")
+
+    def test_release_defaults_use_host_reachable_node_rpc_urls(self) -> None:
+        env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
+
+        self.assertRegex(env_example, r"(?m)^BDAG_NODE_RPC_URLS=node=http://127[.]0[.]0[.]1:38131$")
+        self.assertNotRegex(env_example, r"(?m)^BDAG_NODE_RPC_URLS=node=http://node:38131$")
+
     def test_release_defaults_do_not_ship_dead_or_site_local_seed_peers(self) -> None:
         node_conf = (ROOT / "node.conf.example").read_text(encoding="utf-8")
 

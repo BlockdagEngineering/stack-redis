@@ -199,6 +199,43 @@ bootstrap hint; install completion and mining readiness still require normal
 peer handshakes, at least two fresh consensus peers, sync freshness, RPC
 health, and template checks.
 
+## First-Install Mining Safety Gates
+
+Cold installs must be able to start without manual rescue. The release defaults
+and validation gates now protect the failures seen during the first
+`stack-redis` deployment:
+
+- The canonical P2P service port is `8150`. `.env.example`, `node.conf.example`,
+  and `docker-compose.yml` must agree on that value. If an operator-mounted
+  `node.conf` still has an old port, the node entrypoint writes a private
+  runtime copy with `port=$P2P_PORT` before dropping privileges instead of
+  silently advertising the wrong libp2p port.
+- Host-side status and watchdog code must use host-reachable RPC URLs for
+  host-network containers. The default mining RPC URL is
+  `node=http://127.0.0.1:38131`, not `node=http://node:38131`.
+- Dashboard sync state follows native `getTemplateHealth` when available. The
+  stack may show `synced` only when native template health is P2P-fresh,
+  sync-allowed, chain-current, within peer-lead tolerance, and backed by enough
+  fresh consensus peers. Mining safety additionally requires mineable,
+  submit-ready templates. If peers are ahead or P2P freshness fails, the status
+  is `syncing` and the pool must have zero ready miners.
+- Public EVM RPC height or hash disagreement is a diagnostic input, not the
+  canonical mining gate. Public RPCs can disagree with each other at the same
+  height. Native template health plus fresh Full or CF peers is the hard gate.
+- Miner inventory/configuration rows are not proof of active mining. Require
+  direct pool metrics: ready miners, accepted shares, and submitted blocks.
+
+Run the release guard locally before packaging or shipping a fix:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest \
+  ops.tests.test_chain_rpc_resilience \
+  ops.tests.test_deployment_portability \
+  ops.tests.test_nodeworker_entrypoint \
+  scripts.release_bootstrap_static_test
+bash scripts/validate-release-build.sh
+```
+
 ## Fast Artifact Sync V2 Directory Mode
 
 Fast Artifact Sync V2 directory artifacts are now the preferred empty-datadir

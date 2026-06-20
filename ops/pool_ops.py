@@ -3387,11 +3387,8 @@ PROMETHEUS_LABEL_RE = re.compile(r'([a-zA-Z_][a-zA-Z0-9_]*)="((?:\\.|[^"\\])*)"'
 def mining_rpc_urls() -> list[tuple[str, str]]:
     urls: list[tuple[str, str]] = []
     for name in NODES:
-        ip = run(
-            ["docker", "inspect", name, "--format", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}"],
-            timeout=8,
-        ).stdout.strip()
-        if valid_ipv4(ip):
+        ip = docker_container_host_reachable_ip(name)
+        if ip:
             urls.append((name, f"http://{ip}:{NODE_MINING_RPC_PORT}"))
     return urls
 
@@ -6191,7 +6188,11 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
             and safe_int(node_details.get(node, {}).get("last_import_age_seconds"), NODE_IMPORT_STALE_SECONDS + 1) <= NODE_IMPORT_STALE_SECONDS
         )
     ]
-    sync_blocked_nodes = unique_names([*busy_syncing_nodes, *active_import_nodes])
+    sync_blocked_nodes = [
+        node
+        for node in unique_names([*busy_syncing_nodes, *active_import_nodes])
+        if not sync_progress_native_template_health_synced((sync_progress.get("nodes") or {}).get(node, {}))
+    ]
     if sync_blocked_nodes and sync_progress.get("status") != "syncing":
         sync_progress = dict(sync_progress)
         sync_progress["status"] = "syncing"
@@ -6769,6 +6770,25 @@ def docker_container_ip(name: str) -> str:
     return ip if valid_ipv4(ip) else ""
 
 
+def docker_container_network_mode(name: str) -> str:
+    result = run(
+        ["docker", "inspect", name, "--format", "{{.HostConfig.NetworkMode}}"],
+        timeout=8,
+    )
+    if not result.ok:
+        return ""
+    return result.stdout.strip()
+
+
+def docker_container_host_reachable_ip(name: str) -> str:
+    ip = docker_container_ip(name)
+    if ip:
+        return ip
+    if docker_container_network_mode(name) == "host":
+        return "127.0.0.1"
+    return ""
+
+
 def _host_url_for_dashboard(url: str) -> str:
     """Translate compose-only service hostnames to container IPs for host-side collectors."""
     try:
@@ -6778,7 +6798,7 @@ def _host_url_for_dashboard(url: str) -> str:
     hostname = parsed.hostname or ""
     if hostname not in SERVICES and hostname not in NODES and hostname not in POOL_CONTAINERS:
         return url
-    ip = docker_container_ip(hostname)
+    ip = docker_container_host_reachable_ip(hostname)
     if not ip:
         return url
     port = parsed.port or NODE_EVM_RPC_PORT
@@ -7085,12 +7105,10 @@ def evm_public_chain_alignment(
         and reference_has_other_miners
     )
     lag_is_unsafe = int(reference_lag) >= EVM_PUBLIC_ALIGNMENT_MIN_REFERENCE_LAG
-    hash_divergence_threshold = min(EVM_PUBLIC_ALIGNMENT_MIN_SAMPLES, max(1, compared_count))
-    hash_divergence_suspected = bool(
-        compared_count > 0
-        and lag_is_unsafe
-        and int(alignment["hash_mismatch_count"]) >= hash_divergence_threshold
-    )
+    # BDAG public EVM RPCs can disagree on exact same-height block hashes while
+    # still reporting the same miner and timestamp. Treat hash mismatch as a
+    # diagnostic; only a solo-miner signature is a hard public-chain divergence.
+    hash_divergence_suspected = False
     solo_mining_suspected = bool(
         enough_samples
         and lag_is_unsafe
@@ -7100,12 +7118,7 @@ def evm_public_chain_alignment(
     alignment["hash_divergence_suspected"] = hash_divergence_suspected
     alignment["solo_mining_suspected"] = solo_mining_suspected
     alignment["public_chain_diverged"] = bool(hash_divergence_suspected or solo_mining_suspected)
-    if hash_divergence_suspected:
-        alignment["reason"] = (
-            "same-height local EVM block hashes differ from an ahead public reference; "
-            "the local node must not mine until it rejoins the public chain"
-        )
-    elif solo_mining_suspected:
+    if solo_mining_suspected:
         alignment["reason"] = (
             "local EVM headers are only from the configured mining address while "
             "an ahead public reference shows other miners at the sampled heights"
@@ -7436,6 +7449,197 @@ def native_sync_progress(source: str) -> dict[str, Any] | None:
     }
 
 
+def node_template_health_snapshot(url: str, timeout: float) -> dict[str, Any]:
+    try:
+        health = mining_rpc_call(url, "getTemplateHealth", [], timeout=timeout)
+    except Exception as exc:  # noqa: BLE001 - older nodes may not expose template health.
+        return {"available": False, "error": str(exc)}
+    if not isinstance(health, dict):
+        return {"available": False, "error": "getTemplateHealth result is not an object"}
+    return {"available": True, **health}
+
+
+def native_template_health_is_mining_safe(health: dict[str, Any]) -> bool:
+    if not health.get("available"):
+        return False
+    if health.get("last_template_build_error_blocking") is True:
+        return False
+    required_true = (
+        "submit_ready",
+        "get_block_template_ready",
+        "p2p_mining_fresh",
+        "sync_allowed",
+        "chain_current",
+    )
+    if any(health.get(key) is False for key in required_true):
+        return False
+    if health.get("mineable_now") is False:
+        return False
+    fresh_peers = safe_int(health.get("p2p_fresh_consensus_peer_count"), 0)
+    if fresh_peers < pool_start_gate.MIN_POOL_START_PEERS:
+        return False
+    return bool(
+        health.get("mineable_now")
+        or health.get("submit_ready")
+        or (health.get("p2p_current") and health.get("chain_current"))
+    )
+
+
+def native_template_health_peer_lead_blocks(health: dict[str, Any]) -> int:
+    local_main_order = safe_int(health.get("main_order"), None)
+    best_peer_main_order = safe_int(health.get("p2p_best_peer_main_order"), None)
+    lead = safe_int(health.get("p2p_best_peer_lead_blocks"), 0)
+    if local_main_order is not None and best_peer_main_order is not None:
+        return best_peer_main_order - local_main_order
+    return lead
+
+
+def native_template_health_is_chain_synced(health: dict[str, Any]) -> bool:
+    if not health.get("available"):
+        return False
+    reason_codes = {
+        str(health.get("reason_code") or ""),
+        str(health.get("get_block_template_reason_code") or ""),
+        str(health.get("p2p_mining_fresh_reason_code") or ""),
+        str(health.get("sync_reason_code") or ""),
+    }
+    if "node_syncing" in reason_codes or "peer_lead_exceeds_tolerance" in reason_codes:
+        return False
+    required_true = (
+        "p2p_mining_fresh",
+        "sync_allowed",
+        "chain_current",
+    )
+    if any(health.get(key) is False for key in required_true):
+        return False
+    fresh_peers = safe_int(health.get("p2p_fresh_consensus_peer_count"), 0)
+    if fresh_peers < pool_start_gate.MIN_POOL_START_PEERS:
+        return False
+    return native_template_health_peer_lead_blocks(health) <= NATIVE_SYNC_LEAD_THRESHOLD
+
+
+def native_template_health_sync_progress(
+    source: str,
+    health: dict[str, Any],
+    current_block: int,
+) -> dict[str, Any] | None:
+    if not health.get("available"):
+        return None
+    if native_template_health_is_mining_safe(health):
+        return None
+
+    reason_codes = {
+        str(health.get("reason_code") or ""),
+        str(health.get("get_block_template_reason_code") or ""),
+        str(health.get("p2p_mining_fresh_reason_code") or ""),
+        str(health.get("sync_reason_code") or ""),
+    }
+    local_main_order = safe_int(health.get("main_order"), None)
+    best_peer_main_order = safe_int(health.get("p2p_best_peer_main_order"), None)
+    lead = safe_int(health.get("p2p_best_peer_lead_blocks"), None)
+    lead_exceeds_sync_tolerance = bool(
+        (lead is not None and lead > NATIVE_SYNC_LEAD_THRESHOLD)
+        or (
+            local_main_order is not None
+            and best_peer_main_order is not None
+            and best_peer_main_order - local_main_order > NATIVE_SYNC_LEAD_THRESHOLD
+        )
+    )
+    p2p_or_sync_unready = bool(
+        health.get("sync_allowed") is False
+        or health.get("p2p_mining_fresh") is False
+        or "node_syncing" in reason_codes
+        or "peer_lead_exceeds_tolerance" in reason_codes
+        or lead_exceeds_sync_tolerance
+    )
+    if not p2p_or_sync_unready:
+        return None
+
+    if local_main_order is not None and best_peer_main_order is not None and best_peer_main_order > local_main_order:
+        remaining = best_peer_main_order - local_main_order
+    elif lead is not None and lead > 0:
+        remaining = lead
+    else:
+        remaining = 1
+
+    progress_current = local_main_order if local_main_order is not None else current_block
+    highest = best_peer_main_order if best_peer_main_order and best_peer_main_order >= progress_current else progress_current + remaining
+    percent = round(max(0.0, min(100.0, (progress_current / max(1, highest)) * 100)), 2)
+    return {
+        "status": "syncing",
+        "percent": percent,
+        "current_block": progress_current,
+        "highest_block": highest,
+        "starting_block": None,
+        "remaining_blocks": remaining,
+        "source": f"{source}:native-template-health",
+        "error": str(health.get("reason") or health.get("sync_reason") or ""),
+        "current_block_source": "getTemplateHealth.main_order" if local_main_order is not None else "getBlockCount",
+        "peer_count": safe_int(health.get("p2p_fresh_consensus_peer_count"), 0),
+        "p2p_connections": safe_int(health.get("p2p_fresh_consensus_peer_count"), 0),
+        "native_template_health": compact_template_health_for_status(health),
+    }
+
+
+def native_template_health_synced_progress(
+    source: str,
+    health: dict[str, Any],
+    current_block: int,
+    chain: dict[str, Any],
+    evm_lag: dict[str, Any],
+) -> dict[str, Any]:
+    peer_count = safe_int(health.get("p2p_fresh_consensus_peer_count"), 0)
+    return {
+        "status": "synced",
+        "percent": 100.0,
+        "current_block": current_block,
+        "highest_block": current_block,
+        "starting_block": None,
+        "remaining_blocks": 0,
+        "source": f"{source}:native-template-health",
+        "error": "",
+        "current_block_source": chain.get("chain_rpc_source"),
+        "peer_count": peer_count,
+        "p2p_connections": peer_count,
+        "native_template_health": compact_template_health_for_status(health),
+        "evm_reference_lag_diagnostic_blocks": evm_lag.get("evm_lag_to_reference"),
+        **chain,
+        **evm_lag,
+    }
+
+
+def sync_progress_native_template_health_synced(progress: dict[str, Any]) -> bool:
+    health = progress.get("native_template_health")
+    return isinstance(health, dict) and native_template_health_is_chain_synced(health)
+
+
+def compact_template_health_for_status(health: dict[str, Any]) -> dict[str, Any]:
+    keys = (
+        "available",
+        "mineable_now",
+        "submit_ready",
+        "get_block_template_ready",
+        "get_block_template_reason_code",
+        "p2p_current",
+        "p2p_mining_fresh",
+        "p2p_mining_fresh_reason_code",
+        "sync_allowed",
+        "sync_reason_code",
+        "chain_current",
+        "main_order",
+        "p2p_best_peer_main_order",
+        "p2p_best_peer_lead_blocks",
+        "p2p_fresh_consensus_peer_count",
+        "p2p_consensus_peer_count",
+        "p2p_sync_peer_present",
+        "p2p_sync_peer_fresh",
+        "last_template_build_error_blocking",
+        "last_template_build_error_code",
+        "error",
+    )
+    return {key: health.get(key) for key in keys if key in health}
+
+
 def node_sync_progress(source: str, url: str, timeout: float = NODE_CHAIN_RPC_TIMEOUT) -> dict[str, Any]:
     try:
         if not valid_url(url):
@@ -7448,6 +7652,16 @@ def node_sync_progress(source: str, url: str, timeout: float = NODE_CHAIN_RPC_TI
                 **chain,
             }
         evm_lag = evm_rpc_lag_snapshot(source, url, current, timeout)
+        template_health = node_template_health_snapshot(url, timeout)
+        if native_template_health_is_mining_safe(template_health):
+            return native_template_health_synced_progress(source, template_health, current, chain, evm_lag)
+        native_template_sync = native_template_health_sync_progress(source, template_health, current)
+        if native_template_sync:
+            native_template_sync.update(chain)
+            native_template_sync.update(evm_lag)
+            return native_template_sync
+        if native_template_health_is_chain_synced(template_health):
+            return native_template_health_synced_progress(source, template_health, current, chain, evm_lag)
 
         sync_current = safe_int(chain.get("sync_current_block"), None)
         sync_highest = safe_int(chain.get("sync_highest_block"), None)

@@ -108,7 +108,7 @@ read_config_value() {
   local key="$2"
   [ -f "$config_file" ] || return 1
   awk -F= -v key="$key" '
-    $1 == key {
+    $1 ~ "^[[:space:]]*" key "[[:space:]]*$" {
       value = $0
       sub("^[^=]*=", "", value)
       gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
@@ -116,6 +116,55 @@ read_config_value() {
       exit
     }
   ' "$config_file"
+}
+
+valid_tcp_port() {
+  local port="$1"
+  case "$port" in
+    ""|*[!0-9]*) return 1 ;;
+  esac
+  [ "$port" -ge 1 ] && [ "$port" -le 65535 ]
+}
+
+configured_p2p_port() {
+  local port="${P2P_PORT:-8150}"
+  if ! valid_tcp_port "$port"; then
+    log "invalid P2P_PORT=$port; using release default P2P_PORT=8150"
+    port=8150
+  fi
+  printf '%s\n' "$port"
+}
+
+set_config_value() {
+  local config_file="$1"
+  local key="$2"
+  local value="$3"
+  local tmp_file="${config_file}.tmp.$$"
+  awk -v key="$key" -v value="$value" '
+    $0 ~ "^[[:space:]]*" key "[[:space:]]*=" {
+      print key "=" value
+      wrote = 1
+      next
+    }
+    { print }
+    END {
+      if (!wrote) {
+        print key "=" value
+      }
+    }
+  ' "$config_file" > "$tmp_file"
+  mv "$tmp_file" "$config_file"
+}
+
+normalize_runtime_config_p2p_port() {
+  local runtime_config="$1"
+  local current_port="$2"
+  local desired_port="$3"
+  if [ "$current_port" = "$desired_port" ]; then
+    return 0
+  fi
+  log "node config P2P port ${current_port:-<missing>} differs from P2P_PORT=$desired_port; using runtime config port=$desired_port"
+  set_config_value "$runtime_config" port "$desired_port"
 }
 
 network_datadir() {
@@ -356,12 +405,19 @@ prepare_runtime_configfile() {
   RUNTIME_CONFIGFILE_NODE_ARGS=
   [ "$(id -u)" = 0 ] || return 0
 
-  local node_args config_file runtime_config runtime_dir
+  local node_args config_file runtime_config runtime_dir desired_port configured_port needs_runtime_config
   node_args="$(node_args_from_argv "$@" || true)"
   config_file="$(node_arg_value configfile "$node_args" || true)"
   [ -n "$config_file" ] || return 0
 
-  if runuser -u bdagStack -g bdagStack -- test -r "$config_file" 2>/dev/null; then
+  desired_port="$(configured_p2p_port)"
+  configured_port="$(read_config_value "$config_file" port || true)"
+  needs_runtime_config=0
+  if [ "$configured_port" != "$desired_port" ]; then
+    needs_runtime_config=1
+  fi
+
+  if [ "$needs_runtime_config" != "1" ] && runuser -u bdagStack -g bdagStack -- test -r "$config_file" 2>/dev/null; then
     return 0
   fi
 
@@ -374,6 +430,7 @@ prepare_runtime_configfile() {
   runtime_dir="$(dirname "$runtime_config")"
   mkdir -p "$runtime_dir"
   cp "$config_file" "$runtime_config"
+  normalize_runtime_config_p2p_port "$runtime_config" "$configured_port" "$desired_port"
   chown bdagStack:bdagStack "$runtime_config"
   chmod 0600 "$runtime_config"
   RUNTIME_CONFIGFILE_NODE_ARGS="$(rewrite_node_args_configfile "$node_args" "$runtime_config")"

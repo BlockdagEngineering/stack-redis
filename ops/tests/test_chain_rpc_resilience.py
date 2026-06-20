@@ -155,6 +155,179 @@ class ChainRpcResilienceTests(unittest.TestCase):
         self.assertEqual(progress["evm_gap_to_chain_count"], 2000)
         self.assertEqual(progress["current_block_source"], "eth_blockNumber")
 
+    def test_native_template_health_overrides_evm_lag_for_mining_status(self) -> None:
+        pool_ops.NODE_CHAIN_RPC_RETRIES = 1
+        pool_ops.EVM_PUBLIC_ALIGNMENT_ALWAYS_SAMPLE = True
+        pool_ops.EVM_PUBLIC_ALIGNMENT_SAMPLE_BLOCKS = 2
+        pool_ops.EVM_PUBLIC_ALIGNMENT_MIN_SAMPLES = 1
+
+        def fake_mining_rpc(_url, method, _params, timeout):
+            if method == "getBlockCount":
+                return "12000"
+            if method == "getMainChainHeight":
+                return "9000"
+            if method == "getTemplateHealth":
+                return {
+                    "mineable_now": True,
+                    "submit_ready": True,
+                    "get_block_template_ready": True,
+                    "p2p_current": True,
+                    "p2p_mining_fresh": True,
+                    "sync_allowed": True,
+                    "chain_current": True,
+                    "main_order": 12000,
+                    "p2p_best_peer_main_order": 12000,
+                    "p2p_best_peer_lead_blocks": 0,
+                    "p2p_fresh_consensus_peer_count": 3,
+                    "p2p_consensus_peer_count": 3,
+                }
+            raise AssertionError(method)
+
+        def fake_json_rpc(url, method, params, timeout):
+            if method == "eth_blockNumber":
+                if url == "http://reference:18545":
+                    return "0x2710"
+                return "0x1f40"
+            if method == "eth_getBlockByNumber":
+                height = int(params[0], 16)
+                suffix = "aa" if url == "http://local:18545" else "bb"
+                return {
+                    "number": params[0],
+                    "hash": f"0x{height:062x}{suffix}",
+                    "miner": "0x05518e03e148c56e426ff9e1cbdb962b4fc5250a",
+                    "timestamp": hex(1780784000 + height),
+                }
+            raise AssertionError(method)
+
+        pool_ops.mining_rpc_call = fake_mining_rpc
+        pool_ops.json_rpc_call = fake_json_rpc
+        pool_ops.evm_reference_rpc_urls = lambda: [("reference", "http://reference:18545")]
+
+        progress = pool_ops.node_sync_progress("node", "http://local:38131", timeout=8.0)
+
+        self.assertEqual(progress["status"], "synced")
+        self.assertEqual(progress["source"], "node:native-template-health")
+        self.assertEqual(progress["remaining_blocks"], 0)
+        self.assertEqual(progress["peer_count"], 3)
+        self.assertEqual(progress["evm_lag_to_reference"], 2000)
+        self.assertEqual(progress["evm_reference_lag_diagnostic_blocks"], 2000)
+        self.assertTrue(progress["canonical_mining_safety"]["safe"], progress["canonical_mining_safety"])
+        self.assertEqual(progress["canonical_mining_safety"]["hash_mismatch_count"], 2)
+        self.assertFalse(progress["canonical_mining_safety"]["public_chain_diverged"])
+
+    def test_native_template_health_blocks_synced_status_when_peer_lead_is_unsafe(self) -> None:
+        pool_ops.NODE_CHAIN_RPC_RETRIES = 1
+
+        def fake_mining_rpc(_url, method, _params, timeout):
+            if method == "getBlockCount":
+                return "11981391"
+            if method == "getMainChainHeight":
+                return "9183843"
+            if method == "getTemplateHealth":
+                return {
+                    "reason_code": "node_syncing",
+                    "reason": "node is still syncing with peers",
+                    "mineable_now": False,
+                    "submit_ready": False,
+                    "get_block_template_ready": False,
+                    "get_block_template_reason_code": "node_syncing",
+                    "p2p_current": False,
+                    "p2p_mining_fresh": False,
+                    "p2p_mining_fresh_reason_code": "peer_lead_exceeds_tolerance",
+                    "sync_allowed": False,
+                    "sync_reason_code": "node_syncing",
+                    "chain_current": True,
+                    "main_order": 11981391,
+                    "p2p_best_peer_main_order": 11981415,
+                    "p2p_best_peer_lead_blocks": 24,
+                    "p2p_fresh_consensus_peer_count": 8,
+                    "p2p_consensus_peer_count": 9,
+                }
+            raise AssertionError(method)
+
+        def fake_json_rpc(_url, method, _params, timeout):
+            if method == "eth_blockNumber":
+                return "0xb6d7ef"
+            raise AssertionError(method)
+
+        pool_ops.mining_rpc_call = fake_mining_rpc
+        pool_ops.json_rpc_call = fake_json_rpc
+        pool_ops.evm_reference_rpc_urls = lambda: []
+
+        progress = pool_ops.node_sync_progress("node", "http://local:38131", timeout=8.0)
+
+        self.assertEqual(progress["status"], "syncing")
+        self.assertEqual(progress["source"], "node:native-template-health")
+        self.assertEqual(progress["remaining_blocks"], 24)
+        self.assertEqual(progress["current_block"], 11981391)
+        self.assertEqual(progress["highest_block"], 11981415)
+        self.assertEqual(progress["peer_count"], 8)
+        self.assertFalse(progress["native_template_health"]["mineable_now"])
+        self.assertEqual(progress["native_template_health"]["p2p_mining_fresh_reason_code"], "peer_lead_exceeds_tolerance")
+
+    def test_native_template_health_parent_churn_does_not_fake_sync_lag(self) -> None:
+        pool_ops.NODE_CHAIN_RPC_RETRIES = 1
+
+        def fake_mining_rpc(_url, method, _params, timeout):
+            if method == "getBlockCount":
+                return "11981799"
+            if method == "getMainChainHeight":
+                return "9184136"
+            if method == "getTemplateHealth":
+                return {
+                    "reason_code": "template_parent_churn",
+                    "reason": "mining template parents no longer match current mining tips",
+                    "mineable_now": False,
+                    "submit_ready": False,
+                    "get_block_template_ready": True,
+                    "get_block_template_reason_code": "ok",
+                    "p2p_current": False,
+                    "p2p_mining_fresh": True,
+                    "p2p_mining_fresh_reason_code": "ok",
+                    "sync_allowed": True,
+                    "sync_reason_code": "ok",
+                    "chain_current": True,
+                    "main_order": 11981799,
+                    "p2p_best_peer_main_order": 11981800,
+                    "p2p_best_peer_lead_blocks": 1,
+                    "p2p_fresh_consensus_peer_count": 8,
+                    "p2p_consensus_peer_count": 9,
+                }
+            raise AssertionError(method)
+
+        def fake_json_rpc(_url, method, _params, timeout):
+            if method == "eth_blockNumber":
+                return hex(11981799)
+            raise AssertionError(method)
+
+        pool_ops.mining_rpc_call = fake_mining_rpc
+        pool_ops.json_rpc_call = fake_json_rpc
+        pool_ops.evm_reference_rpc_urls = lambda: []
+
+        progress = pool_ops.node_sync_progress("node", "http://local:38131", timeout=8.0)
+
+        self.assertEqual(progress["status"], "synced")
+        self.assertEqual(progress["source"], "node:native-template-health")
+        self.assertFalse(progress["native_template_health"]["mineable_now"])
+        self.assertTrue(progress["native_template_health"]["p2p_mining_fresh"])
+
+    def test_recent_import_overlay_does_not_override_fresh_native_template_health(self) -> None:
+        progress = {
+            "status": "synced",
+            "native_template_health": {
+                "available": True,
+                "p2p_mining_fresh": True,
+                "sync_allowed": True,
+                "chain_current": True,
+                "main_order": 11982041,
+                "p2p_best_peer_main_order": 11982041,
+                "p2p_best_peer_lead_blocks": 0,
+                "p2p_fresh_consensus_peer_count": 8,
+            },
+        }
+
+        self.assertTrue(pool_ops.sync_progress_native_template_health_synced(progress))
+
     def test_canonical_safety_allows_zero_lag_public_evm_hash_diagnostic(self) -> None:
         pool_ops.EVM_PUBLIC_ALIGNMENT_ALWAYS_SAMPLE = True
         pool_ops.EVM_PUBLIC_ALIGNMENT_SAMPLE_BLOCKS = 3

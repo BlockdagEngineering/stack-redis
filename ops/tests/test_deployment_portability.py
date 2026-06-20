@@ -167,12 +167,45 @@ root 41658 41563 0 16:41 ? 00:00:00 /run/rosetta/rosetta /usr/sbin/runuser runus
     def test_host_dashboard_env_uses_host_reachable_chain_rpc(self) -> None:
         installer = (ROOT_DIR / "ops" / "install-dashboard.sh").read_text(encoding="utf-8")
         portable_env = (ROOT_DIR / "ops" / "portable.env.example").read_text(encoding="utf-8")
+        env_example = (ROOT_DIR / ".env.example").read_text(encoding="utf-8")
 
         self.assertIn("BDAG_NODE_RPC_URLS=node=http://127.0.0.1:38131", installer)
         self.assertIn("BDAG_GLOBAL_CHAIN_RPC_URLS=node=http://127.0.0.1:38131", installer)
         self.assertIn("BDAG_NODE_RPC_URLS=node=http://127.0.0.1:38131", portable_env)
         self.assertIn("BDAG_GLOBAL_CHAIN_RPC_URLS=node=http://127.0.0.1:38131", portable_env)
+        self.assertIn("BDAG_NODE_RPC_URLS=node=http://127.0.0.1:38131", env_example)
         self.assertNotIn("NODE_RPC_URLS=http://node:38131", portable_env)
+        self.assertNotIn("BDAG_NODE_RPC_URLS=node=http://node:38131", env_example)
+
+    def test_host_rpc_url_translation_uses_loopback_for_host_network_node(self) -> None:
+        captured: list[list[str]] = []
+
+        def fake_run(command: list[str], timeout: int = 20) -> pool_ops.CommandResult:
+            captured.append(command)
+            if command == [
+                "docker",
+                "inspect",
+                "node",
+                "--format",
+                "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}",
+            ]:
+                return pool_ops.CommandResult(command, 0, "", "", 0.0)
+            if command == ["docker", "inspect", "node", "--format", "{{.HostConfig.NetworkMode}}"]:
+                return pool_ops.CommandResult(command, 0, "host\n", "", 0.0)
+            return pool_ops.CommandResult(command, 1, "", "unexpected command", 0.0)
+
+        old_run = pool_ops.run
+        try:
+            pool_ops.run = fake_run
+            self.assertEqual(
+                pool_ops._host_url_for_dashboard("http://node:38131"),
+                "http://127.0.0.1:38131",
+            )
+            self.assertEqual(pool_ops.mining_rpc_urls(), [("node", "http://127.0.0.1:38131")])
+        finally:
+            pool_ops.run = old_run
+
+        self.assertGreaterEqual(len(captured), 2)
 
     def test_compose_protects_temp_paths_from_overlay_io(self) -> None:
         compose = (ROOT_DIR / "docker-compose.yml").read_text(encoding="utf-8")

@@ -99,6 +99,7 @@ services:
       TMP: /tmp
       TEMP: /tmp
       BDAG_NETWORK: ${BDAG_NETWORK:-}
+      P2P_PORT: ${P2P_PORT:-8150}
       BDAG_EPHEMERAL_DIR: /run/bdag-ephemeral
       BDAG_SNAPSHOT_URL: ${BDAG_SNAPSHOT_URL:-}
       BDAG_NODE_ARCHIVAL: ${BDAG_NODE_ARCHIVAL:-0}

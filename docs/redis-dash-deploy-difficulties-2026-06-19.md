@@ -65,3 +65,110 @@ chain data from `/home/jeremy/Downloads/bdag-latest-snapshot.tar.gz`.
 - Do not interpret dashboard inventory rows with `status=configured` as active
   miner connections. Require Stratum connection/share evidence before calling
   the pool mining.
+
+## 2026-06-20 Hardening Addendum
+
+This setup exposed several release defects that must be prevented in source,
+not worked around by an operator at install time.
+
+### P2P Port Drift Was the Root Failure
+
+The local runtime had `.env` and firewall expectations for P2P port `8150`, but
+`node.conf` still contained `port=8154`. With host networking, the node
+advertised and listened on the wrong libp2p service port. TCP probes could still
+look open against some remote hosts, but libp2p security negotiation reset or
+timed out because the peer address being exercised was not the durable public
+service endpoint expected by the release.
+
+Mitigations now required by source:
+
+- `.env.example` owns `P2P_PORT=8150`.
+- `docker-compose.yml` passes `P2P_PORT` into the `node` service.
+- `node.conf.example` must contain `port=8150` and must not contain
+  `port=8154`.
+- `docker/entrypoint-nodeworker.sh` reads the mounted `node.conf` before
+  dropping privileges. If the configured `port` differs from `P2P_PORT`, it
+  writes a private runtime config for `bdagStack` with `port=<P2P_PORT>` and
+  leaves the mounted operator file unchanged.
+- `scripts/validate-release-build.sh` and
+  `scripts/release_bootstrap_static_test.py` reject the old `8154` drift.
+
+Expected first-install result: the node listens on `0.0.0.0:8150`, RPC listens
+on `127.0.0.1:38131`, and no service reports or advertises `8154` unless an
+operator deliberately changes both the environment and config.
+
+### Host-Network Services Need Host-Reachable RPC URLs
+
+`node` and `pool` use `network_mode: host`, so host-side watchdog/status code
+cannot assume Compose DNS names such as `node` resolve from the host. The old
+default `BDAG_NODE_RPC_URLS=node=http://node:38131` made status collection fail
+or fall back to weaker signals.
+
+Mitigations now required by source:
+
+- `.env.example` defaults to
+  `BDAG_NODE_RPC_URLS=node=http://127.0.0.1:38131`.
+- `ops/pool_ops.py` maps inspected host-network containers to `127.0.0.1` when
+  building host-side mining RPC URLs.
+- Deployment portability tests cover both explicit loopback URLs and
+  host-network service-name translation.
+
+### Dashboard Sync Status Must Follow Native Template Health
+
+The dashboard and status sampler must not report `synced` merely because an EVM
+height check looks current or a Redis cache is stale. The native node method
+`getTemplateHealth` is the authoritative mining-safety source when available.
+
+Mitigations now required by source:
+
+- Status is `synced` only when native template health proves chain freshness:
+  `p2p_mining_fresh`, `sync_allowed`, `chain_current`, peer lead within
+  tolerance, and enough fresh consensus peers. Mining safety additionally
+  requires `mineable_now`, `submit_ready`, and `get_block_template_ready`.
+- If native template health reports peer lead, stale P2P freshness, or
+  `node_syncing`, status is `syncing` and includes the native health reason.
+- Public EVM RPC hash mismatches are diagnostic only unless they show the
+  explicit solo-miner divergence signature. During this incident, public EVM
+  endpoints disagreed with each other at the same heights, so they cannot be
+  the hard mining gate.
+- Recent node import logs are not a hard sync blocker when native template
+  health is P2P-fresh, sync-allowed, chain-current, and within peer-lead
+  tolerance. A live node imports blocks continuously while mining.
+- The pool is expected to invalidate current jobs and show zero ready miners
+  while native template health is unsafe, then resume only after
+  `submit_ready=true` and P2P freshness returns.
+
+### Peer Lists And Peerstores Need Durable Service Endpoints
+
+Observed high NAT ports and stale peer IDs are not durable bootstrap addresses.
+Seed lists must prefer operator-supplied or live public service-port multiaddrs
+with matching peer IDs. When a wrong local port or stale peerstore has been in
+use, clear or move the stale peerstore before judging the new peer list.
+
+Cold installs should use the packaged peers plus any operator-maintained stable
+service peers, then verify real handshakes through `getPeerInfo`. TCP-open
+alone is not proof of a usable consensus peer.
+
+### Do Not Source Complex `.env` Files In Shell Checks
+
+The release `.env` can contain values that are valid for Compose but unsafe to
+source directly in `bash`. Operator scripts must parse the specific key they
+need or use the existing Python/Compose helpers. Ad hoc `source .env` checks can
+mis-execute continuation-style values and hide the real failure.
+
+### Direct Metrics Are The Runtime Source Of Truth
+
+Dashboard tables and Redis caches are visibility aids. They are not proof that
+miners are connected or that the pool is issuing current work. The runtime
+source of truth is:
+
+- direct native RPC: `getTemplateHealth`, `getPeerInfo`, `getBlockTemplate`;
+- direct pool metrics: `pool_job_health_ready_miners`,
+  `pool_job_health_authorized_miners`, `pool_shares_accepted_total`, and
+  `pool_blocks_found_total`;
+- direct container/process state: `docker ps`, listening ports, and recent
+  `pool`/`node` logs.
+
+During the fixed run, the pool correctly moved from zero ready miners while the
+node was behind peers to four ready miners after native health returned
+`submit_ready=true`.
