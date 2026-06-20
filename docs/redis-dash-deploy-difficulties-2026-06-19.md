@@ -195,6 +195,13 @@ source of truth is:
 - direct container/process state: `docker ps`, listening ports, and recent
   `pool`/`node` logs.
 
+`backend_mineable` and `backend_submit_ready` can briefly drop to zero during
+parent/template invalidation immediately after accepted blocks. Redis-dash
+therefore records a per-sample `accepted_block_submissions_delta` from the live
+pool metrics stream. A fresh accepted-block delta may bridge that transient only
+when P2P freshness, peer lead, ready miners, and template age are also safe; it
+must not be replaced with a lifetime accepted-block total.
+
 During the fixed run, the pool correctly moved from zero ready miners while the
 node was behind peers to four ready miners after native health returned
 `submit_ready=true`.
