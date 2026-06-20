@@ -121,7 +121,7 @@ services:
     # so if you want to start fresh, you need to delete the volume explicity.
     # `docker compose down && docker volume rm <project>_node-data`\
 
-      - ${NODE_DATA_DIR:-node-data}:/var/lib/bdagStack/node
+      - ${NODE_DATA_DIR:-./data/node}:/var/lib/bdagStack/node
       - nodeworker-data:/var/lib/bdagStack/nodeworker
       - ${SNAPSHOT_HOST_PATH:-./docker/no-snapshot.marker}:/snapshot/latest.bdsnap:ro
       # node.conf in project root (copy from node.conf.example). gitignored.
@@ -431,6 +431,7 @@ services:
       - /run/dashboard-redis:size=16m,mode=0700
     volumes:
       - dashboard-redis:/var/lib/dashboard-redis
+      - ${BDAG_HOST_ARP_TABLE_PATH:-/proc/net/arp}:/host/proc/net/arp:ro
     depends_on:
       node: { condition: service_started }
       pool: { condition: service_started }
@@ -478,7 +479,9 @@ services:
       DASHBOARD_TIMEZONE: ${DASHBOARD_TIMEZONE:-Africa/Johannesburg}
       BDAG_MINER_CONTROL_ENABLED: ${BDAG_MINER_CONTROL_ENABLED:-1}
       BDAG_ASIC_LAN_CIDRS: ${BDAG_ASIC_LAN_CIDRS:-}
+      POOL_ASIC_ARP_TABLE_PATH: ${POOL_ASIC_ARP_TABLE_PATH:-/host/proc/net/arp}
       POOL_ASIC_MAC_OVERRIDES: ${POOL_ASIC_MAC_OVERRIDES:-}
+      POOL_ASIC_MAC_ALLOWLIST: ${POOL_ASIC_MAC_ALLOWLIST:-}
       BDAG_POOL_URL: ${BDAG_POOL_URL:-}
       MINING_POOL_ADDRESS: ${MINING_POOL_ADDRESS:?set MINING_POOL_ADDRESS to a non-zero payout address}
       POOL_COINBASE_ADDRESS: ${POOL_COINBASE_ADDRESS:-}

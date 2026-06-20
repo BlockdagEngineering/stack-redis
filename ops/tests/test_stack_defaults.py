@@ -75,6 +75,29 @@ class StackDefaultsTests(unittest.TestCase):
         self.assertIn('os.environ.get("BDAG_POOL_DB_USER", "bdag_pool")', pool_ops)
         self.assertIn('os.environ.get("BDAG_POOL_DB_NAME", "bdagpool")', pool_ops)
 
+    def test_native_safe_mining_defaults_are_stack_owned(self) -> None:
+        defaults = parse_env(ROOT_DIR / "ops/config/stack-defaults.env")
+        env_example = parse_env(ROOT_DIR / ".env.example")
+        compose = (ROOT_DIR / "docker-compose.yml").read_text(encoding="utf-8")
+
+        expected = {
+            "NODE_DATA_DIR": "./data/node",
+            "POOL_ASIC_ARP_TABLE_PATH": "/host/proc/net/arp",
+            "POOL_RPC_ROUTER_NODE_HEALTH_FRESH_TEMPLATE_GRACE_SECONDS": "15",
+            "POOL_RPC_ROUTER_NODE_HEALTH_MIN_CONSENSUS_PEERS": "2",
+            "POOL_RECENT_STALE_BLOCK_CANDIDATE_SUBMIT_GRACE_MS": "250",
+            "POOL_AUTO_TUNE_BLOCK_CANDIDATE_JOB_AGE": "true",
+            "POOL_AUTO_TUNE_BLOCK_CANDIDATE_MAX_AGE_MS": "8000",
+            "POOL_PREEMPTIVE_BLOCK_CANDIDATE_CLEAN_REISSUE_ENABLED": "false",
+            "POOL_PREEMPTIVE_BLOCK_CANDIDATE_REFRESH_DELAY_MS": "0",
+            "POOL_PREEMPTIVE_BLOCK_CANDIDATE_REFRESH_INTERVAL_MS": "20",
+            "POOL_PREEMPTIVE_BLOCK_CANDIDATE_REFRESH_TIMEOUT_MS": "1000",
+        }
+        for key, value in expected.items():
+            self.assertEqual(defaults[key], value)
+            self.assertEqual(env_example[key], value)
+            self.assertIn(f"${{{key}:-{value}}}", compose)
+
     def test_stack_defaults_validator_passes(self) -> None:
         result = subprocess.run(
             ["python3", "scripts/validate-stack-defaults.py"],
