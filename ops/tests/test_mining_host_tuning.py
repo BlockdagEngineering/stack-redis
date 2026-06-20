@@ -30,6 +30,7 @@ class MiningHostTuningTests(unittest.TestCase):
     def test_compose_defaults_keep_critical_path_above_dashboard(self) -> None:
         compose = read("docker-compose.yml")
         stack_defaults = read("ops/config/stack-defaults.env")
+        sysctl_profile = read("ops/sysctl/99-bdag-mining.conf")
 
         self.assertIn("BDAG_NODE_CPU_SHARES=6144", stack_defaults)
         self.assertIn("BDAG_POOL_CPU_SHARES=5120", stack_defaults)
@@ -41,6 +42,7 @@ class MiningHostTuningTests(unittest.TestCase):
         self.assertIn("weight: 900", compose)
         self.assertIn("weight: 100", compose)
         self.assertIn("shm_size: ${BDAG_NODE_SHM_SIZE:-512m}", compose)
+        self.assertIn("vm.overcommit_memory = 1", sysctl_profile)
 
     def test_env_example_exposes_priority_knobs(self) -> None:
         env_example = read(".env.example")

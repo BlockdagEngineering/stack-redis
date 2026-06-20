@@ -131,6 +131,36 @@ class MiningAppliancePreflightTest(unittest.TestCase):
         self.assertEqual(found["node_mining_runtime"].status, "pass")
         self.assertEqual(found["fastsync_acceleration"].status, "pass")
 
+    def test_bootstrap_peer_overlay_fails_known_stale_peer_id(self) -> None:
+        checks = []
+        preflight.check_bootstrap_peers(
+            checks,
+            ROOT,
+            {
+                "BOOTSTRAP_PEER_ADDRESSES": (
+                    "/ip4/16.28.133.168/tcp/8150/p2p/"
+                    "16Uiu2HAkvnS42JoJSUNawLmbsHio2ikQWNWXqSMsTf6UXLRcmsXS"
+                )
+            },
+        )
+
+        found = {check.name: check for check in checks}
+        self.assertEqual(found["bootstrap_peer_overlay"].status, "fail")
+        self.assertIn("stale", found["bootstrap_peer_overlay"].detail)
+
+    def test_bootstrap_peer_overlay_accepts_required_operator_seeds(self) -> None:
+        checks = []
+        preflight.check_bootstrap_peers(
+            checks,
+            ROOT,
+            {
+                "BOOTSTRAP_PEER_ADDRESSES": ",".join(sorted(preflight.REQUIRED_BOOTSTRAP_PEERS)),
+            },
+        )
+
+        found = {check.name: check for check in checks}
+        self.assertEqual(found["bootstrap_peer_overlay"].status, "pass")
+
     def test_constrained_mining_profile_warns_without_maxinbound(self) -> None:
         profile = preflight.HostProfile(
             os_name="linux",

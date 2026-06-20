@@ -37,6 +37,18 @@ class StackDefaultsTests(unittest.TestCase):
         )
         self.assertIn(expected, compose)
 
+    def test_pool_database_defaults_match_compose(self) -> None:
+        defaults = parse_env(ROOT_DIR / "ops/config/stack-defaults.env")
+        env_example = parse_env(ROOT_DIR / ".env.example")
+        pool_ops = (ROOT_DIR / "ops/pool_ops.py").read_text(encoding="utf-8")
+
+        self.assertEqual(defaults["BDAG_POOL_DB_USER"], "bdag_pool")
+        self.assertEqual(defaults["BDAG_POOL_DB_NAME"], "bdagpool")
+        self.assertEqual(env_example["POSTGRES_USER"], defaults["BDAG_POOL_DB_USER"])
+        self.assertEqual(env_example["POSTGRES_DB"], defaults["BDAG_POOL_DB_NAME"])
+        self.assertIn('os.environ.get("BDAG_POOL_DB_USER", "bdag_pool")', pool_ops)
+        self.assertIn('os.environ.get("BDAG_POOL_DB_NAME", "bdagpool")', pool_ops)
+
     def test_stack_defaults_validator_passes(self) -> None:
         result = subprocess.run(
             ["python3", "scripts/validate-stack-defaults.py"],

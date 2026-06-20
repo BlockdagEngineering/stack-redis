@@ -273,8 +273,8 @@ DATA_DIR = path_from_env("BDAG_DATA_DIR", PROJECT_ROOT / "data", PROJECT_ROOT)
 POOL_CONTAINER = os.environ.get("BDAG_POOL_CONTAINER", "pool")
 POOL_CONTAINERS = unique_names([POOL_CONTAINER, *split_env_list("BDAG_POOL_CONTAINERS", "")])
 POOL_DB_CONTAINER = os.environ.get("BDAG_POOL_DB_CONTAINER", "postgres")
-POOL_DB_USER = os.environ.get("BDAG_POOL_DB_USER", "test")
-POOL_DB_NAME = os.environ.get("BDAG_POOL_DB_NAME", "pool")
+POOL_DB_USER = os.environ.get("BDAG_POOL_DB_USER", "bdag_pool")
+POOL_DB_NAME = os.environ.get("BDAG_POOL_DB_NAME", "bdagpool")
 NODES = split_env_list("BDAG_NODE_SERVICES", "node")
 OBSERVER_NODES = unique_names(split_env_list("BDAG_OBSERVER_NODE_SERVICES", ""))
 STACK_SERVICES = split_env_list(
@@ -7161,6 +7161,7 @@ def evm_rpc_lag_snapshot(source: str, node_rpc_url: str, chain_block_count: int,
             "reason": "EVM RPC has not been sampled yet",
         },
     }
+    snapshot.update(eth_syncing_details(evm_url, timeout))
     try:
         evm_block = parse_rpc_quantity(json_rpc_call(evm_url, "eth_blockNumber", [], timeout=timeout))
     except Exception as exc:  # noqa: BLE001 - EVM lag is a readiness diagnostic.
@@ -7653,6 +7654,39 @@ def node_sync_progress(source: str, url: str, timeout: float = NODE_CHAIN_RPC_TI
             }
         evm_lag = evm_rpc_lag_snapshot(source, url, current, timeout)
         template_health = node_template_health_snapshot(url, timeout)
+        sync_current = safe_int(chain.get("sync_current_block"), None)
+        sync_highest = safe_int(chain.get("sync_highest_block"), None)
+        if evm_lag.get("chain_syncing") is True:
+            sync_current = safe_int(evm_lag.get("sync_current_block"), sync_current)
+            sync_highest = safe_int(evm_lag.get("sync_highest_block"), sync_highest)
+        if chain.get("chain_syncing") is True or evm_lag.get("chain_syncing") is True:
+            evm_block = safe_int(evm_lag.get("evm_block_count"), None)
+            progress_current = sync_current if sync_current is not None else evm_block if evm_block is not None else current
+            remaining = (
+                max(0, sync_highest - progress_current)
+                if sync_highest is not None and progress_current is not None
+                else None
+            )
+            percent = (
+                round(max(0.0, min(100.0, (progress_current / max(1, sync_highest)) * 100)), 2)
+                if sync_highest is not None and progress_current is not None
+                else None
+            )
+            sync_source = "eth_syncing" if evm_lag.get("chain_syncing") is True else "chain-rpc-syncing"
+            return {
+                "status": "syncing",
+                "percent": percent,
+                "current_block": progress_current,
+                "highest_block": sync_highest,
+                "starting_block": None,
+                "remaining_blocks": remaining,
+                "source": f"{source}:{sync_source}",
+                "error": "eth_syncing active" if evm_lag.get("chain_syncing") is True else "",
+                "current_block_source": "eth_syncing" if evm_lag.get("chain_syncing") is True else chain.get("chain_rpc_source"),
+                "native_template_health": compact_template_health_for_status(template_health),
+                **chain,
+                **evm_lag,
+            }
         if native_template_health_is_mining_safe(template_health):
             return native_template_health_synced_progress(source, template_health, current, chain, evm_lag)
         native_template_sync = native_template_health_sync_progress(source, template_health, current)
@@ -7662,30 +7696,6 @@ def node_sync_progress(source: str, url: str, timeout: float = NODE_CHAIN_RPC_TI
             return native_template_sync
         if native_template_health_is_chain_synced(template_health):
             return native_template_health_synced_progress(source, template_health, current, chain, evm_lag)
-
-        sync_current = safe_int(chain.get("sync_current_block"), None)
-        sync_highest = safe_int(chain.get("sync_highest_block"), None)
-        if chain.get("chain_syncing") is True:
-            progress_current = sync_current if sync_current is not None else current
-            remaining = max(0, sync_highest - progress_current) if sync_highest is not None else None
-            percent = (
-                round(max(0.0, min(100.0, (progress_current / max(1, sync_highest)) * 100)), 2)
-                if sync_highest is not None
-                else None
-            )
-            return {
-                "status": "syncing",
-                "percent": percent,
-                "current_block": progress_current,
-                "highest_block": sync_highest,
-                "starting_block": None,
-                "remaining_blocks": remaining,
-                "source": source,
-                "error": "",
-                "current_block_source": chain.get("chain_rpc_source"),
-                **chain,
-                **evm_lag,
-            }
 
         evm_block = safe_int(evm_lag.get("evm_block_count"), None)
         evm_reference = safe_int(evm_lag.get("evm_reference_block_count"), None)

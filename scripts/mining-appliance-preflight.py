@@ -21,6 +21,16 @@ ZERO_ETH_ADDRESS = "0x0000000000000000000000000000000000000000"
 FLASH_UNFRIENDLY_FS = {"exfat", "vfat", "ntfs", "fuseblk"}
 RAM_BACKED_FS = {"tmpfs", "ramfs"}
 CHAIN_DB_MARKERS = ("BdagChain", "Blockdag", "chaindata", "mainnet")
+STALE_BOOTSTRAP_PEER_IDS = {
+    "16Uiu2HAkvnS42JoJSUNawLmbsHio2ikQWNWXqSMsTf6UXLRcmsXS": (
+        "Cape Town pool/node host stale peer ID for 16.28.133.168:8150"
+    ),
+}
+REQUIRED_BOOTSTRAP_PEERS = {
+    "/ip4/16.28.133.168/tcp/8150/p2p/16Uiu2HAm9UcTayJDSajjJYsWwVaN2qqGeczcs9kXse3dMdvGDRjz",
+    "/ip4/63.182.36.180/tcp/8150/p2p/16Uiu2HAmP8HsTF9ks8JjFamzT9JBZb3ymSiCJ8rkzXBZqYj4yKtP",
+    "/ip4/3.126.64.13/tcp/8152/p2p/16Uiu2HAmEFxRaBbbf3sRi43CCvMk5Y6zPkuGY9s4uRK2FKJVJkqo",
+}
 
 
 @dataclass
@@ -387,6 +397,22 @@ def check_host(checks: list[Check], profile: HostProfile) -> None:
     )
     if profile.os_name != "linux":
         add(checks, "warn", "host_os", f"{profile.os_name} lacks Linux pressure and block-device tuning APIs.")
+    else:
+        try:
+            overcommit = Path("/proc/sys/vm/overcommit_memory").read_text(encoding="utf-8").strip()
+        except OSError:
+            overcommit = ""
+        if overcommit and overcommit != "1":
+            add(
+                checks,
+                "warn",
+                "redis_overcommit",
+                f"vm.overcommit_memory={overcommit}; embedded dashboard Redis can fail background saves under pressure.",
+                "Apply ops/apply-mining-host-tuning.sh or set vm.overcommit_memory=1 before first stack start.",
+                {"vm.overcommit_memory": overcommit},
+            )
+        elif overcommit == "1":
+            add(checks, "pass", "redis_overcommit", "vm.overcommit_memory=1", evidence={"vm.overcommit_memory": overcommit})
     if profile.profile == "constrained" and profile.memory_bytes and profile.memory_bytes < 4 * GIB:
         add(
             checks,
@@ -909,6 +935,61 @@ def check_env_defaults(checks: list[Check], env: dict[str, str], profile: HostPr
         add(checks, "pass", "entrypoint_chown_mode", f"BDAG_ENTRYPOINT_CHOWN_MODE={chown_mode}", evidence=evidence)
 
 
+def split_peer_values(value: str | None) -> list[str]:
+    if not value:
+        return []
+    return [item.strip() for item in re.split(r"[,\s]+", value) if item.strip()]
+
+
+def check_bootstrap_peers(checks: list[Check], root: Path, env: dict[str, str]) -> None:
+    peer_sources: dict[str, list[str]] = {}
+    for key in ("BOOTSTRAP_PEER_ADDRESSES", "BDAG_FASTSYNC_PEERS", "BDAG_FASTSNAP_PEERS", "BDAG_RAWDATADIR_PEERS"):
+        peers = split_peer_values(env.get(key))
+        if peers:
+            peer_sources[key] = peers
+
+    node_conf = root / "node.conf"
+    if not node_conf.exists():
+        node_conf = root / "node.conf.example"
+    if node_conf.exists():
+        peers = [
+            line.split("=", 1)[1].strip()
+            for line in node_conf.read_text(encoding="utf-8").splitlines()
+            if line.strip().startswith("addpeer=") and "=" in line
+        ]
+        if peers:
+            peer_sources[node_conf.name] = peers
+
+    all_peers = [peer for peers in peer_sources.values() for peer in peers]
+    evidence = {"sources": {name: len(peers) for name, peers in peer_sources.items()}}
+    stale_hits = [
+        {"peer_id": peer_id, "reason": reason}
+        for peer_id, reason in STALE_BOOTSTRAP_PEER_IDS.items()
+        if any(peer_id in peer for peer in all_peers)
+    ]
+    missing_required = [peer for peer in sorted(REQUIRED_BOOTSTRAP_PEERS) if peer not in all_peers]
+    if stale_hits:
+        add(
+            checks,
+            "fail",
+            "bootstrap_peer_overlay",
+            "bootstrap peer overlay contains stale known peer IDs.",
+            "Replace stale multiaddrs before first start; mining must not begin from an untrusted or dead peer overlay.",
+            {**evidence, "stale_hits": stale_hits},
+        )
+    elif missing_required:
+        add(
+            checks,
+            "warn",
+            "bootstrap_peer_overlay",
+            "bootstrap peer overlay is missing required operator/public seeds.",
+            "Include the validated operator seeds so the node has known public peers before mining.",
+            {**evidence, "missing_required": missing_required},
+        )
+    else:
+        add(checks, "pass", "bootstrap_peer_overlay", "bootstrap peer overlay contains validated public seeds", evidence=evidence)
+
+
 def check_swap(checks: list[Check], profile: HostProfile) -> None:
     swaps = parse_swaps()
     total = sum(item["size_bytes"] for item in swaps)
@@ -1133,6 +1214,7 @@ def run_preflight(root: Path, env_file: Path) -> dict[str, Any]:
     check_disk_io_noise_guard(checks, root, env, profile)
     check_node_data_layout(checks, root, env)
     check_env_defaults(checks, env, profile)
+    check_bootstrap_peers(checks, root, env)
     check_swap(checks, profile)
     check_network(checks, root)
     check_docker_storage(checks, root, env, profile)

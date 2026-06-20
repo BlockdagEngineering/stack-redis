@@ -131,6 +131,12 @@ class BootstrapPeerDefaultTests(unittest.TestCase):
 
         self.assertNotIn("/ip4/52.8.80.249/tcp/8150/p2p/", node_conf)
         self.assertNotIn("/ip4/192.168.", node_conf)
+        self.assertNotIn("16Uiu2HAkvnS42JoJSUNawLmbsHio2ikQWNWXqSMsTf6UXLRcmsXS", node_conf)
+        self.assertIn(
+            "/ip4/16.28.133.168/tcp/8150/p2p/"
+            "16Uiu2HAm9UcTayJDSajjJYsWwVaN2qqGeczcs9kXse3dMdvGDRjz",
+            node_conf,
+        )
 
 
 if __name__ == "__main__":
