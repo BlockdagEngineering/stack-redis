@@ -2539,13 +2539,17 @@ def get_miner_cgminer_devs(ip: str, timeout: float = MINER_HTTP_TIMEOUT) -> dict
 
 def discover_miner(ip: str, timeout: float = MINER_SCAN_TIMEOUT) -> dict[str, Any] | None:
     started = time.time()
+    pools: list[dict[str, Any]] = []
+    pool_api_error = ""
     try:
         pools = get_miner_pools(ip, timeout=timeout)
-    except MinerAPIError:
-        return None
+    except MinerAPIError as exc:
+        pool_api_error = str(exc)
 
     status = get_miner_status(ip, timeout=timeout)
     settings = get_miner_settings(ip, timeout=timeout)
+    if not pools and not status and not settings:
+        return None
     identity_payload = {**settings, **status}
     active_pool = next((pool for pool in pools if pool.get("active")), pools[0] if pools else {})
     mac = miner_mac_from_payload(identity_payload, ip)
@@ -2560,6 +2564,7 @@ def discover_miner(ip: str, timeout: float = MINER_SCAN_TIMEOUT) -> dict[str, An
         "mcbversion": status.get("mcbversion", ""),
         "pool_count": len(pools),
         "active": bool(active_pool.get("active")),
+        "pool_api_error": pool_api_error,
         "current_pool": active_pool,
         "pools": pools,
         "response_ms": round((time.time() - started) * 1000),

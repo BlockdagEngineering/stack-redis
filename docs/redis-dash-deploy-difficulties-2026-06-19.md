@@ -159,8 +159,10 @@ Mitigations now required by source:
 - Chain-state self-heal stops/parks mining work, quarantines the stale node
   data, restores from a configured trusted source or snapshot, restarts
   node/dashboard, and leaves the pool stopped until readiness gates pass.
-- Mining must never be resumed merely because native P2P is fresh if local EVM
-  remains syncing or materially behind public reference heads.
+- Local EVM sync lag is advisory when native template health and pool backend
+  metrics prove mining safety (`mineable`, `submit_ready`, `p2p_mining_fresh`,
+  zero peer lead). It becomes a hard blocker only when native safety is missing
+  or public/reference evidence shows explicit divergence or solo-mining risk.
 
 ### Peer Lists And Peerstores Need Durable Service Endpoints
 
@@ -196,3 +198,21 @@ source of truth is:
 During the fixed run, the pool correctly moved from zero ready miners while the
 node was behind peers to four ready miners after native health returned
 `submit_ready=true`.
+
+### ASIC Pool APIs Can Wedge While Controllers Stay Alive
+
+X100 controllers can still answer `/mcb/status` and `/mcb/setting` while the
+pool/cgminer endpoint `/mcb/pools` times out or returns errors. Treating that
+as "not a miner" hides a recoverable ASIC and leaves pool operators looking at
+only the surviving miners.
+
+Mitigations now required by source:
+
+- Miner discovery keeps an ASIC visible when status/settings identify it but
+  the pool API is wedged. The scan row includes `pool_api_error`, an empty
+  pool list, and `active=false` instead of disappearing.
+- MAC address remains the canonical ASIC identity. DHCP/IP reuse after restart
+  is expected; do not key miner health, retirement, or restart decisions by IP.
+- When native/pool health is good but an ASIC has controller responses and no
+  pool API, restart that ASIC controller first. Do not restart node or pool for
+  this symptom.
