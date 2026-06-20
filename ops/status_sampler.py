@@ -112,7 +112,9 @@ CHAIN_STATE_SELF_HEAL_UNIT = os.environ.get(
     "BDAG_CHAIN_STATE_SELF_HEAL_UNIT",
     "bdag-chain-state-self-heal.service",
 ).strip()
+CHAIN_STATE_SELF_HEAL_COMMAND = os.environ.get("BDAG_CHAIN_STATE_SELF_HEAL_COMMAND", "").strip()
 CHAIN_STATE_IMPORT_WATCH_FILE = STATUS_SAMPLER_FILE.parent / "chain-state-import-watch.json"
+EVM_REFERENCE_GAP_WATCH_FILE = STATUS_SAMPLER_FILE.parent / "evm-reference-gap-watch.json"
 CHAIN_STATE_MISSING_TRIE_RESTORE_WARNINGS = env_int(
     "BDAG_CHAIN_STATE_MISSING_TRIE_RESTORE_WARNINGS",
     1,
@@ -134,6 +136,25 @@ CHAIN_STATE_STALLED_IMPORT_RESTORE_PEER_AHEAD_BLOCKS = env_int(
 )
 CHAIN_STATE_STALLED_IMPORT_RESTORE_GAP_GROWTH_BLOCKS = env_int(
     "BDAG_CHAIN_STATE_STALLED_IMPORT_RESTORE_GAP_GROWTH_BLOCKS",
+    60,
+    minimum=0,
+)
+EVM_REFERENCE_GAP_STALL_RESTORE_ENABLED = env_bool(
+    "BDAG_EVM_REFERENCE_GAP_STALL_RESTORE_ENABLED",
+    True,
+)
+EVM_REFERENCE_GAP_STALL_RESTORE_SECONDS = env_int(
+    "BDAG_EVM_REFERENCE_GAP_STALL_RESTORE_SECONDS",
+    900,
+    minimum=60,
+)
+EVM_REFERENCE_GAP_STALL_MIN_LAG_BLOCKS = env_int(
+    "BDAG_EVM_REFERENCE_GAP_STALL_MIN_LAG_BLOCKS",
+    1000,
+    minimum=1,
+)
+EVM_REFERENCE_GAP_STALL_MIN_IMPROVEMENT_BLOCKS = env_int(
+    "BDAG_EVM_REFERENCE_GAP_STALL_MIN_IMPROVEMENT_BLOCKS",
     60,
     minimum=0,
 )
@@ -743,46 +764,232 @@ def update_stalled_import_watch(payload: dict[str, Any]) -> dict[str, Any]:
     return state
 
 
+def read_evm_reference_gap_watch_state() -> dict[str, Any]:
+    try:
+        with EVM_REFERENCE_GAP_WATCH_FILE.open(encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def evm_reference_gap_samples(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    samples: list[dict[str, Any]] = []
+    sync = dict_value(payload.get("sync_progress"))
+
+    def add_sample(name: str, info: dict[str, Any]) -> None:
+        source_text = " ".join(
+            str(info.get(key) or "")
+            for key in ("source", "current_block_source", "error", "sync_source")
+        ).lower()
+        evm_marked = bool(
+            "evm" in source_text
+            or "eth_syncing" in source_text
+            or any(
+                key in info
+                for key in (
+                    "eth_syncing",
+                    "evm_block_count",
+                    "evm_reference_block_count",
+                    "evm_lag_to_reference",
+                    "sync_current_block",
+                    "sync_highest_block",
+                )
+            )
+        )
+        if not evm_marked:
+            return
+
+        local_block = safe_int(info.get("evm_block_count"), -1)
+        reference_block = safe_int(info.get("evm_reference_block_count"), -1)
+        lag_blocks = safe_int(info.get("evm_lag_to_reference"), -1)
+
+        if local_block < 0:
+            local_block = safe_int(info.get("current_block"), safe_int(info.get("sync_current_block"), -1))
+        if reference_block < 0:
+            reference_block = safe_int(info.get("highest_block"), safe_int(info.get("sync_highest_block"), -1))
+        if lag_blocks < 0:
+            lag_blocks = safe_int(info.get("remaining_blocks"), -1)
+        if lag_blocks < 0 and local_block >= 0 and reference_block >= 0:
+            lag_blocks = max(0, reference_block - local_block)
+        if lag_blocks < 0:
+            return
+
+        samples.append(
+            {
+                "source": name,
+                "lag_blocks": lag_blocks,
+                "local_block": local_block if local_block >= 0 else None,
+                "reference_block": reference_block if reference_block >= 0 else None,
+                "status": info.get("status"),
+            }
+        )
+
+    if sync:
+        add_sample("sync_progress", sync)
+    for name, info in dict_value(sync.get("nodes")).items():
+        if isinstance(info, dict):
+            add_sample(f"sync_progress.nodes.{name}", info)
+    return samples
+
+
+def evm_reference_gap_sample(payload: dict[str, Any]) -> dict[str, Any]:
+    samples = evm_reference_gap_samples(payload)
+    if not samples:
+        return {}
+    return max(samples, key=lambda item: safe_int(item.get("lag_blocks"), -1))
+
+
+def update_evm_reference_gap_watch(payload: dict[str, Any]) -> dict[str, Any]:
+    now_epoch = time.time()
+    sample = evm_reference_gap_sample(payload)
+    lag = safe_int(sample.get("lag_blocks"), -1)
+    candidate = bool(
+        EVM_REFERENCE_GAP_STALL_RESTORE_ENABLED
+        and sample
+        and lag >= EVM_REFERENCE_GAP_STALL_MIN_LAG_BLOCKS
+    )
+    previous = read_evm_reference_gap_watch_state()
+
+    if not candidate:
+        state = {
+            "schema_version": 1,
+            "updated_at": now_iso(),
+            "epoch": now_epoch,
+            "candidate": False,
+            "restore_required": False,
+            "reason": (
+                "EVM reference gap restore watch disabled or below threshold"
+                if EVM_REFERENCE_GAP_STALL_RESTORE_ENABLED
+                else "EVM reference gap restore watch disabled"
+            ),
+            "sample": sample,
+            "lag_blocks": lag if lag >= 0 else None,
+            "min_lag_blocks": EVM_REFERENCE_GAP_STALL_MIN_LAG_BLOCKS,
+        }
+        write_json_file(EVM_REFERENCE_GAP_WATCH_FILE, state, mode=0o600)
+        return state
+
+    previous_best = safe_int(previous.get("best_lag_blocks"), lag)
+    improvement_required = EVM_REFERENCE_GAP_STALL_MIN_IMPROVEMENT_BLOCKS
+    improved_enough = (
+        lag < previous_best
+        if improvement_required <= 0
+        else lag <= max(0, previous_best - improvement_required)
+    )
+    improved = bool(not previous.get("candidate") or improved_enough)
+    if improved:
+        first_unimproved_epoch = now_epoch
+        best_lag = lag
+        stalled_seconds = 0
+        restore_required = False
+        reason = "EVM reference gap improved or watch started"
+    else:
+        first_unimproved_epoch = safe_float(previous.get("first_unimproved_epoch"), now_epoch)
+        best_lag = min(previous_best, lag)
+        stalled_seconds = max(0, int(now_epoch - first_unimproved_epoch))
+        restore_required = bool(stalled_seconds >= EVM_REFERENCE_GAP_STALL_RESTORE_SECONDS)
+        reason = (
+            f"EVM reference gap has not improved by {improvement_required} block(s) "
+            f"for {stalled_seconds}s while lag is {lag} block(s)"
+        )
+
+    state = {
+        "schema_version": 1,
+        "updated_at": now_iso(),
+        "epoch": now_epoch,
+        "candidate": True,
+        "restore_required": restore_required,
+        "reason": reason,
+        "sample": sample,
+        "lag_blocks": lag,
+        "best_lag_blocks": best_lag,
+        "first_unimproved_epoch": first_unimproved_epoch,
+        "stalled_seconds": stalled_seconds,
+        "stall_seconds": EVM_REFERENCE_GAP_STALL_RESTORE_SECONDS,
+        "min_lag_blocks": EVM_REFERENCE_GAP_STALL_MIN_LAG_BLOCKS,
+        "min_improvement_blocks": improvement_required,
+    }
+    write_json_file(EVM_REFERENCE_GAP_WATCH_FILE, state, mode=0o600)
+    return state
+
+
 def chain_state_restore_decision(payload: dict[str, Any]) -> dict[str, Any]:
     if not MINING_IMPERATIVE_CHAIN_STATE_RESTORE_ENABLED:
-        return {"should_repair": False, "reasons": [], "stalled_import": {}, "disabled": True}
+        return {
+            "should_repair": False,
+            "reasons": [],
+            "stalled_import": {},
+            "evm_reference_gap": {},
+            "disabled": True,
+        }
     reasons = chain_state_restore_hard_reasons(payload)
     stalled_import = update_stalled_import_watch(payload)
+    evm_reference_gap = update_evm_reference_gap_watch(payload)
     if reasons:
-        return {"should_repair": True, "reasons": reasons, "stalled_import": stalled_import, "hard": True}
+        return {
+            "should_repair": True,
+            "reasons": reasons,
+            "stalled_import": stalled_import,
+            "evm_reference_gap": evm_reference_gap,
+            "hard": True,
+        }
     if stalled_import.get("restore_required"):
         return {
             "should_repair": True,
             "reasons": [str(stalled_import.get("reason") or "sustained stalled import")],
             "stalled_import": stalled_import,
+            "evm_reference_gap": evm_reference_gap,
             "hard": False,
         }
-    return {"should_repair": False, "reasons": [], "stalled_import": stalled_import, "hard": False}
+    if evm_reference_gap.get("restore_required"):
+        return {
+            "should_repair": True,
+            "reasons": [str(evm_reference_gap.get("reason") or "sustained EVM reference gap")],
+            "stalled_import": stalled_import,
+            "evm_reference_gap": evm_reference_gap,
+            "hard": False,
+        }
+    return {
+        "should_repair": False,
+        "reasons": [],
+        "stalled_import": stalled_import,
+        "evm_reference_gap": evm_reference_gap,
+        "hard": False,
+    }
 
 
 def start_chain_state_self_heal(payload: dict[str, Any], decision: dict[str, Any]) -> bool:
-    if not CHAIN_STATE_SELF_HEAL_UNIT:
-        log("chain-state self-heal unit is not configured")
+    if not CHAIN_STATE_SELF_HEAL_UNIT and not CHAIN_STATE_SELF_HEAL_COMMAND:
+        log("chain-state self-heal unit/command is not configured")
         return False
+    target = CHAIN_STATE_SELF_HEAL_COMMAND or CHAIN_STATE_SELF_HEAL_UNIT
     if not automation_repair_mutation_allowed(
         automation_control.ACTION_SYSTEMD_START,
-        target=CHAIN_STATE_SELF_HEAL_UNIT,
+        target=target,
         reason="start chain-state self-heal after restore-required node state",
         payload=payload,
         event_type="chain_state_self_heal_start_blocked",
-        message="Chain-state self-heal was not started because automation control blocked systemd start",
+        message="Chain-state self-heal was not started because automation control blocked repair start",
     ):
         return False
-    result = systemctl_user("start", "--no-block", CHAIN_STATE_SELF_HEAL_UNIT)
+    if CHAIN_STATE_SELF_HEAL_COMMAND:
+        result = run(["bash", "-lc", f"nohup {CHAIN_STATE_SELF_HEAL_COMMAND} >/dev/null 2>&1 &"], timeout=10)
+        method = "background command"
+    else:
+        result = systemctl_user("start", "--no-block", CHAIN_STATE_SELF_HEAL_UNIT)
+        method = "systemd user unit"
     details = {
         "unit": CHAIN_STATE_SELF_HEAL_UNIT,
+        "command": CHAIN_STATE_SELF_HEAL_COMMAND,
+        "method": method,
         "decision": decision,
         "returncode": result.returncode,
         "stdout": result.stdout.strip(),
         "stderr": result.stderr.strip(),
     }
     if result.ok:
-        log(f"started chain-state self-heal unit={CHAIN_STATE_SELF_HEAL_UNIT}")
+        log(f"started chain-state self-heal target={target}")
         record_incident(
             "chain_state_self_heal_started",
             "critical",

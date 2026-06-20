@@ -58,15 +58,26 @@ def build_state() -> dict[str, Any]:
     status = collect_stack_status(include_logs=False)
     nodes = status.get("nodes") if isinstance(status, dict) else {}
     sync_progress = status.get("sync_progress") if isinstance(status, dict) else {}
+    sync_health = status.get("sync_health") if isinstance(status.get("sync_health"), dict) else {}
+    evm_gap_watch = (
+        sync_health.get("evm_reference_gap_watch")
+        if isinstance(sync_health.get("evm_reference_gap_watch"), dict)
+        else {}
+    )
+    evm_gap_restore_required = bool(evm_gap_watch.get("restore_required"))
     active_node = NODES[0] if NODES else "node"
     node_info = nodes.get(active_node, {}) if isinstance(nodes, dict) else {}
     remaining = safe_int(node_info.get("remaining_blocks"), safe_int(sync_progress.get("remaining_blocks") if isinstance(sync_progress, dict) else 0))
     state = {
         "updated_at": now_iso(),
         "mode": "active_node_catchup",
-        "action": "monitor",
-        "repairable": False,
-        "reason": "single-backend topology; coordinator does not stop or copy node data",
+        "action": "restore_required" if evm_gap_restore_required else "monitor",
+        "repairable": evm_gap_restore_required,
+        "reason": str(
+            evm_gap_watch.get("reason")
+            if evm_gap_restore_required
+            else "single-backend topology; coordinator does not stop or copy node data"
+        ),
         "active_node": active_node,
         "nodes": {
             active_node: {
@@ -78,6 +89,7 @@ def build_state() -> dict[str, Any]:
             }
         },
         "sync_status": sync_progress.get("status") if isinstance(sync_progress, dict) else None,
+        "evm_reference_gap_watch": evm_gap_watch,
         "overall": status.get("overall") if isinstance(status, dict) else None,
     }
     return state

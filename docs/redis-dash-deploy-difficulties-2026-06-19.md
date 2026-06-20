@@ -138,6 +138,30 @@ Mitigations now required by source:
   while native template health is unsafe, then resume only after
   `submit_ready=true` and P2P freshness returns.
 
+### EVM Reference Gap Must Close, Not Just Move
+
+During catch-up, a node can keep importing blocks while still failing to gain
+on the live EVM chain. Active imports are useful, but they are not sufficient
+proof that the system will become mining-safe soon.
+
+Mitigations now required by source:
+
+- The status sampler records `ops/runtime/evm-reference-gap-watch.json` while
+  local EVM is more than `BDAG_EVM_REFERENCE_GAP_STALL_MIN_LAG_BLOCKS` behind
+  an independent EVM reference.
+- Compose deployments run the status sampler as a low-priority ops service so
+  the same mining imperative and gap watch are active even when user systemd
+  timers are not installed.
+- If `evm_lag_to_reference` does not improve by
+  `BDAG_EVM_REFERENCE_GAP_STALL_MIN_IMPROVEMENT_BLOCKS` within
+  `BDAG_EVM_REFERENCE_GAP_STALL_RESTORE_SECONDS`, the sampler starts the
+  existing fail-closed chain-state self-heal path.
+- Chain-state self-heal stops/parks mining work, quarantines the stale node
+  data, restores from a configured trusted source or snapshot, restarts
+  node/dashboard, and leaves the pool stopped until readiness gates pass.
+- Mining must never be resumed merely because native P2P is fresh if local EVM
+  remains syncing or materially behind public reference heads.
+
 ### Peer Lists And Peerstores Need Durable Service Endpoints
 
 Observed high NAT ports and stale peer IDs are not durable bootstrap addresses.

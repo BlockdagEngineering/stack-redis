@@ -252,6 +252,7 @@ LOG_DIR = RUNTIME_DIR / "logs"
 SHARED_STATUS_CACHE_FILE = RUNTIME_DIR / "shared-status-cache.json"
 STATUS_SAMPLER_FILE = RUNTIME_DIR / "status-sampler.json"
 SYNC_PROGRESS_HEALTH_STATE_FILE = RUNTIME_DIR / "sync-progress-health-state.json"
+EVM_REFERENCE_GAP_WATCH_FILE = RUNTIME_DIR / "evm-reference-gap-watch.json"
 STATUS_PAYLOAD_STALE_AFTER_SECONDS = env_float(
     "BDAG_STATUS_PAYLOAD_STALE_AFTER_SECONDS",
     120.0,
@@ -5845,6 +5846,12 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
         "planned_sync_service": planned_sync_service_name,
         "planned_pause_leader": planned_pause_leader,
     }
+    evm_reference_gap_watch = read_json_file(EVM_REFERENCE_GAP_WATCH_FILE, {})
+    if isinstance(evm_reference_gap_watch, dict) and evm_reference_gap_watch:
+        sync_health["evm_reference_gap_watch"] = evm_reference_gap_watch
+        if evm_reference_gap_watch.get("restore_required"):
+            sync_health["evm_reference_gap_stalled"] = True
+            sync_health["needs_chain_data_restore"] = True
     chain_blocker_nodes = {
         node: {
             "hash": info.get("chain_state_blocker_hash") or "",

@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 
 import os
+import json
 import pathlib
 import sys
 import tempfile
 import unittest
 from types import SimpleNamespace
+from unittest import mock
 
 OPS_DIR = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(OPS_DIR))
@@ -41,6 +43,15 @@ class StatusSamplerMiningImperativeTests(unittest.TestCase):
                 "CATCHUP_IOWAIT_WARN_PERCENT",
                 "CATCHUP_IO_SOME_AVG10_WARN",
                 "CATCHUP_IO_FULL_AVG10_WARN",
+                "CHAIN_STATE_STALLED_IMPORT_RESTORE_ENABLED",
+                "CHAIN_STATE_STALLED_IMPORT_RESTORE_SECONDS",
+                "CHAIN_STATE_STALLED_IMPORT_RESTORE_PEER_AHEAD_BLOCKS",
+                "CHAIN_STATE_STALLED_IMPORT_RESTORE_GAP_GROWTH_BLOCKS",
+                "EVM_REFERENCE_GAP_STALL_RESTORE_ENABLED",
+                "EVM_REFERENCE_GAP_STALL_RESTORE_SECONDS",
+                "EVM_REFERENCE_GAP_STALL_MIN_LAG_BLOCKS",
+                "EVM_REFERENCE_GAP_STALL_MIN_IMPROVEMENT_BLOCKS",
+                "EVM_REFERENCE_GAP_WATCH_FILE",
                 "append_incident",
                 "collect_pool_activity",
                 "detect_total_memory_bytes",
@@ -89,6 +100,14 @@ class StatusSamplerMiningImperativeTests(unittest.TestCase):
         status_sampler.CATCHUP_IOWAIT_WARN_PERCENT = 15.0
         status_sampler.CATCHUP_IO_SOME_AVG10_WARN = 20.0
         status_sampler.CATCHUP_IO_FULL_AVG10_WARN = 10.0
+        status_sampler.CHAIN_STATE_STALLED_IMPORT_RESTORE_ENABLED = True
+        status_sampler.CHAIN_STATE_STALLED_IMPORT_RESTORE_SECONDS = 900
+        status_sampler.CHAIN_STATE_STALLED_IMPORT_RESTORE_PEER_AHEAD_BLOCKS = 1000
+        status_sampler.CHAIN_STATE_STALLED_IMPORT_RESTORE_GAP_GROWTH_BLOCKS = 60
+        status_sampler.EVM_REFERENCE_GAP_STALL_RESTORE_ENABLED = True
+        status_sampler.EVM_REFERENCE_GAP_STALL_RESTORE_SECONDS = 900
+        status_sampler.EVM_REFERENCE_GAP_STALL_MIN_LAG_BLOCKS = 1000
+        status_sampler.EVM_REFERENCE_GAP_STALL_MIN_IMPROVEMENT_BLOCKS = 60
         os.environ["BDAG_ALLOW_UNSYNCED_NODE_MINING"] = "0"
         os.environ["BDAG_ENABLE_NODE_MINING"] = "0"
         os.environ["BDAG_NODE_MODULES"] = "Blockdag"
@@ -152,6 +171,78 @@ class StatusSamplerMiningImperativeTests(unittest.TestCase):
                 "blockdag-node-1": {"canonical_mining_safety": self.canonical_safety(True)}
             }
         return payload
+
+    def evm_gap_payload(self, *, lag: int = 14_100, local: int = 11_690_000) -> dict:
+        reference = local + lag
+        return {
+            "overall": "syncing",
+            "sync_warnings": ["local EVM is behind public reference"],
+            "containers": {status_sampler.POOL_CONTAINER: {"running": False}},
+            "sync_progress": {
+                "status": "syncing",
+                "source": "node:eth_syncing",
+                "current_block_source": "eth_syncing",
+                "current_block": local,
+                "highest_block": reference,
+                "remaining_blocks": lag,
+                "evm_block_count": local,
+                "evm_reference_block_count": reference,
+                "evm_lag_to_reference": lag,
+                "nodes": {},
+            },
+            "sync_health": {},
+            "nodes": {},
+            "miner_health": {"connected_count": 0, "managed_count": 0},
+            "pool": {"metrics": {"active_connections": 0}, "source_job_health": {}},
+            "pool_metrics": {"active_connections": 0, "source_job_health": {}},
+        }
+
+    def test_evm_reference_gap_stall_requires_restore_when_gap_does_not_close(self) -> None:
+        now = 1_779_200_000
+        with tempfile.TemporaryDirectory() as tmpdir:
+            status_sampler.EVM_REFERENCE_GAP_WATCH_FILE = pathlib.Path(tmpdir) / "evm-gap-watch.json"
+            status_sampler.EVM_REFERENCE_GAP_WATCH_FILE.write_text(
+                json.dumps(
+                    {
+                        "candidate": True,
+                        "best_lag_blocks": 14_100,
+                        "first_unimproved_epoch": now - 901,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with mock.patch.object(status_sampler.time, "time", return_value=now):
+                decision = status_sampler.chain_state_restore_decision(
+                    self.evm_gap_payload(lag=14_140, local=11_691_000)
+                )
+
+        self.assertTrue(decision["should_repair"])
+        self.assertFalse(decision["hard"])
+        self.assertIn("EVM reference gap has not improved", decision["reasons"][0])
+        self.assertTrue(decision["evm_reference_gap"]["restore_required"])
+
+    def test_evm_reference_gap_watch_resets_when_gap_closes_enough(self) -> None:
+        now = 1_779_200_000
+        with tempfile.TemporaryDirectory() as tmpdir:
+            status_sampler.EVM_REFERENCE_GAP_WATCH_FILE = pathlib.Path(tmpdir) / "evm-gap-watch.json"
+            status_sampler.EVM_REFERENCE_GAP_WATCH_FILE.write_text(
+                json.dumps(
+                    {
+                        "candidate": True,
+                        "best_lag_blocks": 14_100,
+                        "first_unimproved_epoch": now - 901,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with mock.patch.object(status_sampler.time, "time", return_value=now):
+                decision = status_sampler.chain_state_restore_decision(
+                    self.evm_gap_payload(lag=14_030, local=11_691_000)
+                )
+
+        self.assertFalse(decision["should_repair"])
+        self.assertEqual(0, decision["evm_reference_gap"]["stalled_seconds"])
+        self.assertEqual(14_030, decision["evm_reference_gap"]["best_lag_blocks"])
 
     def test_starts_stopped_pool_when_asic_lan_neighbor_is_present(self) -> None:
         commands = []

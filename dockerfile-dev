@@ -198,6 +198,12 @@ FROM ops-runtime AS watchdog
 LABEL org.opencontainers.image.title="BlockDAG Stack Watchdog"
 
 # ----------------------------------------------------------------------------
+# Status Sampler Runtime Stage (shared status and mining imperative loop)
+# ----------------------------------------------------------------------------
+FROM ops-runtime AS status-sampler
+LABEL org.opencontainers.image.title="BlockDAG Stack Status Sampler"
+
+# ----------------------------------------------------------------------------
 # Sentinel Runtime Stage (last-resort liveness repair loop)
 # ----------------------------------------------------------------------------
 FROM ops-runtime AS sentinel
