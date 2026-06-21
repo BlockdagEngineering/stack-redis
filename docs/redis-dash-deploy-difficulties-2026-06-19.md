@@ -261,6 +261,11 @@ Mitigations now required by source:
   evidence, and connected miners with zero ready lanes keep
   `can_submit_blocks=false` unless fresh paid-block evidence proves the submit
   path is already working.
+- `repair_hold` is not a blanket permission model. It remains a hard block for
+  node restarts, node/container recreates, and config edits, but it may carry an
+  explicit allow-list for pool and ASIC recovery actions so a stale incident hold
+  cannot prevent mining recovery after native safety is proven. The pool start
+  gate still makes the final native-safety decision.
 
 ### ASIC Pool APIs Can Wedge While Controllers Stay Alive
 
@@ -279,3 +284,28 @@ Mitigations now required by source:
 - When native/pool health is good but an ASIC has controller responses and no
   pool API, restart that ASIC controller first. Do not restart node or pool for
   this symptom.
+
+### Payout Balance Log Flood Can Steal Catch-Up I/O
+
+When the payout wallet has zero balance and a large mature backlog exists, the
+pool can repeatedly log payout-processing and insufficient-balance lines for
+every eligible block. This does not fix payouts, but it does add Docker log I/O
+while the node is trying to catch up.
+
+Mitigations now required by source:
+
+- The pool checks wallet balance before logging that a payout block is being
+  processed.
+- The pool defers payout transaction submission unless the selected native
+  backend is mining-safe: fresh node health, submit-ready templates, safe P2P,
+  and the same native predicate that allows mining.
+- The lifecycle loop stops scanning further payout blocks after the first
+  insufficient-balance proof in a tick, because later blocks cannot be paid
+  until the wallet balance changes.
+- Payout backlog processing is capped by
+  `POOL_PAYOUT_MAX_BLOCKS_PER_TICK=5` by default so catch-up payouts cannot
+  monopolize RPC and log I/O after the native backend is safe enough to accept
+  payout traffic. Set it to `0` only when explicitly choosing unlimited payout
+  catch-up over mining-node recovery.
+- Repeated insufficient-balance warnings are throttled and summarized while
+  real payout send failures and database update failures remain immediate.

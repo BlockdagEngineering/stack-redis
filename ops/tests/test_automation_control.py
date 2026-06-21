@@ -131,6 +131,46 @@ class AutomationControlTests(unittest.TestCase):
                 self.assertIn("denies high-risk", decision.reason)
                 self.assertEqual(1, len(self.event_lines()))
 
+    def test_repair_hold_allows_only_allowlisted_mining_recovery_actions(self) -> None:
+        self.write_state(
+            self.control_state(
+                "repair_hold",
+                allowed_mutations=[
+                    f"{automation_control.ACTION_ASIC_POOL_START}:asic-pool",
+                    f"{automation_control.ACTION_ASIC_POOL_RESTART}:asic-pool",
+                    f"{automation_control.ACTION_ASIC_MINER_OPEN_RESTART}:*",
+                    f"{automation_control.ACTION_NODE_RESTART}:*",
+                    f"{automation_control.ACTION_CONFIG_EDIT}:*",
+                ],
+            )
+        )
+
+        pool_start = self.check(automation_control.ACTION_ASIC_POOL_START, target="asic-pool")
+        pool_restart = self.check(automation_control.ACTION_ASIC_POOL_RESTART, target="asic-pool")
+        miner_restart = self.check(automation_control.ACTION_ASIC_MINER_OPEN_RESTART, target="192.168.1.101")
+        node_restart = self.check(automation_control.ACTION_NODE_RESTART, target="node")
+        config_edit = self.check(automation_control.ACTION_CONFIG_EDIT, target="node.env")
+
+        self.assertTrue(pool_start.allowed, pool_start.reason)
+        self.assertTrue(pool_restart.allowed, pool_restart.reason)
+        self.assertTrue(miner_restart.allowed, miner_restart.reason)
+        self.assertFalse(node_restart.allowed)
+        self.assertFalse(config_edit.allowed)
+        self.assertEqual(2, len(self.event_lines()))
+
+    def test_controlled_stop_ignores_mining_recovery_allowlist(self) -> None:
+        self.write_state(
+            self.control_state(
+                "controlled_stop",
+                allowed_mutations=[f"{automation_control.ACTION_ASIC_POOL_START}:asic-pool"],
+            )
+        )
+
+        decision = self.check(automation_control.ACTION_ASIC_POOL_START, target="asic-pool")
+
+        self.assertFalse(decision.allowed)
+        self.assertIn("controlled_stop", decision.reason)
+
     def test_normal_control_allows_high_risk_mutation(self) -> None:
         self.write_state(self.control_state("normal"))
 

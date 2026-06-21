@@ -291,12 +291,14 @@ is behind peers or while the selected backend is not mineable/submit-ready.
 using `iowait`, `io_some`, and `io_full` pressure signals; a production node
 more than `BDAG_CATCHUP_PAUSE_THRESHOLD_BLOCKS=300` blocks behind peers is the
 backup trigger when pressure signals are missing or delayed.
-The status sampler stops the pool, disables node mining/template runtime churn,
-raises the node cache toward `BDAG_CATCHUP_NODE_CACHE_MB` within the host memory
-budget, and recreates only the node service when that runtime change is needed.
-The dashboard reports this as a deliberate catch-up pause, not a pool failure,
-and tells operators to leave miners configured until I/O pressure drops, peer lag
-is back inside the safe window, and template health is ready.
+The status sampler leaves the pool container running for share/session
+continuity, pauses pool-side template work, disables node mining/template runtime
+churn, and may raise the node cache toward `BDAG_CATCHUP_NODE_CACHE_MB` within
+the host memory budget. It must not recreate the node while the pool is live or
+accepted-block history exists. The dashboard reports this as a deliberate
+catch-up pause, not a pool failure, and tells operators to leave miners
+configured until I/O pressure drops, peer lag is back inside the safe window, and
+template health is ready.
 
 Native P2P freshness remains the mining hard gate. A zero-peer native P2P sample
 blocks new mining work immediately, but `BDAG_WATCHDOG_NATIVE_P2P_PEER_LOSS_REPAIR_SECONDS=300`
