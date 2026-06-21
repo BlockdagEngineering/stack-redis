@@ -98,12 +98,20 @@ class StackDefaultsTests(unittest.TestCase):
             "POOL_PREEMPTIVE_BLOCK_CANDIDATE_REFRESH_DELAY_MS": "0",
             "POOL_PREEMPTIVE_BLOCK_CANDIDATE_REFRESH_INTERVAL_MS": "20",
             "POOL_PREEMPTIVE_BLOCK_CANDIDATE_REFRESH_TIMEOUT_MS": "1000",
+            "BDAG_ENABLE_NODE_MINING": "0",
+            "BDAG_NODE_MODULES": "Blockdag,miner",
             "BDAG_EVM_SYNC_BACKOFF_SECONDS": "60",
         }
         for key, value in expected.items():
             self.assertEqual(defaults[key], value)
             self.assertEqual(env_example[key], value)
             self.assertIn(f"${{{key}:-{value}}}", compose)
+
+        self.assertIn(
+            "MINING_POOL_ADDRESS: ${MINING_POOL_ADDRESS:?set MINING_POOL_ADDRESS to a non-zero payout address}",
+            compose,
+        )
+        self.assertIn("POOL_COINBASE_ADDRESS: ${POOL_COINBASE_ADDRESS:-}", compose)
 
     def test_stack_defaults_validator_passes(self) -> None:
         result = subprocess.run(

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="${BDAG_PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
-P2P_PORT="${P2P_PORT:-8150}"
+P2P_PORT="${P2P_PORT:-8155}"
 P2P_PROTOCOLS="${BDAG_P2P_PROTOCOLS:-tcp}"
 
 warn() { printf 'WARNING: %s\n' "$*" >&2; }

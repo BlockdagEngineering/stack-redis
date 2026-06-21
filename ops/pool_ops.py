@@ -254,6 +254,7 @@ STATUS_SAMPLER_FILE = RUNTIME_DIR / "status-sampler.json"
 SYNC_PROGRESS_HEALTH_STATE_FILE = RUNTIME_DIR / "sync-progress-health-state.json"
 EVM_REFERENCE_GAP_WATCH_FILE = RUNTIME_DIR / "evm-reference-gap-watch.json"
 POOL_PAID_WORK_STATE_FILE = RUNTIME_DIR / "pool-paid-work-state.json"
+TEMPLATE_SAFETY_STATE_FILE = RUNTIME_DIR / "template-safety-state.json"
 STATUS_PAYLOAD_STALE_AFTER_SECONDS = env_float(
     "BDAG_STATUS_PAYLOAD_STALE_AFTER_SECONDS",
     120.0,
@@ -841,6 +842,8 @@ def selected_backend_mining_safe(selected_source_health: Mapping[str, Any] | Non
         return False
     if selected_source_health.get("healthy") is False:
         return False
+    if selected_source_health.get("node_template_coinbase_valid") is False:
+        return False
     if selected_source_health.get("node_mineable") is not True:
         return False
     if selected_source_health.get("node_submit_ready") is not True:
@@ -852,6 +855,20 @@ def selected_backend_mining_safe(selected_source_health: Mapping[str, Any] | Non
     if not selected_backend_peer_lead_safe(selected_source_health):
         return False
     return True
+
+
+def optional_bool(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value > 0
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "y", "ok"}:
+            return True
+        if normalized in {"0", "false", "no", "n", "bad"}:
+            return False
+    return None
 
 
 def selected_backend_peer_floor_safe(selected_source_health: Mapping[str, Any]) -> bool:
@@ -874,6 +891,8 @@ def selected_backend_native_p2p_current_safe(selected_source_health: Mapping[str
         return False
     if selected_source_health.get("healthy") is False:
         return False
+    if selected_source_health.get("node_template_coinbase_valid") is False:
+        return False
     if selected_source_health.get("node_p2p_mining_fresh") is not True:
         return False
     if not selected_backend_peer_floor_safe(selected_source_health):
@@ -895,6 +914,8 @@ def selected_backend_recent_paid_work_safe(
     if not isinstance(selected_source_health, Mapping) or not selected_source_health:
         return False
     if selected_source_health.get("healthy") is False:
+        return False
+    if selected_source_health.get("node_template_coinbase_valid") is False:
         return False
     if selected_source_health.get("node_p2p_mining_fresh") is not True:
         return False
@@ -936,6 +957,7 @@ def miner_failures_block_stack(
 def selected_backend_unready_reasons(selected_source_health: Mapping[str, Any]) -> list[str]:
     reasons: list[str] = []
     for key, label in (
+        ("node_template_coinbase_valid", "template_coinbase_valid=false"),
         ("node_mineable", "mineable=false"),
         ("node_submit_ready", "submit_ready=false"),
         ("node_p2p_mining_fresh", "p2p_mining_fresh=false"),
@@ -3747,6 +3769,103 @@ def _prometheus_counter_json(counter: Counter[str] | dict[str, Any]) -> dict[str
     return {str(key): _prometheus_json_number(_float_metric(value)) for key, value in sorted(rows)}
 
 
+def counter_total_matching(counter: Mapping[str, Any], predicate) -> float:
+    total = 0.0
+    for key, value in counter.items():
+        if predicate(str(key)):
+            total += _float_metric(value)
+    return total
+
+
+def zero_coinbase_reject_total(rejects: Mapping[str, Any]) -> float:
+    return counter_total_matching(rejects, lambda key: "zero-template-address" in key)
+
+
+def update_zero_coinbase_reject_rate(total: float, metrics_available: bool) -> dict[str, Any]:
+    now_value = seconds_since_epoch()
+    previous = read_json_file(TEMPLATE_SAFETY_STATE_FILE, {})
+    if not isinstance(previous, Mapping):
+        previous = {}
+    previous_total = safe_float(previous.get("zero_coinbase_reject_total"), None)
+    previous_epoch = safe_float(previous.get("generated_epoch_seconds"), None)
+    elapsed = max(0.0, now_value - previous_epoch) if previous_epoch is not None else None
+    delta = None
+    rate = None
+    if previous_total is not None and elapsed and elapsed > 0:
+        delta = max(0.0, total - previous_total) if total >= previous_total else total
+        rate = delta / elapsed
+
+    payload = {
+        "generated_at": now_iso(),
+        "generated_epoch_seconds": now_value,
+        "zero_coinbase_reject_total": _prometheus_json_number(total),
+        "zero_coinbase_reject_delta": _prometheus_json_number(delta) if delta is not None else None,
+        "zero_coinbase_reject_rate_per_second": round(rate, 6) if rate is not None else None,
+        "sample_elapsed_seconds": round(elapsed, 3) if elapsed is not None else None,
+    }
+    if metrics_available:
+        try:
+            write_json_file(TEMPLATE_SAFETY_STATE_FILE, payload, mode=0o600)
+        except OSError:
+            pass
+    return payload
+
+
+def local_stale_block_submit_stats(block_submit_outcomes: Mapping[str, Any]) -> dict[str, Any]:
+    accepted = counter_total_matching(block_submit_outcomes, lambda key: key.startswith("accepted:"))
+    local_stale = counter_total_matching(
+        block_submit_outcomes,
+        lambda key: (
+            key.startswith("rejected-local:stale-job")
+            or key.startswith("rejected-local:stale-parent")
+            or key.startswith("rejected-local:parent-not-current")
+            or key.startswith("rejected-local:parent_not_current")
+        ),
+    )
+    denominator = accepted + local_stale
+    return {
+        "accepted": _prometheus_json_number(accepted),
+        "local_stale": _prometheus_json_number(local_stale),
+        "local_stale_ratio": round(local_stale / denominator, 6) if denominator > 0 else None,
+    }
+
+
+def automation_restart_marker(latest_action: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(latest_action, dict):
+        return {"recent": False}
+    mode = str(latest_action.get("mode") or "")
+    name = str(latest_action.get("name") or "")
+    restart = mode in {"restart", "restart-node"} or name.startswith("restart-")
+    return {
+        "recent": restart,
+        "name": name,
+        "mode": mode,
+        "status": latest_action.get("status") or "",
+        "node": latest_action.get("node") or "",
+        "reason": latest_action.get("reason") or "",
+        "started_at": latest_action.get("started_at") or "",
+        "finished_at": latest_action.get("finished_at") or "",
+    }
+
+
+def template_coinbase_address_valid(address: str) -> bool | None:
+    normalized = str(address or "").strip().lower()
+    if not normalized:
+        return None
+    return bool(valid_eth_address(normalized) and normalized != ZERO_ETH_ADDRESS)
+
+
+def template_coinbase_valid_signal(value: Any, address: str = "", reason_code: str = "") -> bool | None:
+    parsed = optional_bool(value)
+    if parsed is not False:
+        return parsed
+    normalized_address = str(address or "").strip().lower()
+    normalized_reason = str(reason_code or "").strip().lower().replace("_", "-")
+    if normalized_address or normalized_reason == "zero-template-coinbase":
+        return False
+    return None
+
+
 def _ratio_percent(numerator: float, denominator: float) -> float | None:
     if denominator <= 0:
         return None
@@ -4002,6 +4121,7 @@ def collect_pool_prometheus_metrics(containers: dict[str, dict[str, Any]]) -> di
         "source_backend_health": {},
         "selected_backend_source_health": {},
         "template_conversion_stall": {},
+        "template_coinbase_rejects": {},
     }
     if POOL_METRICS_PORT <= 0:
         payload["error"] = "pool metrics port disabled"
@@ -4018,6 +4138,7 @@ def collect_pool_prometheus_metrics(containers: dict[str, dict[str, Any]]) -> di
     share_processing_count = 0.0
     share_processing_sum = 0.0
     submit_recoveries: Counter[str] = Counter()
+    template_coinbase_rejects: Counter[str] = Counter()
     selected_backend = ""
     active_connections: float | None = None
     source_job_health: dict[str, Any] = {}
@@ -4104,6 +4225,7 @@ def collect_pool_prometheus_metrics(containers: dict[str, dict[str, Any]]) -> di
                 if key in {
                     "mineable",
                     "submit_ready",
+                    "template_coinbase_valid",
                     "p2p_mining_fresh",
                     "p2p_sync_peer_fresh",
                     "p2p_sync_peer_present",
@@ -4145,6 +4267,8 @@ def collect_pool_prometheus_metrics(containers: dict[str, dict[str, Any]]) -> di
                 share_processing_sum += value
             elif metric_name == "pool_submit_stall_recoveries_total":
                 submit_recoveries[_metric_counter_key(labels, "action", "reason")] += value
+            elif metric_name == "pool_template_coinbase_rejects_total":
+                template_coinbase_rejects[_metric_counter_key(labels, "source", "reason")] += value
         payload["containers"][name] = row
         if source_backend_health and not template_backend_source:
             template_backend_source = endpoint
@@ -4166,6 +4290,7 @@ def collect_pool_prometheus_metrics(containers: dict[str, dict[str, Any]]) -> di
     }
     payload["submit_stall_recoveries"] = dict(submit_recoveries)
     payload["submit_stall_recoveries_total"] = float(sum(submit_recoveries.values()))
+    payload["template_coinbase_rejects"] = dict(template_coinbase_rejects)
     payload["source_job_health"] = source_job_health
     payload["source_backend_health"] = source_backend_health
     payload["template_conversion_stall"] = template_conversion_stall
@@ -4175,6 +4300,7 @@ def collect_pool_prometheus_metrics(containers: dict[str, dict[str, Any]]) -> di
             "backends": source_backend_health,
             "job_health": source_job_health,
             "template_conversion_stall": template_conversion_stall,
+            "template_coinbase_rejects": dict(template_coinbase_rejects),
             "selected_backend": selected_backend,
             "backend_count": len(source_backend_health),
             "healthy_backend_count": sum(1 for row in source_backend_health.values() if row.get("healthy") is True),
@@ -5939,6 +6065,11 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
         if isinstance(pool_metrics.get("template_conversion_stall"), dict)
         else {}
     )
+    pool["template_coinbase_rejects"] = (
+        pool_metrics.get("template_coinbase_rejects")
+        if isinstance(pool_metrics.get("template_coinbase_rejects"), dict)
+        else {}
+    )
     pool_loss_ledger = (
         pool_metrics.get("loss_ledger")
         if isinstance(pool_metrics.get("loss_ledger"), dict)
@@ -6237,6 +6368,74 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
     )
     source_ready_miners = safe_int(source_job_health.get("ready_miners"), -1)
     source_ready_miners_known = "ready_miners" in source_job_health
+    native_template_health = (
+        sync_progress.get("native_template_health")
+        if isinstance(sync_progress.get("native_template_health"), dict)
+        else {}
+    )
+    template_coinbase_address = str(
+        selected_source_health.get("node_template_coinbase_address")
+        or native_template_health.get("template_coinbase_address")
+        or ""
+    )
+    template_coinbase_valid = template_coinbase_valid_signal(
+        selected_source_health.get("node_template_coinbase_valid"),
+        str(selected_source_health.get("node_template_coinbase_address") or ""),
+        str(selected_source_health.get("node_reason_code") or selected_source_health.get("node_get_block_template_reason_code") or ""),
+    )
+    if template_coinbase_valid is None:
+        template_coinbase_valid = template_coinbase_valid_signal(
+            native_template_health.get("template_coinbase_valid"),
+            template_coinbase_address,
+            str(native_template_health.get("reason_code") or native_template_health.get("get_block_template_reason_code") or ""),
+        )
+    if template_coinbase_valid is None:
+        template_coinbase_valid = template_coinbase_address_valid(template_coinbase_address)
+    template_coinbase_rejects = pool["template_coinbase_rejects"]
+    zero_coinbase_rejects = zero_coinbase_reject_total(template_coinbase_rejects)
+    zero_coinbase_rate = update_zero_coinbase_reject_rate(
+        zero_coinbase_rejects,
+        metrics_available=pool_metrics.get("status") == "ok",
+    )
+    local_stale_stats = local_stale_block_submit_stats(
+        pool_metrics.get("block_submit_outcomes")
+        if isinstance(pool_metrics.get("block_submit_outcomes"), Mapping)
+        else {}
+    )
+    template_safety = {
+        "template_coinbase_valid": template_coinbase_valid,
+        "template_coinbase_address": template_coinbase_address,
+        "zero_coinbase_reject_total": _prometheus_json_number(zero_coinbase_rejects),
+        "zero_coinbase_reject_rate_per_second": zero_coinbase_rate.get("zero_coinbase_reject_rate_per_second"),
+        "zero_coinbase_reject_delta": zero_coinbase_rate.get("zero_coinbase_reject_delta"),
+        "zero_coinbase_reject_sample_elapsed_seconds": zero_coinbase_rate.get("sample_elapsed_seconds"),
+        "ready_miner_job_count": source_ready_miners if source_ready_miners_known else None,
+        "local_stale_ratio": local_stale_stats.get("local_stale_ratio"),
+        "local_stale_block_submits": local_stale_stats.get("local_stale"),
+        "accepted_block_submits": local_stale_stats.get("accepted"),
+        "automation_restart": automation_restart_marker(latest_action),
+        "selected_backend": pool.get("selected_backend") or "",
+        "source": (
+            "selected-backend-node-health"
+            if selected_source_health.get("node_template_coinbase_valid") is not None
+            else ("native-template-health" if native_template_health else "pool-metrics")
+        ),
+    }
+    pool["template_safety"] = template_safety
+    sync_health["template_coinbase_valid"] = template_coinbase_valid
+    sync_health["zero_coinbase_reject_total"] = _prometheus_json_number(zero_coinbase_rejects)
+    sync_health["ready_miner_job_count"] = template_safety["ready_miner_job_count"]
+    sync_health["local_stale_ratio"] = template_safety["local_stale_ratio"]
+    if template_coinbase_valid is False:
+        selected_source_mining_safe = False
+        recent_paid_backend_safe = False
+        native_progress_paid_work_safe = False
+        readiness_override_safe = False
+        sync_health["selected_backend_recent_paid_work_safe"] = False
+        sync_health["native_progress_paid_work_safe"] = False
+        sync_health["readiness_override_safe"] = False
+        sync_health["selected_backend_mining_safe"] = False
+        add_sync_warning("selected mining template coinbase is invalid or zero")
     source_job_no_ready_miners = bool(
         connected_miners > 0
         and not pool_has_recent_paid_work
@@ -6714,6 +6913,7 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
         "sync_coordinator": sync_coordinator,
         "catchup_policy": catchup_policy,
         "rpc_template_health": template_probe_health,
+        "template_safety": template_safety,
         "pool": pool,
         "pool_metrics": pool_metrics,
         "pool_health": pool_health,
@@ -7814,10 +8014,13 @@ def node_template_health_snapshot(url: str, timeout: float) -> dict[str, Any]:
 def native_template_health_is_mining_safe(health: dict[str, Any]) -> bool:
     if not health.get("available"):
         return False
+    if health.get("template_coinbase_valid") is False:
+        return False
     if health.get("last_template_build_error_blocking") is True:
         return False
     required_true = (
         "submit_ready",
+        "template_usable",
         "get_block_template_ready",
         "p2p_mining_fresh",
         "sync_allowed",
@@ -7996,8 +8199,11 @@ def compact_template_health_for_status(health: dict[str, Any]) -> dict[str, Any]
         "available",
         "mineable_now",
         "submit_ready",
+        "template_usable",
         "get_block_template_ready",
         "get_block_template_reason_code",
+        "template_coinbase_address",
+        "template_coinbase_valid",
         "p2p_current",
         "p2p_mining_fresh",
         "p2p_mining_fresh_reason_code",

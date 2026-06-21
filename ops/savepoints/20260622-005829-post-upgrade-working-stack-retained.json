@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "savepoint_id": "20260622-005829-post-upgrade-working-stack-retained",
+  "recorded_at": "2026-06-22T00:58:29+0200",
+  "timezone": "Africa/Johannesburg",
+  "purpose": "Post-upgrade working stack savepoint after native-safe node, pool submit gate, stack safety defaults, dashboard/status visibility changes, and live pool restart were proven mining.",
+  "retention": "Retain with the original tonight baseline until the user explicitly allows cleanup.",
+  "safety_invariant": "Live node uses Blockdag and miner modules only, with --miner and non-zero --miningaddr=0x1719E0ee598c15957448D5E568948101DF78e7A0. The peer module remains excluded. Local P2P listen/source port is 8155. BDAG_NODE_MINING_NO_PENDING_TX remains disabled.",
+  "live_config": {
+    "P2P_PORT": "8155",
+    "BDAG_NODE_MINING_NO_PENDING_TX": "0",
+    "BDAG_ENABLE_NODE_MINING": "1",
+    "BDAG_NODE_MODULES": "Blockdag,miner",
+    "POOL_COINBASE_ADDRESS": "0x1719E0ee598c15957448D5E568948101DF78e7A0",
+    "MINING_POOL_ADDRESS": "0x1719E0ee598c15957448D5E568948101DF78e7A0"
+  },
+  "images": {
+    "node": {
+      "id": "sha256:c1b1c24457dc052f0d4352e16cbfbf99144633d5bc3f5f7cf17fb57475933845",
+      "tags": [
+        "stack-node:latest",
+        "stack-node:patched-candidate-20260622-0027",
+        "stack-node:post-upgrade-working-20260622-005829"
+      ]
+    },
+    "pool": {
+      "id": "sha256:8779aad770f44bbdc1da08fcc151f7856598dabf5eafc35ec020f1d621e3b7cd",
+      "tags": [
+        "stack-pool:latest",
+        "stack-pool:native-submit-gate-candidate-20260622-0050",
+        "stack-pool:post-upgrade-working-20260622-005829"
+      ],
+      "previous_rollback_tag": "stack-pool:pre-native-submit-gate-20260622-004554"
+    },
+    "dashboard": {
+      "id": "sha256:ade262780dbc75954ace95ff0f88c8eccc702453127e898bb59e2b2c7709afb6",
+      "tags": [
+        "stack-dashboard:latest",
+        "stack-dashboard:post-upgrade-working-20260622-005829"
+      ]
+    },
+    "status_sampler": {
+      "id": "sha256:6e45c75e084826a9ec44f0bd101b124610b450f31908396b9972d99685cd7739",
+      "tags": [
+        "stack-status-sampler:latest",
+        "stack-status-sampler:post-upgrade-working-20260622-005829"
+      ]
+    }
+  },
+  "live_health": {
+    "native_reason_code": "ok",
+    "native_mineable_now": true,
+    "native_submit_ready": true,
+    "template_coinbase_valid": true,
+    "template_coinbase_address": "0x1719E0ee598c15957448D5E568948101DF78e7A0",
+    "p2p_mining_fresh": true,
+    "fresh_consensus_peers": 18,
+    "consensus_peers": 19,
+    "best_peer_lead_blocks": 0,
+    "main_order": 12204831,
+    "pool_active_connections": 4,
+    "pool_backend_healthy": true,
+    "pool_backend_selected": true,
+    "pool_backend_submit_ready": true,
+    "pool_backend_template_coinbase_valid": true
+  },
+  "pool_counters_since_restart": {
+    "blocks_found_total": 177,
+    "blocks_submitted_total": 177,
+    "block_submit_outcome_accepted_ok": 177,
+    "backend_submit_outcome_accepted_ok": 177,
+    "blocks_paid_total": 120,
+    "local_reject_duplicate_block": 2,
+    "local_reject_stale_job": 10,
+    "local_reject_stale_parent": 4,
+    "backend_rejects_observed": 0
+  },
+  "observations": [
+    "The pool reconnected all four ASIC lanes and mined accepted blocks immediately after restart.",
+    "During transient template-parent-stale/node-syncing periods, stale candidates were rejected locally rather than producing backend reject counters.",
+    "Same-parent template invalidations preserve current jobs; block-submission parent advances invalidate jobs deliberately.",
+    "One accepted submit landed near a template-fetch node-syncing race before the refresh path finished invalidating jobs. It was accepted on-chain, but this remains a source refinement target: template-fetch node-syncing should install an immediate submit hold."
+  ],
+  "validated_before_live_restart": [
+    "pool: go test ./... -count=1",
+    "stack-redis: 191 targeted unittest safety tests",
+    "stack-redis: release_bootstrap_static_test.py",
+    "stack-redis: validate-release-build.sh",
+    "stack-redis: git diff --check",
+    "pool: git diff --check",
+    "stack-redis: hard p2p module grep returned no matches"
+  ],
+  "source_refs": {
+    "pool": {
+      "branch": "codex/native-safe-mining-20260620-pool",
+      "head_before_local_changes": "e02f5b5d68ca62888cbd145fd6928e04c98d3555",
+      "dirty_state": "contains tested native-health-gated recent-stale submit changes plus earlier upgrade patchset"
+    },
+    "stack-redis": {
+      "branch": "codex/native-safe-mining-20260620-stack",
+      "head_before_local_changes": "7b3c812d476bd4d3ef96a9b449de1d692330e40b",
+      "dirty_state": "contains tested port 8155, no peer module guard, miningnopending disabled defaults, watchdog/status/pool visibility changes, and retained savepoint manifests"
+    }
+  },
+  "rollback_commands": [
+    "To return to this savepoint: docker tag stack-pool:post-upgrade-working-20260622-005829 stack-pool:latest && docker tag stack-node:post-upgrade-working-20260622-005829 stack-node:latest && docker compose up -d --no-deps node && docker compose up -d --no-deps pool",
+    "To roll pool only back to pre-submit-gate image: docker compose stop pool && docker tag stack-pool:pre-native-submit-gate-20260622-004554 stack-pool:latest && docker compose up -d --no-deps pool",
+    "If node rollback becomes necessary, stop pool first, restore node image/config deliberately, verify native template health, then start pool."
+  ]
+}

@@ -1,0 +1,1788 @@
+{
+  "schema_version": 1,
+  "savepoint_id": "20260621-233309-tonight-baseline-retained",
+  "recorded_at": "2026-06-21T23:33:09.259111+02:00",
+  "host": "asus-miner",
+  "timezone": "Africa/Johannesburg",
+  "purpose": "Retained recovered-good baseline before overnight upgrade/design mission. Do not delete until Jeremy explicitly releases it.",
+  "github_rule": "Only authenticated gh CLI/API may be used for GitHub operations; no raw GitHub git pull/fetch/push.",
+  "memory_status": "## main...origin/main [ahead 5, behind 5]",
+  "source_commits": {
+    "stack-redis": {
+      "branch": "codex/native-safe-mining-20260620-stack",
+      "commit": "7b3c812d476bd4d3ef96a9b449de1d692330e40b",
+      "status_short": "",
+      "stash_top": "stash@{0}: On codex/native-safe-mining-20260620-stack: codex post-savepoint zero-coinbase/watchdog patchset 20260621"
+    },
+    "pool": {
+      "branch": "codex/native-safe-mining-20260620-pool",
+      "commit": "e02f5b5d68ca62888cbd145fd6928e04c98d3555",
+      "status_short": "",
+      "stash_top": "stash@{0}: On codex/native-safe-mining-20260620-pool: codex post-savepoint zero-coinbase pool patchset 20260621"
+    },
+    "blockdag-corechain": {
+      "branch": "codex/native-safe-mining-20260620-corechain",
+      "commit": "33a449269607790e42bc38bcfa3fd213d82ed02e",
+      "status_short": "",
+      "stash_top": "stash@{0}: On codex/native-safe-mining-20260620-corechain: codex post-savepoint zero-coinbase corechain patchset 20260621"
+    },
+    "redis-dash": {
+      "branch": "codex/native-safe-mining-20260620-dashboard",
+      "commit": "8a28b1817f3e10fe1505be5ba1dab93913cb6400",
+      "status_short": "",
+      "stash_top": "stash@{0}: On codex/native-safe-mining-20260620-dashboard: codex post-savepoint dashboard safety patchset 20260621"
+    }
+  },
+  "rendered_compose_sha256": "332b852c8f8b2f2f98f084dfbcc1cf968f63abb9f401e874af3da73d84b8b39f",
+  "rendered_compose_redacted": {
+    "name": "stack",
+    "networks": {
+      "default": {
+        "name": "stack_default",
+        "ipam": {}
+      }
+    },
+    "services": {
+      "dashboard": {
+        "build": {
+          "context": "/home/jeremy/blockdag-source/stack-redis",
+          "dockerfile": "dockerfile-dev",
+          "additional_contexts": {
+            "blockdag_corechain": "/home/jeremy/blockdag-source/blockdag-corechain",
+            "cpu_miner_src": "/home/jeremy/blockdag-source/stack-redis",
+            "dashboard_src": "/home/jeremy/blockdag-source/redis-dash",
+            "pool_src": "/home/jeremy/blockdag-source/pool",
+            "stack_src": "/home/jeremy/blockdag-source/stack-redis"
+          },
+          "target": "dashboard"
+        },
+        "cpu_shares": 256,
+        "command": null,
+        "container_name": "dashboard",
+        "depends_on": {
+          "node": {
+            "condition": "service_started",
+            "required": true
+          },
+          "pool": {
+            "condition": "service_started",
+            "required": true
+          }
+        },
+        "entrypoint": null,
+        "environment": {
+          "ADDR": "0.0.0.0:8088",
+          "BDAG_ASIC_LAN_CIDRS": "192.168.1.0/24",
+          "BDAG_CHAIN_POLL_FALLBACK_AFTER_SECONDS": "3",
+          "BDAG_CHAIN_POLL_SECONDS": "2",
+          "BDAG_CHAIN_WS_READ_LIMIT_BYTES": "1048576",
+          "BDAG_CHAIN_WS_READ_TIMEOUT_SECONDS": "10",
+          "BDAG_DASHBOARD_HEALTH_STALE_SECONDS": "20",
+          "BDAG_DASHBOARD_REDIS_ENABLED": "1",
+          "BDAG_DASHBOARD_REDIS_MANAGED": "1",
+          "BDAG_EVM_HTTP_URL": "http://host.docker.internal:18545",
+          "BDAG_EVM_SYNC_BACKOFF_SECONDS": "60",
+          "BDAG_EVM_WS_URL": "ws://host.docker.internal:18546",
+          "BDAG_GLOBAL_BLOCK_WINDOW": "600",
+          "BDAG_GLOBAL_CACHE_MAX_TIP_LAG_BLOCKS": "30",
+          "BDAG_GLOBAL_FAST_WARMUP_BLOCKS": "120",
+          "BDAG_GLOBAL_MAX_INCREMENTAL_GAP": "120",
+          "BDAG_GLOBAL_RPC_CHUNK_SIZE": "64",
+          "BDAG_GLOBAL_RPC_WORKERS": "4",
+          "BDAG_GLOBAL_SETTLE_DELAY_SECONDS": "5",
+          "BDAG_MINER_CONTROL_ENABLED": "0",
+          "BDAG_NODE_RPC_URL": "http://host.docker.internal:38131",
+          "BDAG_POOL_METRICS_URL": "http://host.docker.internal:9090/metrics",
+          "BDAG_POOL_URL": "stratum+tcp://192.168.1.100:3334",
+          "BDAG_REDIS_APPENDFSYNC": "everysec",
+          "BDAG_REDIS_APPENDONLY": "yes",
+          "BDAG_REDIS_CONFIG": "/etc/redis/redis.conf",
+          "BDAG_REDIS_MAXMEMORY": "256mb",
+          "BDAG_REDIS_MAXMEMORY_POLICY": "noeviction",
+          "BDAG_REDIS_SOCKET": "/run/dashboard-redis/redis.sock",
+          "BDAG_TREND_BACKFILL_CHUNK_SIZE": "128",
+          "BDAG_TREND_BACKFILL_DAYS": "30",
+          "BDAG_TREND_BACKFILL_MAX_BLOCKS_PER_PASS": "<redacted>",
+          "BDAG_TREND_BACKFILL_SLEEP_MS": "100",
+          "BDAG_TREND_CATCHUP_INTERVAL_SECONDS": "30",
+          "BDAG_TREND_HISTORY_ENABLED": "1",
+          "BDAG_TREND_RECENT_WARMUP_BLOCKS": "3600",
+          "BDAG_TREND_RPC_WORKERS": "4",
+          "BDAG_TREND_SPARSE_MAX_SAMPLE_BLOCKS": "2048",
+          "BDAG_TREND_SPARSE_SAMPLES_PER_PASS": "<redacted>",
+          "DASHBOARD_TIMEZONE": "Africa/Johannesburg",
+          "MINING_POOL_ADDRESS": "0x1719E0ee598c15957448D5E568948101DF78e7A0",
+          "NODE_RPC_PASS": "<redacted>",
+          "NODE_RPC_USER": "test",
+          "POOL_ASIC_ARP_TABLE_PATH": "/host/proc/net/arp",
+          "POOL_ASIC_MAC_ALLOWLIST": "2a:71:c7:f5:1f:1e,28:e2:97:3e:39:63,28:e2:97:1e:c0:b5,28:e2:97:4d:44:3a",
+          "POOL_ASIC_MAC_OVERRIDES": "192.168.1.101=28:e2:97:1e:c0:b5,192.168.1.102=2a:71:c7:f5:1f:1e,192.168.1.14=28:e2:97:3e:39:63,192.168.1.105=28:e2:97:4d:44:3a",
+          "POOL_COINBASE_ADDRESS": "0x1719E0ee598c15957448D5E568948101DF78e7A0",
+          "TEMP": "/tmp",
+          "TMP": "/tmp",
+          "TMPDIR": "/tmp"
+        },
+        "extra_hosts": [
+          "host.docker.internal=host-gateway"
+        ],
+        "healthcheck": {
+          "test": [
+            "CMD-SHELL",
+            "curl -fsS http://127.0.0.1:8088/ >/dev/null"
+          ],
+          "timeout": "5s",
+          "interval": "10s",
+          "retries": 12
+        },
+        "logging": {
+          "driver": "local",
+          "options": {
+            "max-file": "2",
+            "max-size": "10m"
+          }
+        },
+        "networks": {
+          "default": null
+        },
+        "oom_score_adj": 300,
+        "platform": "linux/amd64",
+        "ports": [
+          {
+            "mode": "ingress",
+            "host_ip": "127.0.0.1",
+            "target": 8088,
+            "published": "8088",
+            "protocol": "tcp"
+          }
+        ],
+        "restart": "unless-stopped",
+        "tmpfs": [
+          "/tmp:size=128m,mode=1777",
+          "/var/tmp:size=128m,mode=1777",
+          "/run/dashboard-redis:size=16m,mode=0700"
+        ],
+        "volumes": [
+          {
+            "type": "volume",
+            "source": "dashboard-redis",
+            "target": "/var/lib/dashboard-redis",
+            "volume": {}
+          },
+          {
+            "type": "bind",
+            "source": "/proc/net/arp",
+            "target": "/host/proc/net/arp",
+            "read_only": true,
+            "bind": {
+              "create_host_path": true
+            }
+          }
+        ]
+      },
+      "miner-route": {
+        "cap_add": [
+          "NET_ADMIN"
+        ],
+        "command": null,
+        "container_name": "miner-route",
+        "entrypoint": [
+          "/bin/sh",
+          "-c",
+          "while true; do if [ -n \"$$BDAG_MINER_ROUTE_SUBNET\" ] && [ -n \"$$BDAG_MINER_ROUTE_GATEWAY\" ]; then cmd=\"ip route replace $$BDAG_MINER_ROUTE_SUBNET via $$BDAG_MINER_ROUTE_GATEWAY\"; [ -n \"$$BDAG_MINER_ROUTE_DEV\" ] && cmd=\"$$cmd dev $$BDAG_MINER_ROUTE_DEV\"; $$cmd || echo \"miner-route: failed: $$cmd\"; fi; sleep 60; done"
+        ],
+        "environment": {
+          "BDAG_MINER_ROUTE_DEV": "",
+          "BDAG_MINER_ROUTE_GATEWAY": "",
+          "BDAG_MINER_ROUTE_SUBNET": ""
+        },
+        "image": "alpine:3.20",
+        "logging": {
+          "driver": "local",
+          "options": {
+            "max-file": "2",
+            "max-size": "10m"
+          }
+        },
+        "network_mode": "host",
+        "restart": "unless-stopped"
+      },
+      "node": {
+        "build": {
+          "context": "/home/jeremy/blockdag-source/stack-redis",
+          "dockerfile": "dockerfile-dev",
+          "args": {
+            "SNAPSHOT_PATH": "docker/no-snapshot.marker"
+          },
+          "additional_contexts": {
+            "blockdag_corechain": "/home/jeremy/blockdag-source/blockdag-corechain",
+            "cpu_miner_src": "/home/jeremy/blockdag-source/stack-redis",
+            "dashboard_src": "/home/jeremy/blockdag-source/redis-dash",
+            "pool_src": "/home/jeremy/blockdag-source/pool",
+            "stack_src": "/home/jeremy/blockdag-source/stack-redis"
+          },
+          "target": "node"
+        },
+        "cpu_shares": 4096,
+        "command": null,
+        "container_name": "node",
+        "entrypoint": null,
+        "environment": {
+          "BDAG_ASIC_LAN_CIDRS": "192.168.1.0/24",
+          "BDAG_ASIC_LAN_INTERFACE": "enxc8a362eb4bdc",
+          "BDAG_DETECTED_NETWORK_TOPOLOGY": "",
+          "BDAG_ENTRYPOINT_CHOWN_MODE": "needed",
+          "BDAG_EPHEMERAL_DIR": "/run/bdag-ephemeral",
+          "BDAG_NETWORK": "",
+          "BDAG_NETWORK_TOPOLOGY": "auto",
+          "BDAG_NODEWORKER_LIVENESS_TIMEOUT": "5m",
+          "BDAG_NODE_ARCHIVAL": "0",
+          "BDAG_NODE_DEBUG_LEVEL": "warn",
+          "BDAG_NODE_MINING_NO_PENDING_TX": "1",
+          "BDAG_NODE_NO_FILE_LOGGING": "1",
+          "BDAG_NODE_OBSOLETE_HEIGHT": "20",
+          "BDAG_P2P_ADVERTISE_IP": "",
+          "BDAG_P2P_INTERFACE": "",
+          "BDAG_SNAPSHOT_URL": "",
+          "BDAG_STORAGE_PROFILE": "auto",
+          "BOOTSTRAP_PEER_ADDRESSES": "/ip4/16.28.133.168/tcp/8150/p2p/16Uiu2HAm9UcTayJDSajjJYsWwVaN2qqGeczcs9kXse3dMdvGDRjz,/ip4/13.140.165.186/tcp/8150/p2p/16Uiu2HAm4hHD7Ht5LJrLgaKXr7YP2RzHHjrrCLNt8zv8FQ9s3gBU,/ip4/13.57.132.47/tcp/8150/p2p/16Uiu2HAmDynYpWjWmgVGf9qVWvDdLnJ3ybVgDmFexizR4zMereus,/ip4/18.142.70.83/tcp/8150/p2p/16Uiu2HAmBSdn2taoteYwLZJZkDm2iCwL6eQ4UaXYNBBtAwaBU18X,/ip4/199.229.220.118/tcp/8151/p2p/16Uiu2HAmUtspBkyUNBG8pQLgj9DrKVgL6SKQzGBhVT9ZShNM1ops,/ip4/204.236.141.121/tcp/8150/p2p/16Uiu2HAm5qppgbBCjVpTN5nKtjEU5KsSbs2gz4S9uPiSWVSGfNh1,/ip4/3.126.64.13/tcp/8152/p2p/16Uiu2HAmEFxRaBbbf3sRi43CCvMk5Y6zPkuGY9s4uRK2FKJVJkqo,/ip4/52.8.54.60/tcp/8150/p2p/16Uiu2HAkzUWr4YUM7mAhLdCVZgFoV9He6aQzKTyWWrJ7SWQKRTN7,/ip4/54.151.18.92/tcp/8150/p2p/16Uiu2HAmVm91o1JXS2C7P6uTVuVX5empgnRtzuK4UaC8fHmePbKP,/ip4/63.182.36.180/tcp/8150/p2p/16Uiu2HAmP8HsTF9ks8JjFamzT9JBZb3ymSiCJ8rkzXBZqYj4yKtP",
+          "NODE_ARGS_APPEND": "--modules=Blockdag --modules=miner --miner --miningaddr=0x1719E0ee598c15957448D5E568948101DF78e7A0",
+          "P2P_PORT": "8150",
+          "SYNC_SOURCE_NODE": "0",
+          "TEMP": "/tmp",
+          "TMP": "/tmp",
+          "TMPDIR": "/tmp"
+        },
+        "logging": {
+          "driver": "local",
+          "options": {
+            "max-file": "2",
+            "max-size": "10m"
+          }
+        },
+        "network_mode": "host",
+        "oom_score_adj": -900,
+        "platform": "linux/amd64",
+        "restart": "unless-stopped",
+        "shm_size": "536870912",
+        "tmpfs": [
+          "/tmp:size=512m,mode=1777",
+          "/var/tmp:size=512m,mode=1777",
+          "/run/bdag-ephemeral:size=512m,mode=1777"
+        ],
+        "volumes": [
+          {
+            "type": "bind",
+            "source": "/home/jeremy/blockdag-source/stack/data/node",
+            "target": "/var/lib/bdagStack/node",
+            "bind": {
+              "create_host_path": true
+            }
+          },
+          {
+            "type": "volume",
+            "source": "nodeworker-data",
+            "target": "/var/lib/bdagStack/nodeworker",
+            "volume": {}
+          },
+          {
+            "type": "bind",
+            "source": "/home/jeremy/blockdag-source/stack-redis/docker/no-snapshot.marker",
+            "target": "/snapshot/latest.bdsnap",
+            "read_only": true,
+            "bind": {
+              "create_host_path": true
+            }
+          },
+          {
+            "type": "bind",
+            "source": "/home/jeremy/blockdag-source/stack-redis/node.conf",
+            "target": "/etc/bdagStack/node.conf",
+            "read_only": true,
+            "bind": {
+              "create_host_path": true
+            }
+          }
+        ]
+      },
+      "pool": {
+        "build": {
+          "context": "/home/jeremy/blockdag-source/stack-redis",
+          "dockerfile": "dockerfile-dev",
+          "args": {
+            "SNAPSHOT_PATH": "docker/no-snapshot.marker"
+          },
+          "additional_contexts": {
+            "blockdag_corechain": "/home/jeremy/blockdag-source/blockdag-corechain",
+            "cpu_miner_src": "/home/jeremy/blockdag-source/stack-redis",
+            "dashboard_src": "/home/jeremy/blockdag-source/redis-dash",
+            "pool_src": "/home/jeremy/blockdag-source/pool",
+            "stack_src": "/home/jeremy/blockdag-source/stack-redis"
+          },
+          "target": "pool"
+        },
+        "cpu_shares": 3072,
+        "command": null,
+        "container_name": "pool",
+        "depends_on": {
+          "pool-db": {
+            "condition": "service_healthy",
+            "required": true
+          }
+        },
+        "entrypoint": null,
+        "environment": {
+          "BDAG_ASIC_LAN_CIDRS": "192.168.1.0/24",
+          "METRICS_ADDR": "0.0.0.0:9090",
+          "MINING_POOL_ADDRESS": "0x1719E0ee598c15957448D5E568948101DF78e7A0",
+          "NODE_RPC_PASS": "<redacted>",
+          "NODE_RPC_URL": "http://127.0.0.1:38131",
+          "NODE_RPC_URLS": "http://127.0.0.1:38131",
+          "NODE_RPC_USER": "test",
+          "PG_URL": "<redacted>",
+          "POOL_ALLOW_MULTIPLE_BLOCK_CANDIDATES_PER_JOB": "true",
+          "POOL_ASIC_MAC_ALLOWLIST": "2a:71:c7:f5:1f:1e,28:e2:97:3e:39:63,28:e2:97:1e:c0:b5,28:e2:97:4d:44:3a",
+          "POOL_ASIC_MAC_OVERRIDES": "192.168.1.101=28:e2:97:1e:c0:b5,192.168.1.102=2a:71:c7:f5:1f:1e,192.168.1.14=28:e2:97:3e:39:63,192.168.1.105=28:e2:97:4d:44:3a",
+          "POOL_AUTO_TUNE_BLOCK_CANDIDATE_JOB_AGE": "true",
+          "POOL_AUTO_TUNE_BLOCK_CANDIDATE_MAX_AGE_MS": "8000",
+          "POOL_BIND_ADDR": "192.168.1.100:3334",
+          "POOL_BLOCK_MATURITY": "10",
+          "POOL_BLOCK_TIMING_CONTROLLER_COOLDOWN_SECONDS": "20",
+          "POOL_BLOCK_TIMING_CONTROLLER_ENABLED": "true",
+          "POOL_BLOCK_TIMING_CONTROLLER_MAX_JOB_AGE_MS": "1750",
+          "POOL_BLOCK_TIMING_CONTROLLER_MAX_TEMPLATE_TTL_MS": "100",
+          "POOL_BLOCK_TIMING_CONTROLLER_MIN_CANDIDATES": "20",
+          "POOL_BLOCK_TIMING_CONTROLLER_MIN_JOB_AGE_MS": "1750",
+          "POOL_BLOCK_TIMING_CONTROLLER_MIN_TEMPLATE_TTL_MS": "100",
+          "POOL_BLOCK_TIMING_CONTROLLER_STEP_MS": "250",
+          "POOL_BLOCK_TIMING_CONTROLLER_TARGET_WASTE_PERCENT": "5",
+          "POOL_BLOCK_TIMING_CONTROLLER_WINDOW_SECONDS": "60",
+          "POOL_COINBASE_ADDRESS": "0x1719E0ee598c15957448D5E568948101DF78e7A0",
+          "POOL_EXPIRED_JOB_CLIENT_RECONNECT_COOLDOWN_SECONDS": "60",
+          "POOL_EXPIRED_JOB_CLIENT_RECONNECT_THRESHOLD": "3",
+          "POOL_EXPIRED_JOB_CLIENT_RECONNECT_WINDOW_SECONDS": "120",
+          "POOL_FEE_PERCENTAGE": "1.0",
+          "POOL_INSTANCE_ID": "",
+          "POOL_MAX_BLOCK_CANDIDATE_JOB_AGE_MS": "1750",
+          "POOL_PAYOUT_MATURITY": "4096",
+          "POOL_PAYOUT_MAX_BLOCKS_PER_TICK": "5",
+          "POOL_PREEMPTIVE_BLOCK_CANDIDATE_CLEAN_REISSUE_ENABLED": "false",
+          "POOL_PREEMPTIVE_BLOCK_CANDIDATE_REFRESH_DELAY_MS": "0",
+          "POOL_PREEMPTIVE_BLOCK_CANDIDATE_REFRESH_ENABLED": "true",
+          "POOL_PREEMPTIVE_BLOCK_CANDIDATE_REFRESH_INTERVAL_MS": "20",
+          "POOL_PREEMPTIVE_BLOCK_CANDIDATE_REFRESH_TIMEOUT_MS": "1000",
+          "POOL_PRIVATE_KEY": "<redacted>",
+          "POOL_RECENT_STALE_BLOCK_CANDIDATE_SUBMIT_GRACE_MS": "1750",
+          "POOL_RPC_BACKENDS": "",
+          "POOL_RPC_ROUTER_EVM_HEAD_GUARD_ENABLED": "false",
+          "POOL_RPC_ROUTER_EVM_HEAD_GUARD_MAX_LAG_BLOCKS": "30",
+          "POOL_RPC_ROUTER_EVM_REFERENCE_URLS": "https://rpc.blockdag.engineering,https://rpc.bdagscan.com",
+          "POOL_RPC_ROUTER_NODE_HEALTH_ENABLED": "true",
+          "POOL_RPC_ROUTER_NODE_HEALTH_FRESH_TEMPLATE_GRACE_SECONDS": "15",
+          "POOL_RPC_ROUTER_NODE_HEALTH_MAX_AGE_SECONDS": "30",
+          "POOL_RPC_ROUTER_NODE_HEALTH_MIN_CONSENSUS_PEERS": "2",
+          "POOL_RPC_ROUTER_NODE_HEALTH_PROBE_SECONDS": "15",
+          "POOL_RUNTIME_ADMIN_ENABLED": "false",
+          "POOL_STALE_RACE_CLIENT_RECONNECT_COOLDOWN_SECONDS": "60",
+          "POOL_STALE_RACE_CLIENT_RECONNECT_THRESHOLD": "0",
+          "POOL_STALE_RACE_CLIENT_RECONNECT_WINDOW_SECONDS": "120",
+          "POOL_STALE_RACE_CLIENT_RESEND_THRESHOLD": "1",
+          "POOL_STALE_RACE_RECOVERY_COOLDOWN_SECONDS": "5",
+          "POOL_STALE_RACE_REJECT_WINDOW_SECONDS": "10",
+          "POOL_STRATUM_CONNECTION_LOG_INTERVAL_SECONDS": "60",
+          "POOL_SUBMIT_BLOCK_HEADER_V2_ENABLED": "true",
+          "POOL_SUBMIT_RPC_URLS": "",
+          "POOL_SUBMIT_STALE_BLOCK_CANDIDATES": "false",
+          "POOL_TEMPLATE_TTL_REFRESH_MS": "100",
+          "PPLNS_N_WORK": "1000",
+          "TEMP": "/tmp",
+          "TMP": "/tmp",
+          "TMPDIR": "/tmp",
+          "WALLET_RPC_URL": "http://127.0.0.1:18545"
+        },
+        "logging": {
+          "driver": "local",
+          "options": {
+            "max-file": "2",
+            "max-size": "10m"
+          }
+        },
+        "network_mode": "host",
+        "oom_score_adj": -800,
+        "platform": "linux/amd64",
+        "restart": "unless-stopped",
+        "tmpfs": [
+          "/tmp:size=128m,mode=1777",
+          "/var/tmp:size=128m,mode=1777"
+        ]
+      },
+      "pool-db": {
+        "cpu_shares": 3072,
+        "command": null,
+        "container_name": "postgres",
+        "entrypoint": null,
+        "environment": {
+          "POSTGRES_DB": "bdagpool",
+          "POSTGRES_PASSWORD": "<redacted>",
+          "POSTGRES_USER": "bdag_pool",
+          "TEMP": "/tmp",
+          "TMP": "/tmp",
+          "TMPDIR": "/tmp"
+        },
+        "healthcheck": {
+          "test": [
+            "CMD-SHELL",
+            "pg_isready -U bdag_pool -d bdagpool"
+          ],
+          "timeout": "5s",
+          "interval": "5s",
+          "retries": 20
+        },
+        "image": "postgres:15-bookworm",
+        "logging": {
+          "driver": "local",
+          "options": {
+            "max-file": "2",
+            "max-size": "10m"
+          }
+        },
+        "networks": {
+          "default": null
+        },
+        "oom_score_adj": -800,
+        "ports": [
+          {
+            "mode": "ingress",
+            "host_ip": "127.0.0.1",
+            "target": 5432,
+            "published": "55432",
+            "protocol": "tcp"
+          }
+        ],
+        "restart": "unless-stopped",
+        "tmpfs": [
+          "/tmp:size=128m,mode=1777",
+          "/var/tmp:size=128m,mode=1777"
+        ],
+        "volumes": [
+          {
+            "type": "volume",
+            "source": "postgres-data",
+            "target": "/var/lib/postgresql/data",
+            "volume": {}
+          },
+          {
+            "type": "bind",
+            "source": "/home/jeremy/blockdag-source/stack-redis/sql/pool-schema.sql",
+            "target": "/docker-entrypoint-initdb.d/01-pool-schema.sql",
+            "read_only": true,
+            "bind": {
+              "create_host_path": true
+            }
+          }
+        ]
+      },
+      "sentinel": {
+        "build": {
+          "context": "/home/jeremy/blockdag-source/stack-redis",
+          "dockerfile": "dockerfile-dev",
+          "target": "sentinel"
+        },
+        "cpu_shares": 256,
+        "command": null,
+        "container_name": "sentinel",
+        "entrypoint": [
+          "/bin/sh",
+          "-c",
+          "python3 ops/automation_control.py ensure-normal --owner sentinel-container --owner-unit docker-compose:sentinel --reason 'provision automation control gate for containerised repairs' && while true; do python3 ops/stack_sentinel.py; sleep $${BDAG_SENTINEL_INTERVAL_SECONDS:-60}; done"
+        ],
+        "environment": {
+          "BDAG_NODE_SERVICES": "node",
+          "BDAG_POOL_CONTAINER": "pool",
+          "BDAG_POOL_CONTAINERS": "pool",
+          "BDAG_POOL_DB_CONTAINER": "postgres",
+          "BDAG_POOL_ENV_FILE": "/home/jeremy/.env",
+          "BDAG_POOL_HOST_NETWORK_METRICS_HOST": "host.docker.internal",
+          "BDAG_PROJECT_ROOT": "/home/jeremy",
+          "BDAG_RUNTIME_DIR": "/home/jeremy/ops/runtime",
+          "BDAG_SENTINEL_INTERVAL_SECONDS": "60",
+          "BDAG_SENTINEL_STATUS_URL": "http://dashboard:8088/api/status",
+          "BDAG_SENTINEL_USER_SERVICES": "",
+          "BDAG_SENTINEL_USER_TIMERS": "",
+          "BDAG_STACK_SERVICES": "postgres,node,pool",
+          "COMPOSE_PROJECT_NAME": "stack",
+          "NODE_RPC_PASS": "<redacted>",
+          "NODE_RPC_USER": "test",
+          "TMPDIR": "/tmp"
+        },
+        "extra_hosts": [
+          "host.docker.internal=host-gateway"
+        ],
+        "group_add": [
+          "115"
+        ],
+        "logging": {
+          "driver": "local",
+          "options": {
+            "max-file": "2",
+            "max-size": "10m"
+          }
+        },
+        "networks": {
+          "default": null
+        },
+        "oom_score_adj": 300,
+        "platform": "linux/amd64",
+        "restart": "unless-stopped",
+        "tmpfs": [
+          "/tmp:size=128m,mode=1777"
+        ],
+        "user": "1000:1000",
+        "volumes": [
+          {
+            "type": "bind",
+            "source": "/var/run/docker.sock",
+            "target": "/var/run/docker.sock",
+            "bind": {
+              "create_host_path": true
+            }
+          },
+          {
+            "type": "bind",
+            "source": "/home/jeremy",
+            "target": "/home/jeremy",
+            "bind": {
+              "create_host_path": true
+            }
+          }
+        ],
+        "working_dir": "/home/jeremy"
+      },
+      "status-sampler": {
+        "build": {
+          "context": "/home/jeremy/blockdag-source/stack-redis",
+          "dockerfile": "dockerfile-dev",
+          "target": "status-sampler"
+        },
+        "blkio_config": {
+          "weight": 100
+        },
+        "cpu_shares": 256,
+        "command": null,
+        "container_name": "status-sampler",
+        "entrypoint": [
+          "/bin/sh",
+          "-c",
+          "exec python3 ops/status_sampler.py --loop --no-logs"
+        ],
+        "environment": {
+          "BDAG_CHAIN_STATE_SELF_HEAL_COMMAND": "ops/chain-state-self-heal.sh --from-systemd",
+          "BDAG_CHAIN_STATE_SELF_HEAL_STATUS_URL": "http://dashboard:8088/api/status",
+          "BDAG_CHAIN_STATE_SELF_HEAL_UNIT": "",
+          "BDAG_MINING_IMPERATIVE_GUARD_UNITS": "",
+          "BDAG_MINING_IMPERATIVE_REPAIR_INTERVAL_SECONDS": "30",
+          "BDAG_NODE_RPC_URLS": "node=http://host.docker.internal:38131",
+          "BDAG_NODE_SERVICES": "node",
+          "BDAG_POOL_CONTAINER": "pool",
+          "BDAG_POOL_CONTAINERS": "pool",
+          "BDAG_POOL_DB_CONTAINER": "postgres",
+          "BDAG_POOL_ENV_FILE": "/home/jeremy/.env",
+          "BDAG_POOL_HOST_NETWORK_METRICS_HOST": "host.docker.internal",
+          "BDAG_PROJECT_ROOT": "/home/jeremy",
+          "BDAG_RUNTIME_DIR": "/home/jeremy/ops/runtime",
+          "BDAG_STACK_SERVICES": "postgres,node,pool",
+          "BDAG_STATUS_SAMPLER_EARNINGS_SNAPSHOT_INTERVAL_SECONDS": "60",
+          "BDAG_STATUS_SAMPLER_FILE": "/home/jeremy/ops/runtime/status-sampler.json",
+          "BDAG_STATUS_SAMPLER_INTERVAL_SECONDS": "10",
+          "COMPOSE_PROJECT_NAME": "stack",
+          "NODE_RPC_PASS": "<redacted>",
+          "NODE_RPC_USER": "test",
+          "TMPDIR": "/tmp"
+        },
+        "extra_hosts": [
+          "host.docker.internal=host-gateway"
+        ],
+        "group_add": [
+          "115"
+        ],
+        "logging": {
+          "driver": "local",
+          "options": {
+            "max-file": "2",
+            "max-size": "10m"
+          }
+        },
+        "networks": {
+          "default": null
+        },
+        "oom_score_adj": 300,
+        "platform": "linux/amd64",
+        "restart": "unless-stopped",
+        "tmpfs": [
+          "/tmp:size=128m,mode=1777"
+        ],
+        "user": "1000:1000",
+        "volumes": [
+          {
+            "type": "bind",
+            "source": "/var/run/docker.sock",
+            "target": "/var/run/docker.sock",
+            "bind": {
+              "create_host_path": true
+            }
+          },
+          {
+            "type": "bind",
+            "source": "/home/jeremy",
+            "target": "/home/jeremy",
+            "bind": {
+              "create_host_path": true
+            }
+          }
+        ],
+        "working_dir": "/home/jeremy"
+      },
+      "watchdog": {
+        "build": {
+          "context": "/home/jeremy/blockdag-source/stack-redis",
+          "dockerfile": "dockerfile-dev",
+          "target": "watchdog"
+        },
+        "cpu_shares": 256,
+        "command": null,
+        "container_name": "watchdog",
+        "entrypoint": [
+          "/bin/sh",
+          "-c",
+          "python3 ops/automation_control.py ensure-normal --owner watchdog-container --owner-unit docker-compose:watchdog --reason 'provision automation control gate for containerised repairs' && exec python3 ops/watchdog.py --loop"
+        ],
+        "environment": {
+          "BDAG_NODE_SERVICES": "node",
+          "BDAG_POOL_CONTAINER": "pool",
+          "BDAG_POOL_CONTAINERS": "pool",
+          "BDAG_POOL_DB_CONTAINER": "postgres",
+          "BDAG_POOL_ENV_FILE": "/home/jeremy/.env",
+          "BDAG_POOL_HOST": "192.168.1.100",
+          "BDAG_POOL_HOST_NETWORK_METRICS_HOST": "host.docker.internal",
+          "BDAG_PROJECT_ROOT": "/home/jeremy",
+          "BDAG_RUNTIME_DIR": "/home/jeremy/ops/runtime",
+          "BDAG_STACK_SERVICES": "postgres,node,pool",
+          "BDAG_STATUS_SOURCE_URL": "http://dashboard:8088/api/status",
+          "BDAG_WATCHDOG_INTERVAL": "60",
+          "BDAG_WATCHDOG_NATIVE_P2P_PEER_LOSS_REPAIR_SECONDS": "300",
+          "COMPOSE_PROJECT_NAME": "stack",
+          "NODE_RPC_PASS": "<redacted>",
+          "NODE_RPC_USER": "test",
+          "TMPDIR": "/tmp"
+        },
+        "extra_hosts": [
+          "host.docker.internal=host-gateway"
+        ],
+        "group_add": [
+          "115"
+        ],
+        "logging": {
+          "driver": "local",
+          "options": {
+            "max-file": "2",
+            "max-size": "10m"
+          }
+        },
+        "networks": {
+          "default": null
+        },
+        "oom_score_adj": 300,
+        "platform": "linux/amd64",
+        "restart": "unless-stopped",
+        "tmpfs": [
+          "/tmp:size=128m,mode=1777"
+        ],
+        "user": "1000:1000",
+        "volumes": [
+          {
+            "type": "bind",
+            "source": "/var/run/docker.sock",
+            "target": "/var/run/docker.sock",
+            "bind": {
+              "create_host_path": true
+            }
+          },
+          {
+            "type": "bind",
+            "source": "/home/jeremy",
+            "target": "/home/jeremy",
+            "bind": {
+              "create_host_path": true
+            }
+          }
+        ],
+        "working_dir": "/home/jeremy"
+      }
+    },
+    "volumes": {
+      "dashboard-redis": {
+        "name": "stack_dashboard-redis"
+      },
+      "nodeworker-data": {
+        "name": "stack_nodeworker-data"
+      },
+      "postgres-data": {
+        "name": "stack_postgres-data"
+      }
+    },
+    "x-build-args": {
+      "SNAPSHOT_PATH": "docker/no-snapshot.marker"
+    },
+    "x-dev-source-contexts": {
+      "blockdag_corechain": "/home/jeremy/blockdag-source/blockdag-corechain",
+      "cpu_miner_src": "/home/jeremy/blockdag-source/stack-redis",
+      "dashboard_src": "/home/jeremy/blockdag-source/redis-dash",
+      "pool_src": "/home/jeremy/blockdag-source/pool",
+      "stack_src": "/home/jeremy/blockdag-source/stack-redis"
+    },
+    "x-mining-logging": {
+      "driver": "local",
+      "options": {
+        "max-file": "2",
+        "max-size": "10m"
+      }
+    },
+    "x-node-critical": {
+      "blkio_config": {
+        "weight": 1000
+      },
+      "cpu_shares": 4096,
+      "oom_score_adj": -900,
+      "shm_size": "512m",
+      "tmpfs": [
+        "/tmp:size=512m,mode=1777",
+        "/var/tmp:size=512m,mode=1777",
+        "/run/bdag-ephemeral:size=512m,mode=1777"
+      ]
+    },
+    "x-ops-low": {
+      "blkio_config": {
+        "weight": 100
+      },
+      "cpu_shares": 256,
+      "oom_score_adj": 300
+    },
+    "x-pool-critical": {
+      "blkio_config": {
+        "weight": 900
+      },
+      "cpu_shares": 3072,
+      "oom_score_adj": -800
+    }
+  },
+  "live_containers": {
+    "node": {
+      "present": true,
+      "id": "cb4367844b7a81c08219b6fb4d683951b289950505b20bb5a79dec75d09c6861",
+      "image_id": "sha256:db65d3cd9860cc01e2f241832f2c525299d5140073a8d683ba7ef04c0012ee85",
+      "image_name": "stack-node",
+      "state": {
+        "Status": "running",
+        "Running": true,
+        "Paused": false,
+        "Restarting": false,
+        "OOMKilled": false,
+        "Dead": false,
+        "Pid": 3319984,
+        "ExitCode": 0,
+        "Error": "",
+        "StartedAt": "2026-06-21T20:00:45.903735744Z",
+        "FinishedAt": "0001-01-01T00:00:00Z"
+      },
+      "entrypoint": [
+        "/usr/local/bin/docker-entrypoint-nodeworker.sh",
+        "/usr/local/bin/nodeworker",
+        "--node-binary=/usr/local/bin/blockdag-node",
+        "--node-args=--configfile /etc/bdagStack/node.conf",
+        "--rpc-url=ws://127.0.0.1:18546",
+        "--dag-rpc-url=http://127.0.0.1:38131",
+        "--persist-root=/var/lib/bdagStack/nodeworker",
+        "--health-min-peers=2",
+        "--rollout-window=30m"
+      ],
+      "cmd": null,
+      "args": [
+        "/usr/local/bin/nodeworker",
+        "--node-binary=/usr/local/bin/blockdag-node",
+        "--node-args=--configfile /etc/bdagStack/node.conf",
+        "--rpc-url=ws://127.0.0.1:18546",
+        "--dag-rpc-url=http://127.0.0.1:38131",
+        "--persist-root=/var/lib/bdagStack/nodeworker",
+        "--health-min-peers=2",
+        "--rollout-window=30m"
+      ],
+      "path": "/usr/local/bin/docker-entrypoint-nodeworker.sh",
+      "env": [
+        "BDAG_SNAPSHOT_URL=",
+        "NODE_ARGS_APPEND=--modules=Blockdag --modules=miner --miner --miningaddr=0x1719E0ee598c15957448D5E568948101DF78e7A0",
+        "BDAG_NETWORK_TOPOLOGY=auto",
+        "BDAG_NODE_ARCHIVAL=0",
+        "BDAG_STORAGE_PROFILE=auto",
+        "P2P_PORT=8150",
+        "BDAG_NODE_NO_FILE_LOGGING=1",
+        "TMPDIR=/tmp",
+        "BDAG_ASIC_LAN_CIDRS=192.168.1.0/24",
+        "BDAG_NODE_DEBUG_LEVEL=warn",
+        "TEMP=/tmp",
+        "BDAG_EPHEMERAL_DIR=/run/bdag-ephemeral",
+        "BDAG_NODE_OBSOLETE_HEIGHT=20",
+        "BDAG_ENTRYPOINT_CHOWN_MODE=needed",
+        "BDAG_P2P_INTERFACE=",
+        "BDAG_DETECTED_NETWORK_TOPOLOGY=",
+        "BDAG_P2P_ADVERTISE_IP=",
+        "TMP=/tmp",
+        "BOOTSTRAP_PEER_ADDRESSES=/ip4/16.28.133.168/tcp/8150/p2p/16Uiu2HAm9UcTayJDSajjJYsWwVaN2qqGeczcs9kXse3dMdvGDRjz,/ip4/13.140.165.186/tcp/8150/p2p/16Uiu2HAm4hHD7Ht5LJrLgaKXr7YP2RzHHjrrCLNt8zv8FQ9s3gBU,/ip4/13.57.132.47/tcp/8150/p2p/16Uiu2HAmDynYpWjWmgVGf9qVWvDdLnJ3ybVgDmFexizR4zMereus,/ip4/18.142.70.83/tcp/8150/p2p/16Uiu2HAmBSdn2taoteYwLZJZkDm2iCwL6eQ4UaXYNBBtAwaBU18X,/ip4/199.229.220.118/tcp/8151/p2p/16Uiu2HAmUtspBkyUNBG8pQLgj9DrKVgL6SKQzGBhVT9ZShNM1ops,/ip4/204.236.141.121/tcp/8150/p2p/16Uiu2HAm5qppgbBCjVpTN5nKtjEU5KsSbs2gz4S9uPiSWVSGfNh1,/ip4/3.126.64.13/tcp/8152/p2p/16Uiu2HAmEFxRaBbbf3sRi43CCvMk5Y6zPkuGY9s4uRK2FKJVJkqo,/ip4/52.8.54.60/tcp/8150/p2p/16Uiu2HAkzUWr4YUM7mAhLdCVZgFoV9He6aQzKTyWWrJ7SWQKRTN7,/ip4/54.151.18.92/tcp/8150/p2p/16Uiu2HAmVm91o1JXS2C7P6uTVuVX5empgnRtzuK4UaC8fHmePbKP,/ip4/63.182.36.180/tcp/8150/p2p/16Uiu2HAmP8HsTF9ks8JjFamzT9JBZb3ymSiCJ8rkzXBZqYj4yKtP",
+        "BDAG_ASIC_LAN_INTERFACE=enxc8a362eb4bdc",
+        "BDAG_NODE_MINING_NO_PENDING_TX=1",
+        "BDAG_NODEWORKER_LIVENESS_TIMEOUT=5m",
+        "BDAG_NETWORK=",
+        "SYNC_SOURCE_NODE=0",
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "mounts": [
+        {
+          "Type": "bind",
+          "Source": "/home/jeremy/blockdag-source/stack/data/node",
+          "Destination": "/var/lib/bdagStack/node",
+          "Mode": "rw",
+          "RW": true,
+          "Propagation": "rprivate"
+        },
+        {
+          "Type": "volume",
+          "Name": "stack_nodeworker-data",
+          "Source": "/var/lib/docker/volumes/stack_nodeworker-data/_data",
+          "Destination": "/var/lib/bdagStack/nodeworker",
+          "Driver": "local",
+          "Mode": "rw",
+          "RW": true,
+          "Propagation": ""
+        },
+        {
+          "Type": "bind",
+          "Source": "/home/jeremy/blockdag-source/stack-redis/docker/no-snapshot.marker",
+          "Destination": "/snapshot/latest.bdsnap",
+          "Mode": "ro",
+          "RW": false,
+          "Propagation": "rprivate"
+        },
+        {
+          "Type": "bind",
+          "Source": "/home/jeremy/blockdag-source/stack-redis/node.conf",
+          "Destination": "/etc/bdagStack/node.conf",
+          "Mode": "ro",
+          "RW": false,
+          "Propagation": "rprivate"
+        }
+      ],
+      "labels": {
+        "com.docker.compose.config-hash": "8297574be1926c6abc1ec64cee557495ffb4bbaf57289535c32a1e8cc8aa2d00",
+        "com.docker.compose.container-number": "1",
+        "com.docker.compose.depends_on": "",
+        "com.docker.compose.image": "sha256:db65d3cd9860cc01e2f241832f2c525299d5140073a8d683ba7ef04c0012ee85",
+        "com.docker.compose.oneoff": "False",
+        "com.docker.compose.project": "stack",
+        "com.docker.compose.project.config_files": "/home/jeremy/blockdag-source/stack-redis/docker-compose.yml,/home/jeremy/blockdag-source/stack-redis/docker-compose.override.yml",
+        "com.docker.compose.project.working_dir": "/home/jeremy/blockdag-source/stack-redis",
+        "com.docker.compose.replace": "node",
+        "com.docker.compose.service": "node",
+        "com.docker.compose.version": "2.40.3",
+        "org.opencontainers.image.version": "24.04"
+      }
+    },
+    "pool": {
+      "present": true,
+      "id": "77a4d5a4129bfea999989acb9201930cdac17d65e4d741c3014ec45e38576916",
+      "image_id": "sha256:0f5f66595a3708eea4b084ae1a2c8a9457bb1ae28c9ddfbdf414d87faae0b03d",
+      "image_name": "stack-pool",
+      "state": {
+        "Status": "running",
+        "Running": true,
+        "Paused": false,
+        "Restarting": false,
+        "OOMKilled": false,
+        "Dead": false,
+        "Pid": 3320963,
+        "ExitCode": 0,
+        "Error": "",
+        "StartedAt": "2026-06-21T20:01:26.392910027Z",
+        "FinishedAt": "2026-06-21T20:01:26.354216727Z"
+      },
+      "entrypoint": [
+        "/usr/local/bin/mining-pool"
+      ],
+      "cmd": null,
+      "args": [],
+      "path": "/usr/local/bin/mining-pool",
+      "env": [
+        "POOL_ALLOW_MULTIPLE_BLOCK_CANDIDATES_PER_JOB=true",
+        "POOL_STALE_RACE_REJECT_WINDOW_SECONDS=10",
+        "POOL_PREEMPTIVE_BLOCK_CANDIDATE_REFRESH_TIMEOUT_MS=1000",
+        "POOL_BLOCK_TIMING_CONTROLLER_STEP_MS=250",
+        "POOL_RPC_ROUTER_NODE_HEALTH_PROBE_SECONDS=15",
+        "POOL_STALE_RACE_CLIENT_RESEND_THRESHOLD=1",
+        "POOL_SUBMIT_STALE_BLOCK_CANDIDATES=false",
+        "POOL_AUTO_TUNE_BLOCK_CANDIDATE_MAX_AGE_MS=8000",
+        "POOL_BLOCK_TIMING_CONTROLLER_MAX_TEMPLATE_TTL_MS=100",
+        "POOL_BLOCK_TIMING_CONTROLLER_WINDOW_SECONDS=60",
+        "POOL_RPC_ROUTER_NODE_HEALTH_MIN_CONSENSUS_PEERS=2",
+        "WALLET_RPC_URL=http://127.0.0.1:18545",
+        "POOL_BLOCK_TIMING_CONTROLLER_ENABLED=true",
+        "POOL_SUBMIT_RPC_URLS=",
+        "POOL_MAX_BLOCK_CANDIDATE_JOB_AGE_MS=1750",
+        "POOL_PRIVATE_KEY=<redacted>",
+        "POOL_AUTO_TUNE_BLOCK_CANDIDATE_JOB_AGE=true",
+        "METRICS_ADDR=0.0.0.0:9090",
+        "POOL_BLOCK_TIMING_CONTROLLER_MAX_JOB_AGE_MS=1750",
+        "POOL_RPC_BACKENDS=",
+        "PPLNS_N_WORK=1000",
+        "POOL_INSTANCE_ID=",
+        "POOL_COINBASE_ADDRESS=0x1719E0ee598c15957448D5E568948101DF78e7A0",
+        "NODE_RPC_URLS=http://127.0.0.1:38131",
+        "POOL_RPC_ROUTER_NODE_HEALTH_MAX_AGE_SECONDS=30",
+        "POOL_EXPIRED_JOB_CLIENT_RECONNECT_WINDOW_SECONDS=120",
+        "POOL_STALE_RACE_CLIENT_RECONNECT_WINDOW_SECONDS=120",
+        "TMPDIR=/tmp",
+        "NODE_RPC_USER=test",
+        "NODE_RPC_URL=http://127.0.0.1:38131",
+        "POOL_TEMPLATE_TTL_REFRESH_MS=100",
+        "POOL_FEE_PERCENTAGE=1.0",
+        "NODE_RPC_PASS=<redacted>",
+        "POOL_PREEMPTIVE_BLOCK_CANDIDATE_REFRESH_INTERVAL_MS=20",
+        "POOL_BLOCK_MATURITY=10",
+        "POOL_SUBMIT_BLOCK_HEADER_V2_ENABLED=true",
+        "POOL_RPC_ROUTER_NODE_HEALTH_FRESH_TEMPLATE_GRACE_SECONDS=15",
+        "POOL_PAYOUT_MAX_BLOCKS_PER_TICK=5",
+        "TMP=/tmp",
+        "POOL_PAYOUT_MATURITY=4096",
+        "POOL_EXPIRED_JOB_CLIENT_RECONNECT_COOLDOWN_SECONDS=60",
+        "PG_URL=postgres://<redacted>",
+        "POOL_PREEMPTIVE_BLOCK_CANDIDATE_REFRESH_ENABLED=true",
+        "POOL_STALE_RACE_CLIENT_RECONNECT_COOLDOWN_SECONDS=60",
+        "POOL_ASIC_MAC_OVERRIDES=192.168.1.101=28:e2:97:1e:c0:b5,192.168.1.102=2a:71:c7:f5:1f:1e,192.168.1.14=28:e2:97:3e:39:63,192.168.1.105=28:e2:97:4d:44:3a",
+        "POOL_STALE_RACE_RECOVERY_COOLDOWN_SECONDS=5",
+        "POOL_BLOCK_TIMING_CONTROLLER_MIN_CANDIDATES=20",
+        "POOL_STRATUM_CONNECTION_LOG_INTERVAL_SECONDS=60",
+        "POOL_BLOCK_TIMING_CONTROLLER_COOLDOWN_SECONDS=20",
+        "POOL_RPC_ROUTER_NODE_HEALTH_ENABLED=true",
+        "POOL_RPC_ROUTER_EVM_HEAD_GUARD_MAX_LAG_BLOCKS=30",
+        "POOL_BLOCK_TIMING_CONTROLLER_MIN_TEMPLATE_TTL_MS=100",
+        "POOL_ASIC_MAC_ALLOWLIST=2a:71:c7:f5:1f:1e,28:e2:97:3e:39:63,28:e2:97:1e:c0:b5,28:e2:97:4d:44:3a",
+        "MINING_POOL_ADDRESS=0x1719E0ee598c15957448D5E568948101DF78e7A0",
+        "POOL_RUNTIME_ADMIN_ENABLED=false",
+        "POOL_STALE_RACE_CLIENT_RECONNECT_THRESHOLD=0",
+        "POOL_PREEMPTIVE_BLOCK_CANDIDATE_REFRESH_DELAY_MS=0",
+        "TEMP=/tmp",
+        "POOL_BIND_ADDR=192.168.1.100:3334",
+        "POOL_BLOCK_TIMING_CONTROLLER_MIN_JOB_AGE_MS=1750",
+        "POOL_RPC_ROUTER_EVM_REFERENCE_URLS=https://rpc.blockdag.engineering,https://rpc.bdagscan.com",
+        "POOL_RECENT_STALE_BLOCK_CANDIDATE_SUBMIT_GRACE_MS=1750",
+        "POOL_EXPIRED_JOB_CLIENT_RECONNECT_THRESHOLD=3",
+        "POOL_RPC_ROUTER_EVM_HEAD_GUARD_ENABLED=false",
+        "BDAG_ASIC_LAN_CIDRS=192.168.1.0/24",
+        "POOL_BLOCK_TIMING_CONTROLLER_TARGET_WASTE_PERCENT=5",
+        "POOL_PREEMPTIVE_BLOCK_CANDIDATE_CLEAN_REISSUE_ENABLED=false",
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "mounts": [],
+      "labels": {
+        "com.docker.compose.config-hash": "3cc1bff3269cba209e027936c6f19ed844abc881d2e10bd0111807726ea628d1",
+        "com.docker.compose.container-number": "1",
+        "com.docker.compose.depends_on": "pool-db:service_healthy:false",
+        "com.docker.compose.image": "sha256:0f5f66595a3708eea4b084ae1a2c8a9457bb1ae28c9ddfbdf414d87faae0b03d",
+        "com.docker.compose.oneoff": "False",
+        "com.docker.compose.project": "stack",
+        "com.docker.compose.project.config_files": "/home/jeremy/blockdag-source/stack-redis/docker-compose.yml,/home/jeremy/blockdag-source/stack-redis/docker-compose.override.yml",
+        "com.docker.compose.project.working_dir": "/home/jeremy/blockdag-source/stack-redis",
+        "com.docker.compose.replace": "pool",
+        "com.docker.compose.service": "pool",
+        "com.docker.compose.version": "2.40.3",
+        "org.opencontainers.image.version": "24.04"
+      }
+    },
+    "dashboard": {
+      "present": true,
+      "id": "ba783cd7f6fdae9229cc624418e86e28f706dbf03c9241c6c1dd4b9c046fa0a0",
+      "image_id": "sha256:4b04283d589857d4d9e45bf6656dd7293671879ec472a89e86d32af9647c7686",
+      "image_name": "stack-dashboard",
+      "state": {
+        "Status": "running",
+        "Running": true,
+        "Paused": false,
+        "Restarting": false,
+        "OOMKilled": false,
+        "Dead": false,
+        "Pid": 3319231,
+        "ExitCode": 0,
+        "Error": "",
+        "StartedAt": "2026-06-21T20:00:15.604765751Z",
+        "FinishedAt": "2026-06-21T19:52:26.43438084Z",
+        "Health": {
+          "Status": "healthy",
+          "FailingStreak": 0,
+          "Log": [
+            {
+              "Start": "2026-06-21T23:32:21.563933919+02:00",
+              "End": "2026-06-21T23:32:21.633716985+02:00",
+              "ExitCode": 0,
+              "Output": ""
+            },
+            {
+              "Start": "2026-06-21T23:32:31.634757665+02:00",
+              "End": "2026-06-21T23:32:31.775368082+02:00",
+              "ExitCode": 0,
+              "Output": ""
+            },
+            {
+              "Start": "2026-06-21T23:32:41.776495804+02:00",
+              "End": "2026-06-21T23:32:41.941282031+02:00",
+              "ExitCode": 0,
+              "Output": ""
+            },
+            {
+              "Start": "2026-06-21T23:32:51.942097752+02:00",
+              "End": "2026-06-21T23:32:52.01079157+02:00",
+              "ExitCode": 0,
+              "Output": ""
+            },
+            {
+              "Start": "2026-06-21T23:33:02.011596854+02:00",
+              "End": "2026-06-21T23:33:02.069193528+02:00",
+              "ExitCode": 0,
+              "Output": ""
+            }
+          ]
+        }
+      },
+      "entrypoint": [
+        "/usr/local/bin/dashboard"
+      ],
+      "cmd": null,
+      "args": [],
+      "path": "/usr/local/bin/dashboard",
+      "env": [
+        "BDAG_EVM_SYNC_BACKOFF_SECONDS=60",
+        "MINING_POOL_ADDRESS=0x1719E0ee598c15957448D5E568948101DF78e7A0",
+        "BDAG_TREND_BACKFILL_DAYS=30",
+        "TMP=/tmp",
+        "BDAG_CHAIN_POLL_SECONDS=2",
+        "BDAG_REDIS_APPENDFSYNC=everysec",
+        "BDAG_POOL_URL=stratum+tcp://192.168.1.100:3334",
+        "BDAG_TREND_BACKFILL_SLEEP_MS=100",
+        "BDAG_TREND_BACKFILL_MAX_BLOCKS_PER_PASS=4096",
+        "BDAG_TREND_SPARSE_SAMPLES_PER_PASS=24",
+        "BDAG_CHAIN_WS_READ_TIMEOUT_SECONDS=10",
+        "BDAG_GLOBAL_RPC_CHUNK_SIZE=64",
+        "BDAG_CHAIN_POLL_FALLBACK_AFTER_SECONDS=3",
+        "BDAG_REDIS_MAXMEMORY=256mb",
+        "BDAG_EVM_WS_URL=ws://host.docker.internal:18546",
+        "BDAG_REDIS_SOCKET=/run/dashboard-redis/redis.sock",
+        "BDAG_EVM_HTTP_URL=http://host.docker.internal:18545",
+        "BDAG_GLOBAL_MAX_INCREMENTAL_GAP=120",
+        "BDAG_TREND_CATCHUP_INTERVAL_SECONDS=30",
+        "BDAG_ASIC_LAN_CIDRS=192.168.1.0/24",
+        "BDAG_TREND_BACKFILL_CHUNK_SIZE=128",
+        "BDAG_DASHBOARD_REDIS_MANAGED=1",
+        "BDAG_REDIS_MAXMEMORY_POLICY=noeviction",
+        "BDAG_TREND_SPARSE_MAX_SAMPLE_BLOCKS=2048",
+        "POOL_ASIC_MAC_ALLOWLIST=2a:71:c7:f5:1f:1e,28:e2:97:3e:39:63,28:e2:97:1e:c0:b5,28:e2:97:4d:44:3a",
+        "ADDR=0.0.0.0:8088",
+        "TEMP=/tmp",
+        "BDAG_POOL_METRICS_URL=http://host.docker.internal:9090/metrics",
+        "BDAG_CHAIN_WS_READ_LIMIT_BYTES=1048576",
+        "BDAG_DASHBOARD_REDIS_ENABLED=1",
+        "BDAG_MINER_CONTROL_ENABLED=0",
+        "BDAG_REDIS_CONFIG=/etc/redis/redis.conf",
+        "BDAG_TREND_HISTORY_ENABLED=1",
+        "BDAG_TREND_RECENT_WARMUP_BLOCKS=3600",
+        "BDAG_REDIS_APPENDONLY=yes",
+        "BDAG_GLOBAL_BLOCK_WINDOW=600",
+        "BDAG_GLOBAL_FAST_WARMUP_BLOCKS=120",
+        "NODE_RPC_PASS=<redacted>",
+        "BDAG_GLOBAL_SETTLE_DELAY_SECONDS=5",
+        "BDAG_DASHBOARD_HEALTH_STALE_SECONDS=20",
+        "BDAG_GLOBAL_RPC_WORKERS=4",
+        "BDAG_TREND_RPC_WORKERS=4",
+        "POOL_COINBASE_ADDRESS=0x1719E0ee598c15957448D5E568948101DF78e7A0",
+        "POOL_ASIC_ARP_TABLE_PATH=/host/proc/net/arp",
+        "BDAG_NODE_RPC_URL=http://host.docker.internal:38131",
+        "NODE_RPC_USER=test",
+        "TMPDIR=/tmp",
+        "BDAG_GLOBAL_CACHE_MAX_TIP_LAG_BLOCKS=30",
+        "POOL_ASIC_MAC_OVERRIDES=192.168.1.101=28:e2:97:1e:c0:b5,192.168.1.102=2a:71:c7:f5:1f:1e,192.168.1.14=28:e2:97:3e:39:63,192.168.1.105=28:e2:97:4d:44:3a",
+        "DASHBOARD_TIMEZONE=Africa/Johannesburg",
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "mounts": [
+        {
+          "Type": "volume",
+          "Name": "stack_dashboard-redis",
+          "Source": "/var/lib/docker/volumes/stack_dashboard-redis/_data",
+          "Destination": "/var/lib/dashboard-redis",
+          "Driver": "local",
+          "Mode": "rw",
+          "RW": true,
+          "Propagation": ""
+        },
+        {
+          "Type": "bind",
+          "Source": "/proc/net/arp",
+          "Destination": "/host/proc/net/arp",
+          "Mode": "ro",
+          "RW": false,
+          "Propagation": "rprivate"
+        }
+      ],
+      "labels": {
+        "com.docker.compose.config-hash": "e03f4a8bb3888d03330d9472539c32e0a4893687873b226ce12c92c9412a2162",
+        "com.docker.compose.container-number": "1",
+        "com.docker.compose.depends_on": "pool:service_started:false,node:service_started:false",
+        "com.docker.compose.image": "sha256:4b04283d589857d4d9e45bf6656dd7293671879ec472a89e86d32af9647c7686",
+        "com.docker.compose.oneoff": "False",
+        "com.docker.compose.project": "stack",
+        "com.docker.compose.project.config_files": "/home/jeremy/blockdag-source/stack-redis/docker-compose.yml,/home/jeremy/blockdag-source/stack-redis/docker-compose.override.yml",
+        "com.docker.compose.project.working_dir": "/home/jeremy/blockdag-source/stack-redis",
+        "com.docker.compose.replace": "dashboard",
+        "com.docker.compose.service": "dashboard",
+        "com.docker.compose.version": "2.40.3",
+        "org.opencontainers.image.version": "24.04"
+      }
+    },
+    "status-sampler": {
+      "present": true,
+      "id": "5b35a79cc6af2a3cb2ba006da91ff3fcc59fb69e8c94eee5eb1b6e03c802f1b2",
+      "image_id": "sha256:678391c079a5544621ac100e7a3da55a12b90c25d586ba7d4c69b66817b765ff",
+      "image_name": "stack-status-sampler",
+      "state": {
+        "Status": "running",
+        "Running": true,
+        "Paused": false,
+        "Restarting": false,
+        "OOMKilled": false,
+        "Dead": false,
+        "Pid": 3318834,
+        "ExitCode": 0,
+        "Error": "",
+        "StartedAt": "2026-06-21T20:00:09.012829508Z",
+        "FinishedAt": "2026-06-21T19:52:33.203389363Z"
+      },
+      "entrypoint": [
+        "/bin/sh",
+        "-c",
+        "exec python3 ops/status_sampler.py --loop --no-logs"
+      ],
+      "cmd": null,
+      "args": [
+        "-c",
+        "exec python3 ops/status_sampler.py --loop --no-logs"
+      ],
+      "path": "/bin/sh",
+      "env": [
+        "COMPOSE_PROJECT_NAME=stack",
+        "NODE_RPC_USER=test",
+        "TMPDIR=/tmp",
+        "BDAG_MINING_IMPERATIVE_REPAIR_INTERVAL_SECONDS=30",
+        "BDAG_MINING_IMPERATIVE_GUARD_UNITS=",
+        "BDAG_CHAIN_STATE_SELF_HEAL_COMMAND=ops/chain-state-self-heal.sh --from-systemd",
+        "BDAG_POOL_HOST_NETWORK_METRICS_HOST=host.docker.internal",
+        "NODE_RPC_PASS=<redacted>",
+        "BDAG_POOL_CONTAINER=pool",
+        "BDAG_POOL_ENV_FILE=/home/jeremy/blockdag-source/stack-redis/.env",
+        "BDAG_STATUS_SAMPLER_EARNINGS_SNAPSHOT_INTERVAL_SECONDS=60",
+        "BDAG_RUNTIME_DIR=/home/jeremy/blockdag-source/stack-redis/ops/runtime",
+        "BDAG_CHAIN_STATE_SELF_HEAL_UNIT=",
+        "BDAG_NODE_SERVICES=node",
+        "BDAG_STATUS_SAMPLER_INTERVAL_SECONDS=10",
+        "BDAG_STATUS_SAMPLER_FILE=/home/jeremy/blockdag-source/stack-redis/ops/runtime/status-sampler.json",
+        "BDAG_NODE_RPC_URLS=node=http://host.docker.internal:38131",
+        "BDAG_PROJECT_ROOT=/home/jeremy/blockdag-source/stack-redis",
+        "BDAG_STACK_SERVICES=postgres,node,pool",
+        "BDAG_POOL_DB_CONTAINER=postgres",
+        "BDAG_CHAIN_STATE_SELF_HEAL_STATUS_URL=http://dashboard:8088/api/status",
+        "BDAG_POOL_CONTAINERS=pool",
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "DOCKER_VERSION=27.5.1",
+        "DOCKER_BUILDX_VERSION=0.20.1",
+        "DOCKER_COMPOSE_VERSION=2.33.0",
+        "DOCKER_TLS_CERTDIR=/certs",
+        "PYTHONUNBUFFERED=1"
+      ],
+      "mounts": [
+        {
+          "Type": "bind",
+          "Source": "/var/run/docker.sock",
+          "Destination": "/var/run/docker.sock",
+          "Mode": "rw",
+          "RW": true,
+          "Propagation": "rprivate"
+        },
+        {
+          "Type": "bind",
+          "Source": "/home/jeremy/blockdag-source/stack-redis",
+          "Destination": "/home/jeremy/blockdag-source/stack-redis",
+          "Mode": "rw",
+          "RW": true,
+          "Propagation": "rprivate"
+        }
+      ],
+      "labels": {
+        "com.docker.compose.config-hash": "9d60a4b5400ef9e3431e282622311aaaff140c76375cfffe3ac6613c28f1e091",
+        "com.docker.compose.container-number": "1",
+        "com.docker.compose.depends_on": "",
+        "com.docker.compose.image": "sha256:678391c079a5544621ac100e7a3da55a12b90c25d586ba7d4c69b66817b765ff",
+        "com.docker.compose.oneoff": "False",
+        "com.docker.compose.project": "stack",
+        "com.docker.compose.project.config_files": "/home/jeremy/blockdag-source/stack-redis/docker-compose.yml,/home/jeremy/blockdag-source/stack-redis/docker-compose.override.yml",
+        "com.docker.compose.project.working_dir": "/home/jeremy/blockdag-source/stack-redis",
+        "com.docker.compose.replace": "status-sampler",
+        "com.docker.compose.service": "status-sampler",
+        "com.docker.compose.version": "2.40.3",
+        "org.opencontainers.image.title": "BlockDAG Stack Status Sampler"
+      }
+    },
+    "postgres": {
+      "present": true,
+      "id": "36d4c876c62c00c471d3ad33ac51fc6e23ee14a9e379bb26b4460ab4f08997d9",
+      "image_id": "sha256:b395c9b05a57a43c079691104bc8468ea336a42e6148f44095e66d0c056cdd1c",
+      "image_name": "postgres:15-bookworm",
+      "state": {
+        "Status": "running",
+        "Running": true,
+        "Paused": false,
+        "Restarting": false,
+        "OOMKilled": false,
+        "Dead": false,
+        "Pid": 3318902,
+        "ExitCode": 0,
+        "Error": "",
+        "StartedAt": "2026-06-21T20:00:09.10276953Z",
+        "FinishedAt": "2026-06-21T19:52:26.707663541Z",
+        "Health": {
+          "Status": "healthy",
+          "FailingStreak": 0,
+          "Log": [
+            {
+              "Start": "2026-06-21T23:32:46.128581064+02:00",
+              "End": "2026-06-21T23:32:46.210677672+02:00",
+              "ExitCode": 0,
+              "Output": "/var/run/postgresql:5432 - accepting connections\n"
+            },
+            {
+              "Start": "2026-06-21T23:32:51.211680418+02:00",
+              "End": "2026-06-21T23:32:51.290856148+02:00",
+              "ExitCode": 0,
+              "Output": "/var/run/postgresql:5432 - accepting connections\n"
+            },
+            {
+              "Start": "2026-06-21T23:32:56.291940471+02:00",
+              "End": "2026-06-21T23:32:56.350035664+02:00",
+              "ExitCode": 0,
+              "Output": "/var/run/postgresql:5432 - accepting connections\n"
+            },
+            {
+              "Start": "2026-06-21T23:33:01.351096793+02:00",
+              "End": "2026-06-21T23:33:01.442231522+02:00",
+              "ExitCode": 0,
+              "Output": "/var/run/postgresql:5432 - accepting connections\n"
+            },
+            {
+              "Start": "2026-06-21T23:33:06.443555067+02:00",
+              "End": "2026-06-21T23:33:06.523744661+02:00",
+              "ExitCode": 0,
+              "Output": "/var/run/postgresql:5432 - accepting connections\n"
+            }
+          ]
+        }
+      },
+      "entrypoint": [
+        "docker-entrypoint.sh"
+      ],
+      "cmd": [
+        "postgres"
+      ],
+      "args": [
+        "postgres"
+      ],
+      "path": "docker-entrypoint.sh",
+      "env": [
+        "POSTGRES_DB=bdagpool",
+        "POSTGRES_PASSWORD=<redacted>",
+        "TMPDIR=/tmp",
+        "TMP=/tmp",
+        "TEMP=/tmp",
+        "POSTGRES_USER=bdag_pool",
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/lib/postgresql/15/bin",
+        "GOSU_VERSION=1.19",
+        "LANG=en_US.utf8",
+        "PG_MAJOR=15",
+        "PG_VERSION=15.18-1.pgdg12+1",
+        "PGDATA=/var/lib/postgresql/data"
+      ],
+      "mounts": [
+        {
+          "Type": "volume",
+          "Name": "stack_postgres-data",
+          "Source": "/var/lib/docker/volumes/stack_postgres-data/_data",
+          "Destination": "/var/lib/postgresql/data",
+          "Driver": "local",
+          "Mode": "rw",
+          "RW": true,
+          "Propagation": ""
+        },
+        {
+          "Type": "bind",
+          "Source": "/home/jeremy/blockdag-source/stack-redis/sql/pool-schema.sql",
+          "Destination": "/docker-entrypoint-initdb.d/01-pool-schema.sql",
+          "Mode": "ro",
+          "RW": false,
+          "Propagation": "rprivate"
+        }
+      ],
+      "labels": {
+        "com.docker.compose.config-hash": "65ffec4edf19c98fb1bc7919809f6a4a013270b8c2e5878f5528ed49e4002ab1",
+        "com.docker.compose.container-number": "1",
+        "com.docker.compose.depends_on": "",
+        "com.docker.compose.image": "sha256:b395c9b05a57a43c079691104bc8468ea336a42e6148f44095e66d0c056cdd1c",
+        "com.docker.compose.oneoff": "False",
+        "com.docker.compose.project": "stack",
+        "com.docker.compose.project.config_files": "/home/jeremy/blockdag-source/stack-redis/docker-compose.yml,/home/jeremy/blockdag-source/stack-redis/docker-compose.override.yml",
+        "com.docker.compose.project.working_dir": "/home/jeremy/blockdag-source/stack-redis",
+        "com.docker.compose.replace": "postgres",
+        "com.docker.compose.service": "pool-db",
+        "com.docker.compose.version": "2.40.3"
+      }
+    },
+    "watchdog": {
+      "present": true,
+      "id": "cbc6353dfe48204167b3cfebe35cf9be20a0434c06b2199cb2eb34d2643a72b4",
+      "image_id": "sha256:355e333d19d056bd6e5ed8f9b7231747bd0ad72ca26743a796065f842ccddf51",
+      "image_name": "stack-watchdog",
+      "state": {
+        "Status": "exited",
+        "Running": false,
+        "Paused": false,
+        "Restarting": false,
+        "OOMKilled": false,
+        "Dead": false,
+        "Pid": 0,
+        "ExitCode": 137,
+        "Error": "",
+        "StartedAt": "2026-06-21T19:51:15.127534786Z",
+        "FinishedAt": "2026-06-21T19:52:33.210436649Z"
+      },
+      "entrypoint": [
+        "/bin/sh",
+        "-c",
+        "python3 ops/automation_control.py ensure-normal --owner watchdog-container --owner-unit docker-compose:watchdog --reason 'provision automation control gate for containerised repairs' && exec python3 ops/watchdog.py --loop"
+      ],
+      "cmd": null,
+      "args": [
+        "-c",
+        "python3 ops/automation_control.py ensure-normal --owner watchdog-container --owner-unit docker-compose:watchdog --reason 'provision automation control gate for containerised repairs' && exec python3 ops/watchdog.py --loop"
+      ],
+      "path": "/bin/sh",
+      "env": [
+        "NODE_RPC_PASS=<redacted>",
+        "BDAG_RUNTIME_DIR=/home/jeremy/blockdag-source/stack-redis/ops/runtime",
+        "BDAG_POOL_ENV_FILE=/home/jeremy/blockdag-source/stack-redis/.env",
+        "TMPDIR=/tmp",
+        "BDAG_POOL_CONTAINER=pool",
+        "BDAG_STATUS_SOURCE_URL=http://dashboard:8088/api/status",
+        "BDAG_STACK_SERVICES=postgres,node,pool",
+        "BDAG_PROJECT_ROOT=/home/jeremy/blockdag-source/stack-redis",
+        "COMPOSE_PROJECT_NAME=stack",
+        "BDAG_POOL_DB_CONTAINER=postgres",
+        "BDAG_WATCHDOG_NATIVE_P2P_PEER_LOSS_REPAIR_SECONDS=300",
+        "BDAG_POOL_HOST=192.168.1.100",
+        "BDAG_POOL_CONTAINERS=pool",
+        "BDAG_NODE_SERVICES=node",
+        "NODE_RPC_USER=test",
+        "BDAG_WATCHDOG_INTERVAL=60",
+        "BDAG_POOL_HOST_NETWORK_METRICS_HOST=host.docker.internal",
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "DOCKER_VERSION=27.5.1",
+        "DOCKER_BUILDX_VERSION=0.20.1",
+        "DOCKER_COMPOSE_VERSION=2.33.0",
+        "DOCKER_TLS_CERTDIR=/certs",
+        "PYTHONUNBUFFERED=1"
+      ],
+      "mounts": [
+        {
+          "Type": "bind",
+          "Source": "/var/run/docker.sock",
+          "Destination": "/var/run/docker.sock",
+          "Mode": "rw",
+          "RW": true,
+          "Propagation": "rprivate"
+        },
+        {
+          "Type": "bind",
+          "Source": "/home/jeremy/blockdag-source/stack-redis",
+          "Destination": "/home/jeremy/blockdag-source/stack-redis",
+          "Mode": "rw",
+          "RW": true,
+          "Propagation": "rprivate"
+        }
+      ],
+      "labels": {
+        "com.docker.compose.config-hash": "8284d8a6f838e54e658dd33722504cc81f08c3cb35e1c85609946da1316b0894",
+        "com.docker.compose.container-number": "1",
+        "com.docker.compose.depends_on": "",
+        "com.docker.compose.image": "sha256:355e333d19d056bd6e5ed8f9b7231747bd0ad72ca26743a796065f842ccddf51",
+        "com.docker.compose.oneoff": "False",
+        "com.docker.compose.project": "stack",
+        "com.docker.compose.project.config_files": "/home/jeremy/blockdag-source/stack-redis/docker-compose.yml,/home/jeremy/blockdag-source/stack-redis/docker-compose.override.yml",
+        "com.docker.compose.project.working_dir": "/home/jeremy/blockdag-source/stack-redis",
+        "com.docker.compose.replace": "watchdog",
+        "com.docker.compose.service": "watchdog",
+        "com.docker.compose.version": "2.40.3",
+        "org.opencontainers.image.title": "BlockDAG Stack Watchdog"
+      }
+    },
+    "sentinel": {
+      "present": true,
+      "id": "4cb2ab330489cc3a2715eb24f6879c2a82c0dc218dfb08b97025d29c80c142aa",
+      "image_id": "sha256:1c1e14c011edba83f7a45a24382cebefca8017e9fd23f1109bfd6cc6f774aa80",
+      "image_name": "stack-sentinel",
+      "state": {
+        "Status": "exited",
+        "Running": false,
+        "Paused": false,
+        "Restarting": false,
+        "OOMKilled": false,
+        "Dead": false,
+        "Pid": 0,
+        "ExitCode": 137,
+        "Error": "",
+        "StartedAt": "2026-06-21T19:51:15.130469576Z",
+        "FinishedAt": "2026-06-21T19:52:33.199143907Z"
+      },
+      "entrypoint": [
+        "/bin/sh",
+        "-c",
+        "python3 ops/automation_control.py ensure-normal --owner sentinel-container --owner-unit docker-compose:sentinel --reason 'provision automation control gate for containerised repairs' && while true; do python3 ops/stack_sentinel.py; sleep ${BDAG_SENTINEL_INTERVAL_SECONDS:-60}; done"
+      ],
+      "cmd": null,
+      "args": [
+        "-c",
+        "python3 ops/automation_control.py ensure-normal --owner sentinel-container --owner-unit docker-compose:sentinel --reason 'provision automation control gate for containerised repairs' && while true; do python3 ops/stack_sentinel.py; sleep ${BDAG_SENTINEL_INTERVAL_SECONDS:-60}; done"
+      ],
+      "path": "/bin/sh",
+      "env": [
+        "BDAG_POOL_CONTAINERS=pool",
+        "BDAG_NODE_SERVICES=node",
+        "BDAG_POOL_ENV_FILE=/home/jeremy/blockdag-source/stack-redis/.env",
+        "BDAG_POOL_CONTAINER=pool",
+        "BDAG_SENTINEL_STATUS_URL=http://dashboard:8088/api/status",
+        "NODE_RPC_USER=test",
+        "TMPDIR=/tmp",
+        "BDAG_PROJECT_ROOT=/home/jeremy/blockdag-source/stack-redis",
+        "COMPOSE_PROJECT_NAME=stack",
+        "BDAG_SENTINEL_INTERVAL_SECONDS=60",
+        "NODE_RPC_PASS=<redacted>",
+        "BDAG_POOL_HOST_NETWORK_METRICS_HOST=host.docker.internal",
+        "BDAG_SENTINEL_USER_SERVICES=",
+        "BDAG_SENTINEL_USER_TIMERS=",
+        "BDAG_STACK_SERVICES=postgres,node,pool",
+        "BDAG_RUNTIME_DIR=/home/jeremy/blockdag-source/stack-redis/ops/runtime",
+        "BDAG_POOL_DB_CONTAINER=postgres",
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "DOCKER_VERSION=27.5.1",
+        "DOCKER_BUILDX_VERSION=0.20.1",
+        "DOCKER_COMPOSE_VERSION=2.33.0",
+        "DOCKER_TLS_CERTDIR=/certs",
+        "PYTHONUNBUFFERED=1"
+      ],
+      "mounts": [
+        {
+          "Type": "bind",
+          "Source": "/var/run/docker.sock",
+          "Destination": "/var/run/docker.sock",
+          "Mode": "rw",
+          "RW": true,
+          "Propagation": "rprivate"
+        },
+        {
+          "Type": "bind",
+          "Source": "/home/jeremy/blockdag-source/stack-redis",
+          "Destination": "/home/jeremy/blockdag-source/stack-redis",
+          "Mode": "rw",
+          "RW": true,
+          "Propagation": "rprivate"
+        }
+      ],
+      "labels": {
+        "com.docker.compose.config-hash": "ff1d8885724e3cb12bf66b0ab5c13aa6a64436d39b4f08ee449ead92ac0b95e8",
+        "com.docker.compose.container-number": "1",
+        "com.docker.compose.depends_on": "",
+        "com.docker.compose.image": "sha256:1c1e14c011edba83f7a45a24382cebefca8017e9fd23f1109bfd6cc6f774aa80",
+        "com.docker.compose.oneoff": "False",
+        "com.docker.compose.project": "stack",
+        "com.docker.compose.project.config_files": "/home/jeremy/blockdag-source/stack-redis/docker-compose.yml,/home/jeremy/blockdag-source/stack-redis/docker-compose.override.yml",
+        "com.docker.compose.project.working_dir": "/home/jeremy/blockdag-source/stack-redis",
+        "com.docker.compose.replace": "sentinel",
+        "com.docker.compose.service": "sentinel",
+        "com.docker.compose.version": "2.40.3",
+        "org.opencontainers.image.title": "BlockDAG Stack Sentinel"
+      }
+    }
+  },
+  "node_runtime": {
+    "node_conf_path": "/home/jeremy/blockdag-source/stack-redis/node.conf",
+    "node_conf": "# BlockDAG node configuration for the Docker Compose stack.\n\n# P2P listen\nlisten=0.0.0.0\nport=8150\n\n# BDAG RPC listen\nrpclisten=0.0.0.0:38131\n\n# EVM RPC listen\nevm.http.addr=0.0.0.0\nevm.http.port=18545\nevm.ws.addr=0.0.0.0\nevm.ws.port=18546\n\n\n# Bootstrap peers (mainnet seed nodes). Add one addpeer=... line per complete\n# BDAG P2P multiaddr. Keep only public peers that are currently reachable.\n\n\n\n\naddpeer=/ip4/3.126.64.13/tcp/8152/p2p/16Uiu2HAmEFxRaBbbf3sRi43CCvMk5Y6zPkuGY9s4uRK2FKJVJkqo\naddpeer=/ip4/63.182.36.180/tcp/8150/p2p/16Uiu2HAmP8HsTF9ks8JjFamzT9JBZb3ymSiCJ8rkzXBZqYj4yKtP\naddpeer=/ip4/16.28.133.168/tcp/8150/p2p/16Uiu2HAm9UcTayJDSajjJYsWwVaN2qqGeczcs9kXse3dMdvGDRjz\naddpeer=/ip4/169.0.254.182/tcp/8150/p2p/16Uiu2HAmGsEDGnDGhvziZR1UQSELTDihXRKYMB6SrbEQ6NsWBVqD\naddpeer=/ip4/13.140.165.186/tcp/8150/p2p/16Uiu2HAm4hHD7Ht5LJrLgaKXr7YP2RzHHjrrCLNt8zv8FQ9s3gBU\naddpeer=/ip4/102.39.221.179/tcp/8152/p2p/16Uiu2HAm8ebvL9NTNwgLYwm8LEEXSY7QKQhQ7YVcAV7PR6ymsrTm\naddpeer=/ip4/80.141.136.179/tcp/8151/p2p/16Uiu2HAmMZNeDNLgfLXFKzEiWZHFjdDejLSCzhunJMYWoYhdT3gv\naddpeer=/ip4/102.39.221.179/tcp/8150/p2p/16Uiu2HAmNQznwWPjuAUhXnTkP6EuWsEHa4eRnb1aTm3WcZQKsrFn\naddpeer=/ip4/47.156.6.142/tcp/8151/p2p/16Uiu2HAmJz7PTCxSWTnuJhvbf4oXEffFZ1KAE3yNBX9SY72jS1ta\naddpeer=/ip4/218.32.84.82/tcp/8150/p2p/16Uiu2HAmNjFKhP3945Az3afdBSUSRwhgDw1uGRBDsqSvSduStbWJ\naddpeer=/ip4/5.78.193.245/tcp/8150/p2p/16Uiu2HAkwosZsQdtgAQHoJ57MFKpWnyfGJtSpt2R2aJMgR6ywGME\naddpeer=/ip4/13.57.132.47/tcp/8150/p2p/16Uiu2HAmDynYpWjWmgVGf9qVWvDdLnJ3ybVgDmFexizR4zMereus\naddpeer=/ip4/3.218.54.171/tcp/8150/p2p/16Uiu2HAmUZBdpuutiLPuru1UQnX8hf6GyvG7yU2B832sYjvNhmQG\naddpeer=/ip4/102.182.77.21/tcp/8151/p2p/16Uiu2HAm2uPLqM1dfd3ddbzg3FDAmvuvyo3vbBSXpVHurqAsUxWQ\naddpeer=/ip4/121.91.173.235/tcp/8150/p2p/16Uiu2HAkvH1U2kQqQFh6fSVQPGgABaKNHRMT7DceGe6kRtYr6ndY\naddpeer=/ip4/102.182.77.16/tcp/8152/p2p/16Uiu2HAm99a8KYuUkL5LGEQbpRNhz5nzScrwYpEh47BfSaVMCg5G\naddpeer=/ip4/52.8.54.60/tcp/8150/p2p/16Uiu2HAkzUWr4YUM7mAhLdCVZgFoV9He6aQzKTyWWrJ7SWQKRTN7\naddpeer=/ip4/204.236.141.121/tcp/8150/p2p/16Uiu2HAm5qppgbBCjVpTN5nKtjEU5KsSbs2gz4S9uPiSWVSGfNh1\naddpeer=/ip4/54.151.18.92/tcp/8150/p2p/16Uiu2HAmVm91o1JXS2C7P6uTVuVX5empgnRtzuK4UaC8fHmePbKP\naddpeer=/ip4/18.142.70.83/tcp/8150/p2p/16Uiu2HAmBSdn2taoteYwLZJZkDm2iCwL6eQ4UaXYNBBtAwaBU18X\naddpeer=/ip4/54.214.229.250/tcp/8154/p2p/16Uiu2HAm1vZgJXKhUfWWC7nz9wzNpUDiYAid7zCZSKb1hhU7QBNB\naddpeer=/ip4/54.201.253.248/tcp/8150/p2p/16Uiu2HAm5bpb5ssgN47BT4ChQjmbpGA2zAPJskWGMPknrFwaEtE9\n\n# Peer limit\nmaxpeers=350\ncache=6144\ncache.database=70\n\n# RPC auth. Must match NODE_RPC_USER / NODE_RPC_PASS in .env.\nrpcuser=test\nrpcpass=test\n\n# Storage paths\ndatadir=/var/lib/bdagStack/node\nlogdir=/var/log/bdagStack\n\n# Native metrics endpoint\nmetrics=true\nprofile=0.0.0.0:6060\n\n# Keep empty unless node mining is intentionally enabled.\nminingaddr=0x1719E0ee598c15957448D5E568948101DF78e7A0\n\nmodules=Blockdag,miner\n\nevm.http.api=eth,net,web3,txpool,debug\nhttp.readtimeout=45s\nhttp.writetimeout=45s\nhttp.idletimeout=45s\nevmenv=\"--rpc.allow-unprotected-txs --metrics --metrics.addr 0.0.0.0 --metrics.port 6060 --cache 6144\"\nrpcmaxclients=64\nrpcmaxclientsperhost=16\nrpcmaxconcurrentreqs=500\nrpcrequesttimeout=60s\nhttp.ratelimit=1800\nhttp.rateburst=3200\n",
+    "env_path": "/home/jeremy/blockdag-source/stack-redis/.env",
+    "env_redacted": "COMPOSE_PROJECT_NAME=stack\nDOCKERFILE=dockerfile-dev\nDOCKER_PLATFORM=linux/amd64\n# Optional overrides for dockerfile-dev named build contexts.\"\n# BLOCKDAG_CORECHAIN_CONTEXT=../blockdag-corechain\n# POOL_SRC_CONTEXT=../pool\n# CPU_MINER_SRC_CONTEXT=../cpu-miner\nCOLLECTOR_SRC_CONTEXT=/home/jeremy/blockdag-source/collector\n# DASHBOARD_SRC_CONTEXT=../dashboard2\"\n# Paths are relative to tarball root (same directory as docker-compose.yml).\n# To import a snapshot during build, place latest.bdsnap in the payload root and\n# set SNAPSHOT_PATH=./latest.bdsnap. The default marker means \"build without a\n# baked-in snapshot.\"\nSNAPSHOT_PATH=docker/no-snapshot.marker\n# SNAPSHOT_PATH=docker/latest.bdsnap\"\n\n# Snapshot download link for this node. The installer writes this based on the\n# selected install mode. Naming convention on the snapshot host:\n#   latest.bdsnap         -> non-archive (pruned) snapshot\n#   latest-archive.bdsnap -> archive (full history) snapshot\n# The node entrypoint downloads from this URL at first start when no local\n# snapshot or chain data exists.\nBDAG_SNAPSHOT_URL=\n# Set to 1 to run the node in archival mode (--archival; consensus keeps all\n# blocks instead of pruning). Archive nodes should bootstrap from the archive\n# snapshot so historical data is actually present.\nBDAG_NODE_ARCHIVAL=0\n# Optional compose services:\n#   blank -> base stack only\n#   miner -> include CPU miner service (requires DOCKERFILE=dockerfile-dev)\n# COMPOSE_PROFILES=miner\n\n# Dashboard repository. Release builds always use the main branch.\nDASHBOARD_REPO=https://github.com/BlockdagEngineering/redis-dash.git\nP2P_PORT=8150\nBDAG_RPC_PORT=38131\nEVM_HTTP_PORT=18545\nEVM_WS_PORT=18546\nWALLET_RPC_URL=http://127.0.0.1:18545\nNODE_METRICS_PORT=6060\nPOOL_BIND_PORT=3334\nPOOL_API_PORT=9090\nCOLLECTOR_HOST_PORT=9280\nDASHBOARD_HOST_PORT=8088\n# Dashboard UI display timezone.\nDASHBOARD_TIMEZONE=Africa/Johannesburg\n# NODE_DATA_DIR=./node-data\n\n# Required for any pool/miner deployment. Do not use the zero address.\n# POOL_COINBASE_ADDRESS may be set separately when it must differ from the\n# displayed miner/pool identity; otherwise set MINING_POOL_ADDRESS only.\nMINING_POOL_ADDRESS=0x1719E0ee598c15957448D5E568948101DF78e7A0\nPOOL_COINBASE_ADDRESS=0x1719E0ee598c15957448D5E568948101DF78e7A0\n\n# Storage placement for constrained mining appliances. Release installers keep\n# growing node chain data on capacity storage, then move frequent small writes\n# such as Postgres and dashboard/runtime state to internal storage when it has\n# enough free space.\nBDAG_STORAGE_PROFILE=auto\nBDAG_CHAIN_DATA_DIR=/home/jeremy/blockdag-source/stack/data\nBDAG_DATA_DIR=/home/jeremy/blockdag-source/stack/data\nBDAG_NODE_DATA_DIR=/home/jeremy/blockdag-source/stack/data/node\nBDAG_POSTGRES_DATA_DIR=./data/postgres\nBDAG_RUNTIME_DIR=./ops/runtime\nBDAG_STORAGE_MIN_CHAIN_FREE_GIB=50\nBDAG_STORAGE_MIN_RUNTIME_FREE_GIB=4\n\n# Ephemeral scratch policy. Small temporary files belong on RAM-backed tmpfs so\n# they do not add avoidable writes to the USB chain device. Large snapshot and\n# chain staging must stay on capacity storage unless explicitly sized.\nBDAG_EPHEMERAL_TMPFS_ENABLED=1\nBDAG_EPHEMERAL_DIR=/run/bdag-pool\nBDAG_HOST_TMPDIR=/run/bdag-pool/tmp\nBDAG_CONTAINER_TMPFS_SIZE=128m\nBDAG_NODE_TMPFS_SIZE=512m\nBDAG_NODE_SHM_SIZE=512m\nBDAG_BUILD_TMPDIR=./.build-tmp\nBDAG_BUILD_CACHE_WARN_GIB=4\nBDAG_ROOT_FREE_WARN_GIB=6\nBDAG_ROOT_FREE_FAIL_GIB=2\n\n# Single P2P host port used by Docker publishing, firewall, and local peer\n# advertisement.\nBDAG_P2P_PROTOCOLS=tcp\n# Standard mining-host performance defaults. The release topology has one\n# production node with a direct pool-to-node RPC path.\nBDAG_NODE_CACHE_MB=6144\nBDAG_EVM_CACHE_MB=6144\nBDAG_NODE_CACHE_DATABASE_PERCENT=70\nBDAG_NODE_OBSOLETE_HEIGHT=20\nBDAG_NODE_MINING_NO_PENDING_TX=1\nBDAG_BLOCK_READ_AHEAD_KB=1024\nBDAG_BLOCK_NR_REQUESTS=256\nBDAG_NODE_CPU_SHARES=6144\nBDAG_POOL_CPU_SHARES=5120\nBDAG_POOL_DB_CPU_SHARES=4096\nBDAG_DASHBOARD_CPU_SHARES=128\nBDAG_NODE_MEMORY_LOW=768M\nBDAG_POOL_MEMORY_LOW=256M\nBDAG_POOL_DB_MEMORY_LOW=512M\nBDAG_DASHBOARD_MEMORY_LOW=64M\nBDAG_MINING_ACTIVE_NODE_NICE=-10\nBDAG_MINING_POOL_NICE=-8\nBDAG_OBSERVABILITY_NICE=15\nBDAG_TUNE_NET_QDISC=1\nBDAG_STACK_NET_IFACE=\nPOOL_RPC_BACKENDS=\n\n# Release install support services. Fresh appliance installs apply the\n# non-destructive host profile by default, then install P2P/IPFS support timers\n# and the mining-host tuning timer. Set the strict toggles to fail the install\n# instead of warning when host-level service installation cannot complete.\nBDAG_INSTALL_APPLIANCE_HOST_PROFILE=1\nBDAG_INSTALL_APPLIANCE_PROFILE_DISABLE_SERVICES=0\nBDAG_INSTALL_APPLIANCE_PROFILE_RELOAD_DOCKER=1\nBDAG_INSTALL_APPLIANCE_PROFILE_STRICT=0\nBDAG_INSTALL_STACK_SUPPORT_SERVICES=1\nBDAG_INSTALL_STACK_SUPPORT_SERVICES_STRICT=0\n\n# Enables localhost/private-network pool runtime admin endpoints. Keep the pool\n# metrics/admin port bound to localhost on public hosts.\nPOOL_RUNTIME_ADMIN_ENABLED=false\nMETRICS_ADDR=0.0.0.0:9090\nPOOL_GBT_MIN_INTERVAL_MS=1100\nPOOL_GBT_PRESSURE_INTERVAL_MS=500\nPOOL_GBT_PRESSURE_WINDOW_SECONDS=10\nPOOL_RPC_ROUTER_NODE_HEALTH_PROBE_SECONDS=15\nPOOL_RPC_ROUTER_NODE_HEALTH_MAX_AGE_SECONDS=30\n# Host network discovery is only for choosing this node's advertised P2P address.\n# Peer candidates should be complete P2P multiaddrs.\nBDAG_NETWORK_TOPOLOGY=auto\nBDAG_DETECTED_NETWORK_TOPOLOGY=\nBDAG_ASIC_LAN_INTERFACE=enxc8a362eb4bdc\nBDAG_ASIC_LAN_CIDRS=192.168.1.0/24\n# Optional route to miners on a remote LAN reached through a routed gateway\n# (e.g. a ZeroTier peer). When set, the miner-route compose service keeps the\n# host route alive so the watchdog can reach the miner HTTP API. Leave empty\n# when miners are on the host LAN.\nBDAG_MINER_ROUTE_SUBNET=\nBDAG_MINER_ROUTE_GATEWAY=\nBDAG_MINER_ROUTE_DEV=\n# Docker bridge/container networks must not be treated as ASIC LANs. Override\"\n# only if a real ASIC LAN intentionally uses these ranges.\nBDAG_DOCKER_BRIDGE_CIDRS=172.16.0.0/12\nBDAG_ALLOW_DOCKER_BRIDGE_ASIC_IPS=0\nBDAG_P2P_ADVERTISE_IP=\nBDAG_P2P_INTERFACE=\nBDAG_CHAIN_PEERSTORE_PEER_EXTRACTION_ENABLED=1\nBDAG_CHAIN_PEERSTORE_LOG_TAIL=8000\nEXTRA_PEER_ADDRESSES=\n# When enabled by installer/watchdog for attached ASICs, this must include\n# --miner, --miningaddr=<non-zero wallet>, and --maxinbound=1 on constrained\n# USB/router hosts. Do not add --allowminingwhennearlysynced or\n# --allowsubmitwhennotsynced; template/readiness health must fail closed when\n# P2P freshness or sync safety is unavailable.\nBDAG_NODE_MINING_ARGS=\nBDAG_NODE_CHAIN_RPC_TIMEOUT=8.0\nBDAG_NODE_CHAIN_RPC_RETRIES=2\nBDAG_POOL_RPC_REFUSED_WARN_SECONDS=120\nBDAG_HOST_PRESSURE_IOWAIT_WARN_PERCENT=25\nBDAG_HOST_PRESSURE_IOWAIT_WARN_SAMPLES=3\nBDAG_HOST_PRESSURE_HISTORY_SAMPLES=6\nBDAG_SHARED_STATUS_CACHE_ENABLED=1\nBDAG_SHARED_STATUS_CACHE_SECONDS=3.0\nBDAG_STATUS_PAYLOAD_STALE_AFTER_SECONDS=120\nBDAG_HOST_PROFILE=auto\nBDAG_ADAPTIVE_CONCURRENCY_ENABLED=1\nBDAG_ADAPTIVE_IOWAIT_WARN_PERCENT=25\nBDAG_ADAPTIVE_IO_SOME_AVG10_WARN=20.0\nBDAG_ADAPTIVE_CPU_SOME_AVG10_WARN=80.0\nBDAG_ADAPTIVE_CHAIN_RPC_WARN_MS=1000\nBDAG_STATUS_SAMPLER_ENABLED=1\nBDAG_STATUS_SAMPLER_INTERVAL_SECONDS=10\nBDAG_STATUS_SAMPLER_MAX_AGE_SECONDS=120\nBDAG_COLLECTOR_DIRECT_STATUS_FALLBACK=0\nBDAG_COLLECTOR_STATUS_CACHE_SECONDS=10\nBDAG_COLLECTOR_SAMPLER_CACHE_SECONDS=120\nBDAG_COLLECTOR_STATUS_SAMPLE_WAIT_SECONDS=60\nBDAG_CHAIN_STATE_SELF_HEAL_ENABLED=1\nBDAG_CHAIN_STATE_SELF_HEAL_UNIT=bdag-chain-state-self-heal.service\nBDAG_MINING_IMPERATIVE_CHAIN_STATE_RESTORE_ENABLED=1\nBDAG_CHAIN_STATE_STALLED_IMPORT_RESTORE_ENABLED=1\nBDAG_CHAIN_STATE_STALLED_IMPORT_RESTORE_SECONDS=900\nBDAG_CHAIN_STATE_STALLED_IMPORT_RESTORE_PEER_AHEAD_BLOCKS=1000\nBDAG_CHAIN_STATE_STALLED_IMPORT_RESTORE_GAP_GROWTH_BLOCKS=60\nBDAG_CHAIN_STATE_REUSE_EXISTING_SNAPSHOT=1\n# Optional trusted restore source for unattended chain-state self-heal.\"\n# Use key-based SSH for remote rsync sources; do not store passwords here.\nBDAG_CHAIN_STATE_RESTORE_SOURCE=\nBDAG_CHAIN_STATE_RESTORE_SNAPSHOT=\nBDAG_CHAIN_STATE_RESTORE_SSH_COMMAND=\nBDAG_DASHBOARD_DIRECT_STATUS_FALLBACK=0\nBDAG_DASHBOARD_STATUS_CACHE_SECONDS=10\nBDAG_DASHBOARD_SAMPLER_CACHE_SECONDS=120\nBDAG_DASHBOARD_STATUS_SAMPLE_WAIT_SECONDS=60\nBDAG_WATCHDOG_EARNINGS_SNAPSHOT_INTERVAL_SECONDS=60\nBDAG_STATUS_SAMPLER_EARNINGS_SNAPSHOT_INTERVAL_SECONDS=60\nBDAG_COLLECTOR_EARNINGS_SAMPLER_INTERVAL_SECONDS=60\nBDAG_COLLECTOR_GLOBAL_SAMPLER_INTERVAL_SECONDS=60\nBDAG_OPS_UID=1000\nBDAG_OPS_GID=1000\nBDAG_DOCKER_SOCKET_GID=115\nBDAG_GLOBAL_CACHE_TTL_SECONDS=60\nBDAG_GLOBAL_RPC_WORKERS=4\nBDAG_GLOBAL_BLOCK_WINDOW=600\nBDAG_GLOBAL_CACHE_MAX_TIP_LAG_BLOCKS=30\nBDAG_INSTALL_REBUILD_DASHBOARD_PLOTS=1\nBDAG_INSTALL_REBUILD_DASHBOARD_PLOT_HOURS=720\nBDAG_INSTALL_REBUILD_DASHBOARD_PLOT_WINDOW_BLOCKS=64\nBDAG_INSTALL_REBUILD_DASHBOARD_PLOT_WORKERS=12\nBDAG_DASHBOARD_HISTORY_REBUILD_PRESERVE_ASIC_HISTORY=1\n# Optional native mining RPC list for Global chain-production stats.\"\n# EVM RPC variables are wallet/balance sources only and must not drive Global mining attribution.\nBDAG_GLOBAL_CHAIN_RPC_URLS=\nBDAG_MINER_SCAN_WORKERS=64\nBDAG_MINER_HASHRATE_PROBE_WORKERS=8\nBDAG_BACKGROUND_MAINTENANCE_BACKOFF_ENABLED=1\nBDAG_BACKGROUND_MAINTENANCE_SYNC_BACKOFF_BLOCKS=0\nBDAG_BACKGROUND_MAINTENANCE_IOWAIT_WARN_PERCENT=25\nBDAG_BACKGROUND_MAINTENANCE_IO_SOME_AVG10_WARN=20.0\nBDAG_BACKGROUND_MAINTENANCE_CPU_SOME_AVG10_WARN=80.0\nBDAG_BACKGROUND_MAINTENANCE_CHAIN_RPC_WARN_MS=1000\nBDAG_BACKGROUND_MAINTENANCE_POOL_READY_TASKS=rawdatadir_publish,ipfs_content_sidecar,ipfs_segment_writer\nBDAG_GLOBAL_HISTORY_COMPACT_MULTIPLIER=2\nBDAG_ENTRYPOINT_CHOWN_MODE=needed\nBDAG_NODEWORKER_LIVENESS_TIMEOUT=5m\n# Current Compose/service-name topology. Source Compose intentionally does not\n# pin container_name; Docker Compose may append project and ordinal suffixes to\n# concrete container names.\nBDAG_POOL_CONTAINER=pool\nBDAG_POOL_CONTAINERS=pool\nBDAG_POOL_DB_CONTAINER=postgres\nBDAG_NODE_SERVICES=node\nBDAG_STACK_SERVICES=postgres,node,pool\nBDAG_NODE_RPC_URLS=node=http://127.0.0.1:38131\n\n# Optional pre-start P2P snapshot bootstrap. When the node datadir is empty,\n# the node image uses ordinary trusted/addpeer candidates for FastSnap V2 first,\n# imports the verified snapshot, then normal FastSync catches the remaining tail.\nBDAG_FASTSNAP_ENABLED=1\nBDAG_FASTSNAP_REQUIRED=0\nBDAG_FASTSNAP_PEERS=/ip4/16.28.133.168/tcp/8150/p2p/16Uiu2HAm9UcTayJDSajjJYsWwVaN2qqGeczcs9kXse3dMdvGDRjz,/ip4/13.140.165.186/tcp/8150/p2p/16Uiu2HAm4hHD7Ht5LJrLgaKXr7YP2RzHHjrrCLNt8zv8FQ9s3gBU,/ip4/13.57.132.47/tcp/8150/p2p/16Uiu2HAmDynYpWjWmgVGf9qVWvDdLnJ3ybVgDmFexizR4zMereus,/ip4/18.142.70.83/tcp/8150/p2p/16Uiu2HAmBSdn2taoteYwLZJZkDm2iCwL6eQ4UaXYNBBtAwaBU18X,/ip4/199.229.220.118/tcp/8151/p2p/16Uiu2HAmUtspBkyUNBG8pQLgj9DrKVgL6SKQzGBhVT9ZShNM1ops,/ip4/204.236.141.121/tcp/8150/p2p/16Uiu2HAm5qppgbBCjVpTN5nKtjEU5KsSbs2gz4S9uPiSWVSGfNh1,/ip4/3.126.64.13/tcp/8152/p2p/16Uiu2HAmEFxRaBbbf3sRi43CCvMk5Y6zPkuGY9s4uRK2FKJVJkqo,/ip4/52.8.54.60/tcp/8150/p2p/16Uiu2HAkzUWr4YUM7mAhLdCVZgFoV9He6aQzKTyWWrJ7SWQKRTN7,/ip4/54.151.18.92/tcp/8150/p2p/16Uiu2HAmVm91o1JXS2C7P6uTVuVX5empgnRtzuK4UaC8fHmePbKP,/ip4/63.182.36.180/tcp/8150/p2p/16Uiu2HAmP8HsTF9ks8JjFamzT9JBZb3ymSiCJ8rkzXBZqYj4yKtP\nBDAG_FASTSNAP_MIN_TIP=0\nBDAG_FASTSNAP_TIMEOUT=90s\nBDAG_FASTSNAP_ARTIFACT_V2=1\n# Prefer Fast Artifact Sync V2 directory artifacts when a peer offers them.\n# This avoids building/importing a temporary .bdsnap archive. The archive\n# snapshot RPC path is used only when the serving peer lacks directory support.\nBDAG_FASTSNAP_DIRECTORY_MODE=1\nBDAG_FASTSNAP_DIRECTORY_STAGING=\nBDAG_FASTSNAP_DIRECTORY_REPLACE_EXISTING=1\nBDAG_FASTSNAP_DIRECTORY_MOVE_STAGING=1\nBDAG_FASTSNAP_ALLOW_UNSIGNED=0\nBDAG_FASTSNAP_PARALLELISM=4\nBDAG_FASTSNAP_LEDGER=\n# Archive FastSnap seed serving is deprecated for release installs.\n# The raw datadir FastArtifact source sidecar below is the preferred sync-source\n# path. Keep this disabled unless an offline export workflow is being\n# investigated away from the live mining host.\nBDAG_FASTSNAP_SEED_TIMER_ENABLED=0\n# Raw datadir FastArtifact source sidecar. Installer auto-enables the timer only\n# when chain/stage/artifact paths are not USB/removable and the host has enough\n# CPU, RAM, and disk headroom. Publishes require an explicit operator-approved\n# finalization window.\nSYNC_SOURCE_NODE=0\nBDAG_RAWDATADIR_ARTIFACT_BASE=./data-restore/rawdatadir\nBDAG_RAWDATADIR_ARTIFACT_KEEP=3\nBDAG_RAWDATADIR_REQUIRE_SIGNED=1\nBDAG_RAWDATADIR_REQUIRE_EVM_REFERENCE_FRESH=1\nBDAG_RAWDATADIR_MAX_EVM_REFERENCE_LAG=1000\nBDAG_PUBLIC_RPC_URLS=bdagscan-rpc=https://rpc.bdagscan.com,blockdag-engineering-rpc=https://rpc.blockdag.engineering\nBDAG_RAWDATADIR_SIDECAR_SOURCE=\nBDAG_RAWDATADIR_SIDECAR_DIR=\nBDAG_RAWDATADIR_SIDECAR_CONTENT_MODE=auto\nBDAG_RAWDATADIR_SIDECAR_CONTENT_BASE=./data-restore/rawdatadir-sidecar-content\nBDAG_RAWDATADIR_SIDECAR_CONTENT_KEEP=2\nBDAG_RAWDATADIR_SIDECAR_CONTENT_CHUNK_SIZE=67108864\nBDAG_RAWDATADIR_SIDECAR_CONTENT_REQUIRE_SIGNED=1\nBDAG_RAWDATADIR_SIDECAR_CONTENT_ALLOW_HOT_PUBLISH=0\nBDAG_RAWDATADIR_OPEN_SIDECAR_ENABLED=1\nBDAG_RAWDATADIR_OPEN_SIDECAR_BASE=./data-restore/rawdatadir-sidecar-open/mainnet\nBDAG_RAWDATADIR_OPEN_SIDECAR_KEEP=12\nBDAG_RAWDATADIR_SIDECAR_RSYNC_BWLIMIT=4096\nBDAG_RAWDATADIR_SIDECAR_DELAY_UPDATES=0\nBDAG_RAWDATADIR_ACTIVE_SERVICE=node\nBDAG_RAWDATADIR_FINALIZE=0\nBDAG_RAWDATADIR_MIN_FREE_GIB=100\nBDAG_RAWDATADIR_FREE_SPACE_MULTIPLIER=2.5\nBDAG_RAWDATADIR_REQUIRE_STATE_ROOT=1\nBDAG_RAWDATADIR_SIDECAR_USE_SUDO=auto\nBDAG_RAWDATADIR_ARCHIVE_USE_SUDO=auto\nBDAG_RAWDATADIR_PEERS=/ip4/16.28.133.168/tcp/8150/p2p/16Uiu2HAm9UcTayJDSajjJYsWwVaN2qqGeczcs9kXse3dMdvGDRjz,/ip4/13.140.165.186/tcp/8150/p2p/16Uiu2HAm4hHD7Ht5LJrLgaKXr7YP2RzHHjrrCLNt8zv8FQ9s3gBU,/ip4/13.57.132.47/tcp/8150/p2p/16Uiu2HAmDynYpWjWmgVGf9qVWvDdLnJ3ybVgDmFexizR4zMereus,/ip4/18.142.70.83/tcp/8150/p2p/16Uiu2HAmBSdn2taoteYwLZJZkDm2iCwL6eQ4UaXYNBBtAwaBU18X,/ip4/199.229.220.118/tcp/8151/p2p/16Uiu2HAmUtspBkyUNBG8pQLgj9DrKVgL6SKQzGBhVT9ZShNM1ops,/ip4/204.236.141.121/tcp/8150/p2p/16Uiu2HAm5qppgbBCjVpTN5nKtjEU5KsSbs2gz4S9uPiSWVSGfNh1,/ip4/3.126.64.13/tcp/8152/p2p/16Uiu2HAmEFxRaBbbf3sRi43CCvMk5Y6zPkuGY9s4uRK2FKJVJkqo,/ip4/52.8.54.60/tcp/8150/p2p/16Uiu2HAkzUWr4YUM7mAhLdCVZgFoV9He6aQzKTyWWrJ7SWQKRTN7,/ip4/54.151.18.92/tcp/8150/p2p/16Uiu2HAmVm91o1JXS2C7P6uTVuVX5empgnRtzuK4UaC8fHmePbKP,/ip4/63.182.36.180/tcp/8150/p2p/16Uiu2HAmP8HsTF9ks8JjFamzT9JBZb3ymSiCJ8rkzXBZqYj4yKtP\nBDAG_RAWDATADIR_TRUSTED_SIGNERS=\n# Optional Fast Artifact Sync V2 directory hot-stage serving. Set these only on\n# nodes that maintain a verified directory artifact mirror. The manifest path is\n# allowed to be a sidecar outside the directory to avoid copying control files\n# into a future install target.\nBDAG_FASTSYNC_ARTIFACT_DIRECTORY=\nBDAG_FASTSYNC_ARTIFACT_MANIFEST=\n\n# Lazy IPFS content sidecar. The rawdatadir sidecar seals immutable signed\n# file/chunk generations into BDAG_RAWDATADIR_SIDECAR_CONTENT_BASE; IPFS pins\n# only publishable generations after mining and host resource gates pass. IPFS\n# is byte transport; signed manifests and consensus validation remain\n# authoritative.\nBDAG_IPFS_CONTENT_SIDECAR_MODE=auto\nBDAG_IPFS_CONTENT_ARTIFACT_DIR=./data-restore/rawdatadir-sidecar-content/current\nBDAG_IPFS_CONTENT_ARTIFACT_MANIFEST=./data-restore/rawdatadir-sidecar-content/current/manifest.json\nBDAG_IPFS_CONTENT_ALLOW_UNSIGNED_ARTIFACT=0\nBDAG_IPFS_CONTENT_PUBLISH_IPNS=0\nBDAG_IPFS_CONTENT_IPNS_KEY=\nBDAG_IPFS_CONTENT_REPUBLISH_IPNS_WHILE_WAITING=1\nBDAG_IPFS_CONTENT_IPNS_TTL=1m\nBDAG_IPFS_CONTENT_IPNS_LIFETIME=8760h\nBDAG_IPFS_CONTENT_ADD_ARGS=\"--recursive --cid-version=1 --raw-leaves --pin=true --quieter\"\nBDAG_IPFS_CONTENT_DISCOVERY_FILE=./ops/ipfs-content-discovery.json\nBDAG_IPFS_CONTENT_LATEST_IPNS=/ipns/k51qzi5uqu5djjlh4vxtmzyswx0qk4s3wdlf3yrpkszp38gq5sl71zcgmmc3jk\nBDAG_IPFS_CONTENT_DEFAULT_INDEX_CID=bafkreia7jk2ljqi3raiohugp6nw3633njfp7jmnuvqh47po52et4kupu2a\nBDAG_IPFS_CONTENT_DEFAULT_ROOT_CID=\nBDAG_IPFS_CONTENT_STATUS_FILE=./ops/runtime/ipfs-content-sidecar-status.json\nBDAG_IPFS_CONTENT_LATEST_INDEX_PATH=./ops/runtime/ipfs-content/latest-index.json\nBDAG_IPFS_SEGMENT_WRITER_MODE=auto\nBDAG_IPFS_SEGMENT_START_POLICY=live_tail\nBDAG_IPFS_SEGMENT_FINALITY_LAG_ORDERS=600\nBDAG_IPFS_SEGMENT_ORDERS_PER_SEGMENT=300\nBDAG_IPFS_SEGMENT_MAX_SEGMENTS_PER_RUN=1\nBDAG_IPFS_SEGMENT_MAX_RPC_PER_SECOND=25\nBDAG_IPFS_SEGMENT_RPC_TIMEOUT=8\nBDAG_IPFS_SEGMENT_BLOCK_RPC_RETRIES=2\nBDAG_IPFS_SEGMENT_PUBLISH_IPNS=0\nBDAG_IPFS_SEGMENT_IPNS_KEY=\nBDAG_IPFS_SEGMENT_IPNS_TTL=1m\nBDAG_IPFS_SEGMENT_IPNS_LIFETIME=8760h\nBDAG_IPFS_SEGMENT_STATUS_FILE=./ops/runtime/ipfs-content/segment-writer-status.json\nBDAG_IPFS_SEGMENT_INDEX_PATH=./ops/runtime/ipfs-content/latest-index.json\n\n# FastSync candidates for new/empty nodes and startup peers. Entries must be\n# complete P2P multiaddrs with peer IDs. Address class is not a sync mode or\n# priority signal; libp2p/FastArtifact probing should pick useful peers by\n# measured P2P latency, manifest/chunk response, and sustained transfer.\nBDAG_FASTSYNC_PEER_ORDERING=p2p-latency\nBDAG_FASTSYNC_APPEND_ADDPEERS=1\nBDAG_FASTARTIFACTSYNC_ENABLED=1\nBOOTSTRAP_PEER_ADDRESSES=/ip4/16.28.133.168/tcp/8150/p2p/16Uiu2HAm9UcTayJDSajjJYsWwVaN2qqGeczcs9kXse3dMdvGDRjz,/ip4/13.140.165.186/tcp/8150/p2p/16Uiu2HAm4hHD7Ht5LJrLgaKXr7YP2RzHHjrrCLNt8zv8FQ9s3gBU,/ip4/13.57.132.47/tcp/8150/p2p/16Uiu2HAmDynYpWjWmgVGf9qVWvDdLnJ3ybVgDmFexizR4zMereus,/ip4/18.142.70.83/tcp/8150/p2p/16Uiu2HAmBSdn2taoteYwLZJZkDm2iCwL6eQ4UaXYNBBtAwaBU18X,/ip4/199.229.220.118/tcp/8151/p2p/16Uiu2HAmUtspBkyUNBG8pQLgj9DrKVgL6SKQzGBhVT9ZShNM1ops,/ip4/204.236.141.121/tcp/8150/p2p/16Uiu2HAm5qppgbBCjVpTN5nKtjEU5KsSbs2gz4S9uPiSWVSGfNh1,/ip4/3.126.64.13/tcp/8152/p2p/16Uiu2HAmEFxRaBbbf3sRi43CCvMk5Y6zPkuGY9s4uRK2FKJVJkqo,/ip4/52.8.54.60/tcp/8150/p2p/16Uiu2HAkzUWr4YUM7mAhLdCVZgFoV9He6aQzKTyWWrJ7SWQKRTN7,/ip4/54.151.18.92/tcp/8150/p2p/16Uiu2HAmVm91o1JXS2C7P6uTVuVX5empgnRtzuK4UaC8fHmePbKP,/ip4/63.182.36.180/tcp/8150/p2p/16Uiu2HAmP8HsTF9ks8JjFamzT9JBZb3ymSiCJ8rkzXBZqYj4yKtP\nBDAG_FASTSYNC_PEERS=/ip4/16.28.133.168/tcp/8150/p2p/16Uiu2HAm9UcTayJDSajjJYsWwVaN2qqGeczcs9kXse3dMdvGDRjz,/ip4/13.140.165.186/tcp/8150/p2p/16Uiu2HAm4hHD7Ht5LJrLgaKXr7YP2RzHHjrrCLNt8zv8FQ9s3gBU,/ip4/13.57.132.47/tcp/8150/p2p/16Uiu2HAmDynYpWjWmgVGf9qVWvDdLnJ3ybVgDmFexizR4zMereus,/ip4/18.142.70.83/tcp/8150/p2p/16Uiu2HAmBSdn2taoteYwLZJZkDm2iCwL6eQ4UaXYNBBtAwaBU18X,/ip4/199.229.220.118/tcp/8151/p2p/16Uiu2HAmUtspBkyUNBG8pQLgj9DrKVgL6SKQzGBhVT9ZShNM1ops,/ip4/204.236.141.121/tcp/8150/p2p/16Uiu2HAm5qppgbBCjVpTN5nKtjEU5KsSbs2gz4S9uPiSWVSGfNh1,/ip4/3.126.64.13/tcp/8152/p2p/16Uiu2HAmEFxRaBbbf3sRi43CCvMk5Y6zPkuGY9s4uRK2FKJVJkqo,/ip4/52.8.54.60/tcp/8150/p2p/16Uiu2HAkzUWr4YUM7mAhLdCVZgFoV9He6aQzKTyWWrJ7SWQKRTN7,/ip4/54.151.18.92/tcp/8150/p2p/16Uiu2HAmVm91o1JXS2C7P6uTVuVX5empgnRtzuK4UaC8fHmePbKP,/ip4/63.182.36.180/tcp/8150/p2p/16Uiu2HAmP8HsTF9ks8JjFamzT9JBZb3ymSiCJ8rkzXBZqYj4yKtP\nBDAG_FASTSYNC_RANGE_BLOCKS=1024\nBDAG_FASTSYNC_PREPROCESS_WORKERS=1\nBDAG_SYNC_COORDINATOR_ACCELERATE_FASTSYNC=1\nBDAG_SYNC_COORDINATOR_FAST_RESTART_COOLDOWN_SECONDS=900\nBDAG_SYNC_COORDINATOR_RESTART_ON_STALE_IMPORT=1\nBDAG_CATCHUP_PAUSE_ENABLED=1\nBDAG_CATCHUP_PAUSE_ON_SYNCING=1\nBDAG_CATCHUP_PAUSE_THRESHOLD_BLOCKS=300\nBDAG_CATCHUP_IO_PRESSURE_PAUSE_ENABLED=1\nBDAG_CATCHUP_IO_PRESSURE_MIN_LAG_BLOCKS=25\nBDAG_CATCHUP_IOWAIT_WARN_PERCENT=15\nBDAG_CATCHUP_IO_SOME_AVG10_WARN=20.0\nBDAG_CATCHUP_IO_FULL_AVG10_WARN=10.0\nBDAG_CATCHUP_NODE_RECREATE_ENABLED=1\nBDAG_CATCHUP_NODE_CACHE_MB=6144\nBDAG_CATCHUP_NODE_CACHE_MIN_MB=1024\nBDAG_CATCHUP_NODE_CACHE_MEMORY_PERCENT=40\nBDAG_FAST_CATCHUP_ARTIFACT_MODE=auto\nBDAG_FAST_CATCHUP_ARTIFACT_RETRY_SECONDS=300\nBDAG_FAST_CATCHUP_ARTIFACT_MIN_BEHIND_BLOCKS=1000\nBDAG_FAST_CATCHUP_ARTIFACT_MIN_GAIN_BLOCKS=1000\nBDAG_FAST_CATCHUP_ARTIFACT_TRUST_ON_FIRST_SIGNED=1\nBDAG_FAST_CATCHUP_ALLOW_UNSIGNED_ARTIFACTS=0\nBDAG_FAST_CATCHUP_ARTIFACT_TIMEOUT=21600s\nNODE_RPC_USER=test\nNODE_RPC_PASS=<redacted>\nNODE_RPC_URLS=http://127.0.0.1:38131\n# Optional block-candidate submit override. Leave blank to use NODE_RPC_URLS.\"\n# Named entries are allowed: local=http://node:38131\nPOOL_SUBMIT_RPC_URLS=\n# Extra node flags.\nNODE_ARGS_APPEND=--modules=Blockdag --modules=miner --miner --miningaddr=0x1719E0ee598c15957448D5E568948101DF78e7A0\nBDAG_FASTSYNC_SNAPSHOT_PATH=\nBDAG_FASTSYNC_ARTIFACT_SIGNING_KEY_ID=\nBDAG_FASTSYNC_ARTIFACT_SIGNING_KEY_HEX=\nBDAG_FASTSYNC_ARTIFACT_MANIFEST_TTL=24h\nBDAG_FASTSNAP_ENABLED=1\nBDAG_FASTSNAP_REQUIRED=0\nBDAG_FASTSNAP_PEERS_FILE=/etc/bdagStack/node.conf\nBDAG_FASTSNAP_AUTO_MAX_PEERS=3\nBDAG_FASTSNAP_LEGACY_FALLBACK=0\n# Production pool deployments are mainnet-only. Install/runtime scripts reject\n# any rawdatadir or FastSnap network value other than mainnet.\nBDAG_FASTSNAP_NETWORK=mainnet\nBDAG_RAWDATADIR_NETWORK=mainnet\nBDAG_FASTSNAP_PEERS=/ip4/16.28.133.168/tcp/8150/p2p/16Uiu2HAm9UcTayJDSajjJYsWwVaN2qqGeczcs9kXse3dMdvGDRjz,/ip4/13.140.165.186/tcp/8150/p2p/16Uiu2HAm4hHD7Ht5LJrLgaKXr7YP2RzHHjrrCLNt8zv8FQ9s3gBU,/ip4/13.57.132.47/tcp/8150/p2p/16Uiu2HAmDynYpWjWmgVGf9qVWvDdLnJ3ybVgDmFexizR4zMereus,/ip4/18.142.70.83/tcp/8150/p2p/16Uiu2HAmBSdn2taoteYwLZJZkDm2iCwL6eQ4UaXYNBBtAwaBU18X,/ip4/199.229.220.118/tcp/8151/p2p/16Uiu2HAmUtspBkyUNBG8pQLgj9DrKVgL6SKQzGBhVT9ZShNM1ops,/ip4/204.236.141.121/tcp/8150/p2p/16Uiu2HAm5qppgbBCjVpTN5nKtjEU5KsSbs2gz4S9uPiSWVSGfNh1,/ip4/3.126.64.13/tcp/8152/p2p/16Uiu2HAmEFxRaBbbf3sRi43CCvMk5Y6zPkuGY9s4uRK2FKJVJkqo,/ip4/52.8.54.60/tcp/8150/p2p/16Uiu2HAkzUWr4YUM7mAhLdCVZgFoV9He6aQzKTyWWrJ7SWQKRTN7,/ip4/54.151.18.92/tcp/8150/p2p/16Uiu2HAmVm91o1JXS2C7P6uTVuVX5empgnRtzuK4UaC8fHmePbKP,/ip4/63.182.36.180/tcp/8150/p2p/16Uiu2HAmP8HsTF9ks8JjFamzT9JBZb3ymSiCJ8rkzXBZqYj4yKtP\nBDAG_FASTSNAP_MIN_TIP=0\nBDAG_FASTSNAP_TIMEOUT=300s\nBDAG_FASTSNAP_PARALLELISM=8\nBDAG_FASTSNAP_RETRIES=5\nBDAG_FASTSNAP_RETRY_DELAY=10s\nBDAG_FASTSNAP_TRUSTED_SIGNERS=\nBDAG_FASTSNAP_ALLOW_UNSIGNED=0\nBDAG_FASTSNAP_KEEP_ARCHIVE=0\nPOSTGRES_USER=bdag_pool\nPOSTGRES_DB=bdagpool\nPOSTGRES_PASSWORD=<redacted>\n# ---------------------------------------------------------------------------\n# Mining pool \u2014 passed into the `pool` container environment.\n# ---------------------------------------------------------------------------\nPOOL_BIND_ADDR=192.168.1.100:3334\nPPLNS_N_WORK=1000\nPOOL_FEE_PERCENTAGE=1.0\nPOOL_BLOCK_MATURITY=10\nPOOL_PAYOUT_MATURITY=4096\n# CPU miner (only used when COMPOSE_PROFILES includes \"miner\").\nMINER_POOL_URL=stratum+tcp://192.168.1.100:3334\nMINER_POOL_PASS=<redacted>\nMINER_WORKERS=1\n\n\n\n# ASIC block-candidate timing pinned to the best observed 2026-06-21\n# 05:40-05:57 SAST production window.\nPOOL_RPC_ROUTER_NODE_HEALTH_ENABLED=true\nPOOL_TEMPLATE_TTL_REFRESH_MS=100\nPOOL_SUBMIT_STALE_BLOCK_CANDIDATES=false\nPOOL_RECENT_STALE_BLOCK_CANDIDATE_SUBMIT_GRACE_MS=1750\nPOOL_MAX_BLOCK_CANDIDATE_JOB_AGE_MS=1750\nPOOL_BLOCK_TIMING_CONTROLLER_MIN_JOB_AGE_MS=1750\nPOOL_BLOCK_TIMING_CONTROLLER_MAX_JOB_AGE_MS=1750\nPOOL_BLOCK_TIMING_CONTROLLER_MIN_TEMPLATE_TTL_MS=100\nPOOL_BLOCK_TIMING_CONTROLLER_MAX_TEMPLATE_TTL_MS=100\nPOOL_SUBMIT_BLOCK_HEADER_V2_ENABLED=true\nPOOL_STALE_RACE_REJECT_WINDOW_SECONDS=10\nPOOL_STALE_RACE_CLIENT_RESEND_THRESHOLD=1\nPOOL_STALE_RACE_CLIENT_RECONNECT_THRESHOLD=0\nPOOL_STALE_RACE_RECOVERY_COOLDOWN_SECONDS=5\nPOOL_EXPIRED_JOB_CLIENT_RECONNECT_THRESHOLD=3\nPOOL_EXPIRED_JOB_CLIENT_RECONNECT_WINDOW_SECONDS=120\nPOOL_EXPIRED_JOB_CLIENT_RECONNECT_COOLDOWN_SECONDS=60\nPOOL_ALLOW_MULTIPLE_BLOCK_CANDIDATES_PER_JOB=true\nPOOL_PREEMPTIVE_BLOCK_CANDIDATE_REFRESH_ENABLED=true\nSTACK_SRC_CONTEXT=/home/jeremy/blockdag-source/stack-redis\nBLOCKDAG_CORECHAIN_CONTEXT=/home/jeremy/blockdag-source/blockdag-corechain\nPOOL_SRC_CONTEXT=/home/jeremy/blockdag-source/pool\nCPU_MINER_SRC_CONTEXT=/home/jeremy/blockdag-source/stack-redis\nDASHBOARD_SRC_CONTEXT=/home/jeremy/blockdag-source/redis-dash\nCOMPOSE_PROFILES=\nNODE_DATA_DIR=/home/jeremy/blockdag-source/stack/data/node\nSNAPSHOT_HOST_PATH=./docker/no-snapshot.marker\nBDAG_REQUIRE_SNAPSHOT=0\nBDAG_ENABLE_NODE_MINING=1\nBDAG_NODE_MODULES=Blockdag,miner\nBDAG_POOL_HOST=192.168.1.100\nBDAG_POOL_URL=stratum+tcp://192.168.1.100:3334\nBDAG_MINER_SCAN_TARGET=192.168.1.0/24\nBDAG_MINER_CONTROL_ENABLED=0\nDASHBOARD_BIND=127.0.0.1\nNODE_RPC_URL=http://127.0.0.1:38131\nPOOL_DB_HOST=127.0.0.1\nPOOL_DB_PORT=55432\nMINING_ADDRESS=0x1719E0ee598c15957448D5E568948101DF78e7A0\nPOOL_PRIVATE_KEY=<redacted>\nPOOL_ASIC_MAC_ALLOWLIST=2a:71:c7:f5:1f:1e,28:e2:97:3e:39:63,28:e2:97:1e:c0:b5,28:e2:97:4d:44:3a\nPOOL_ASIC_MAC_OVERRIDES=192.168.1.101=28:e2:97:1e:c0:b5,192.168.1.102=2a:71:c7:f5:1f:1e,192.168.1.14=28:e2:97:3e:39:63,192.168.1.105=28:e2:97:4d:44:3a\nPOOL_ASIC_ARP_TABLE_PATH=/host/proc/net/arp\nPOOL_RPC_ROUTER_NODE_HEALTH_MIN_CONSENSUS_PEERS=2\nPOOL_RPC_ROUTER_EVM_HEAD_GUARD_ENABLED=false\nPOOL_RPC_ROUTER_EVM_HEAD_GUARD_MAX_LAG_BLOCKS=30\nPOOL_RPC_ROUTER_EVM_REFERENCE_URLS=https://rpc.blockdag.engineering,https://rpc.bdagscan.com\nBDAG_POOL_START_GATE_MIN_PEERS=2\nBDAG_NODE_DEBUG_LEVEL=warn\nBDAG_NODE_NO_FILE_LOGGING=1\n",
+    "docker_exec_ps": "UID          PID    PPID  C STIME TTY          TIME CMD\nroot           1       0  0 20:00 ?        00:00:00 runuser -u bdagStack -g bdagStack -- /usr/local/bin/nodeworker --node-binary=/usr/local/bin/blockdag-node --node-args=--configfile /etc/bdagStack/node.conf  --addpeer=/ip4/16.28.133.168/tcp/8150/p2p/16Uiu2HAm9UcTayJDSajjJYsWwVaN2qqGeczcs9kXse3dMdvGDRjz --addpeer=/ip4/13.140.165.186/tcp/8150/p2p/16Uiu2HAm4hHD7Ht5LJrLgaKXr7YP2RzHHjrrCLNt8zv8FQ9s3gBU --addpeer=/ip4/13.57.132.47/tcp/8150/p2p/16Uiu2HAmDynYpWjWmgVGf9qVWvDdLnJ3ybVgDmFexizR4zMereus --addpeer=/ip4/18.142.70.83/tcp/8150/p2p/16Uiu2HAmBSdn2taoteYwLZJZkDm2iCwL6eQ4UaXYNBBtAwaBU18X --addpeer=/ip4/199.229.220.118/tcp/8151/p2p/16Uiu2HAmUtspBkyUNBG8pQLgj9DrKVgL6SKQzGBhVT9ZShNM1ops --addpeer=/ip4/204.236.141.121/tcp/8150/p2p/16Uiu2HAm5qppgbBCjVpTN5nKtjEU5KsSbs2gz4S9uPiSWVSGfNh1 --addpeer=/ip4/3.126.64.13/tcp/8152/p2p/16Uiu2HAmEFxRaBbbf3sRi43CCvMk5Y6zPkuGY9s4uRK2FKJVJkqo --addpeer=/ip4/52.8.54.60/tcp/8150/p2p/16Uiu2HAkzUWr4YUM7mAhLdCVZgFoV9He6aQzKTyWWrJ7SWQKRTN7 --addpeer=/ip4/54.151.18.92/tcp/8150/p2p/16Uiu2HAmVm91o1JXS2C7P6uTVuVX5empgnRtzuK4UaC8fHmePbKP --addpeer=/ip4/63.182.36.180/tcp/8150/p2p/16Uiu2HAmP8HsTF9ks8JjFamzT9JBZb3ymSiCJ8rkzXBZqYj4yKtP --addpeer=/ip4/169.0.254.182/tcp/8150/p2p/16Uiu2HAmGsEDGnDGhvziZR1UQSELTDihXRKYMB6SrbEQ6NsWBVqD --addpeer=/ip4/102.39.221.179/tcp/8152/p2p/16Uiu2HAm8ebvL9NTNwgLYwm8LEEXSY7QKQhQ7YVcAV7PR6ymsrTm --addpeer=/ip4/80.141.136.179/tcp/8151/p2p/16Uiu2HAmMZNeDNLgfLXFKzEiWZHFjdDejLSCzhunJMYWoYhdT3gv --addpeer=/ip4/102.39.221.179/tcp/8150/p2p/16Uiu2HAmNQznwWPjuAUhXnTkP6EuWsEHa4eRnb1aTm3WcZQKsrFn --addpeer=/ip4/47.156.6.142/tcp/8151/p2p/16Uiu2HAmJz7PTCxSWTnuJhvbf4oXEffFZ1KAE3yNBX9SY72jS1ta --addpeer=/ip4/218.32.84.82/tcp/8150/p2p/16Uiu2HAmNjFKhP3945Az3afdBSUSRwhgDw1uGRBDsqSvSduStbWJ --addpeer=/ip4/5.78.193.245/tcp/8150/p2p/16Uiu2HAkwosZsQdtgAQHoJ57MFKpWnyfGJtSpt2R2aJMgR6ywGME --addpeer=/ip4/3.218.54.171/tcp/8150/p2p/16Uiu2HAmUZBdpuutiLPuru1UQnX8hf6GyvG7yU2B832sYjvNhmQG --addpeer=/ip4/102.182.77.21/tcp/8151/p2p/16Uiu2HAm2uPLqM1dfd3ddbzg3FDAmvuvyo3vbBSXpVHurqAsUxWQ --addpeer=/ip4/121.91.173.235/tcp/8150/p2p/16Uiu2HAkvH1U2kQqQFh6fSVQPGgABaKNHRMT7DceGe6kRtYr6ndY --addpeer=/ip4/102.182.77.16/tcp/8152/p2p/16Uiu2HAm99a8KYuUkL5LGEQbpRNhz5nzScrwYpEh47BfSaVMCg5G --addpeer=/ip4/54.214.229.250/tcp/8154/p2p/16Uiu2HAm1vZgJXKhUfWWC7nz9wzNpUDiYAid7zCZSKb1hhU7QBNB --addpeer=/ip4/54.201.253.248/tcp/8150/p2p/16Uiu2HAm5bpb5ssgN47BT4ChQjmbpGA2zAPJskWGMPknrFwaEtE9 --modules=Blockdag --modules=miner --miner --miningaddr=0x1719E0ee598c15957448D5E568948101DF78e7A0 --obsoleteheight=20 --miningnopendingtx --debuglevel=warn --nofilelogging --rpc-url=ws://127.0.0.1:18546 --dag-rpc-url=http://127.0.0.1:38131 --persist-root=/var/lib/bdagStack/nodeworker --health-min-peers=2 --rollout-window=30m --health.liveness-timeout=5m\nbdagSta+      84       1  0 20:00 ?        00:00:07 /usr/local/bin/nodeworker --node-binary=/usr/local/bin/blockdag-node --node-args=--configfile /etc/bdagStack/node.conf  --addpeer=/ip4/16.28.133.168/tcp/8150/p2p/16Uiu2HAm9UcTayJDSajjJYsWwVaN2qqGeczcs9kXse3dMdvGDRjz --addpeer=/ip4/13.140.165.186/tcp/8150/p2p/16Uiu2HAm4hHD7Ht5LJrLgaKXr7YP2RzHHjrrCLNt8zv8FQ9s3gBU --addpeer=/ip4/13.57.132.47/tcp/8150/p2p/16Uiu2HAmDynYpWjWmgVGf9qVWvDdLnJ3ybVgDmFexizR4zMereus --addpeer=/ip4/18.142.70.83/tcp/8150/p2p/16Uiu2HAmBSdn2taoteYwLZJZkDm2iCwL6eQ4UaXYNBBtAwaBU18X --addpeer=/ip4/199.229.220.118/tcp/8151/p2p/16Uiu2HAmUtspBkyUNBG8pQLgj9DrKVgL6SKQzGBhVT9ZShNM1ops --addpeer=/ip4/204.236.141.121/tcp/8150/p2p/16Uiu2HAm5qppgbBCjVpTN5nKtjEU5KsSbs2gz4S9uPiSWVSGfNh1 --addpeer=/ip4/3.126.64.13/tcp/8152/p2p/16Uiu2HAmEFxRaBbbf3sRi43CCvMk5Y6zPkuGY9s4uRK2FKJVJkqo --addpeer=/ip4/52.8.54.60/tcp/8150/p2p/16Uiu2HAkzUWr4YUM7mAhLdCVZgFoV9He6aQzKTyWWrJ7SWQKRTN7 --addpeer=/ip4/54.151.18.92/tcp/8150/p2p/16Uiu2HAmVm91o1JXS2C7P6uTVuVX5empgnRtzuK4UaC8fHmePbKP --addpeer=/ip4/63.182.36.180/tcp/8150/p2p/16Uiu2HAmP8HsTF9ks8JjFamzT9JBZb3ymSiCJ8rkzXBZqYj4yKtP --addpeer=/ip4/169.0.254.182/tcp/8150/p2p/16Uiu2HAmGsEDGnDGhvziZR1UQSELTDihXRKYMB6SrbEQ6NsWBVqD --addpeer=/ip4/102.39.221.179/tcp/8152/p2p/16Uiu2HAm8ebvL9NTNwgLYwm8LEEXSY7QKQhQ7YVcAV7PR6ymsrTm --addpeer=/ip4/80.141.136.179/tcp/8151/p2p/16Uiu2HAmMZNeDNLgfLXFKzEiWZHFjdDejLSCzhunJMYWoYhdT3gv --addpeer=/ip4/102.39.221.179/tcp/8150/p2p/16Uiu2HAmNQznwWPjuAUhXnTkP6EuWsEHa4eRnb1aTm3WcZQKsrFn --addpeer=/ip4/47.156.6.142/tcp/8151/p2p/16Uiu2HAmJz7PTCxSWTnuJhvbf4oXEffFZ1KAE3yNBX9SY72jS1ta --addpeer=/ip4/218.32.84.82/tcp/8150/p2p/16Uiu2HAmNjFKhP3945Az3afdBSUSRwhgDw1uGRBDsqSvSduStbWJ --addpeer=/ip4/5.78.193.245/tcp/8150/p2p/16Uiu2HAkwosZsQdtgAQHoJ57MFKpWnyfGJtSpt2R2aJMgR6ywGME --addpeer=/ip4/3.218.54.171/tcp/8150/p2p/16Uiu2HAmUZBdpuutiLPuru1UQnX8hf6GyvG7yU2B832sYjvNhmQG --addpeer=/ip4/102.182.77.21/tcp/8151/p2p/16Uiu2HAm2uPLqM1dfd3ddbzg3FDAmvuvyo3vbBSXpVHurqAsUxWQ --addpeer=/ip4/121.91.173.235/tcp/8150/p2p/16Uiu2HAkvH1U2kQqQFh6fSVQPGgABaKNHRMT7DceGe6kRtYr6ndY --addpeer=/ip4/102.182.77.16/tcp/8152/p2p/16Uiu2HAm99a8KYuUkL5LGEQbpRNhz5nzScrwYpEh47BfSaVMCg5G --addpeer=/ip4/54.214.229.250/tcp/8154/p2p/16Uiu2HAm1vZgJXKhUfWWC7nz9wzNpUDiYAid7zCZSKb1hhU7QBNB --addpeer=/ip4/54.201.253.248/tcp/8150/p2p/16Uiu2HAm5bpb5ssgN47BT4ChQjmbpGA2zAPJskWGMPknrFwaEtE9 --modules=Blockdag --modules=miner --miner --miningaddr=0x1719E0ee598c15957448D5E568948101DF78e7A0 --obsoleteheight=20 --miningnopendingtx --debuglevel=warn --nofilelogging --rpc-url=ws://127.0.0.1:18546 --dag-rpc-url=http://127.0.0.1:38131 --persist-root=/var/lib/bdagStack/nodeworker --health-min-peers=2 --rollout-window=30m --health.liveness-timeout=5m\nbdagSta+      92      84 99 20:00 ?        02:06:32 /usr/local/bin/blockdag-node --configfile /etc/bdagStack/node.conf --addpeer=/ip4/16.28.133.168/tcp/8150/p2p/16Uiu2HAm9UcTayJDSajjJYsWwVaN2qqGeczcs9kXse3dMdvGDRjz --addpeer=/ip4/13.140.165.186/tcp/8150/p2p/16Uiu2HAm4hHD7Ht5LJrLgaKXr7YP2RzHHjrrCLNt8zv8FQ9s3gBU --addpeer=/ip4/13.57.132.47/tcp/8150/p2p/16Uiu2HAmDynYpWjWmgVGf9qVWvDdLnJ3ybVgDmFexizR4zMereus --addpeer=/ip4/18.142.70.83/tcp/8150/p2p/16Uiu2HAmBSdn2taoteYwLZJZkDm2iCwL6eQ4UaXYNBBtAwaBU18X --addpeer=/ip4/199.229.220.118/tcp/8151/p2p/16Uiu2HAmUtspBkyUNBG8pQLgj9DrKVgL6SKQzGBhVT9ZShNM1ops --addpeer=/ip4/204.236.141.121/tcp/8150/p2p/16Uiu2HAm5qppgbBCjVpTN5nKtjEU5KsSbs2gz4S9uPiSWVSGfNh1 --addpeer=/ip4/3.126.64.13/tcp/8152/p2p/16Uiu2HAmEFxRaBbbf3sRi43CCvMk5Y6zPkuGY9s4uRK2FKJVJkqo --addpeer=/ip4/52.8.54.60/tcp/8150/p2p/16Uiu2HAkzUWr4YUM7mAhLdCVZgFoV9He6aQzKTyWWrJ7SWQKRTN7 --addpeer=/ip4/54.151.18.92/tcp/8150/p2p/16Uiu2HAmVm91o1JXS2C7P6uTVuVX5empgnRtzuK4UaC8fHmePbKP --addpeer=/ip4/63.182.36.180/tcp/8150/p2p/16Uiu2HAmP8HsTF9ks8JjFamzT9JBZb3ymSiCJ8rkzXBZqYj4yKtP --addpeer=/ip4/169.0.254.182/tcp/8150/p2p/16Uiu2HAmGsEDGnDGhvziZR1UQSELTDihXRKYMB6SrbEQ6NsWBVqD --addpeer=/ip4/102.39.221.179/tcp/8152/p2p/16Uiu2HAm8ebvL9NTNwgLYwm8LEEXSY7QKQhQ7YVcAV7PR6ymsrTm --addpeer=/ip4/80.141.136.179/tcp/8151/p2p/16Uiu2HAmMZNeDNLgfLXFKzEiWZHFjdDejLSCzhunJMYWoYhdT3gv --addpeer=/ip4/102.39.221.179/tcp/8150/p2p/16Uiu2HAmNQznwWPjuAUhXnTkP6EuWsEHa4eRnb1aTm3WcZQKsrFn --addpeer=/ip4/47.156.6.142/tcp/8151/p2p/16Uiu2HAmJz7PTCxSWTnuJhvbf4oXEffFZ1KAE3yNBX9SY72jS1ta --addpeer=/ip4/218.32.84.82/tcp/8150/p2p/16Uiu2HAmNjFKhP3945Az3afdBSUSRwhgDw1uGRBDsqSvSduStbWJ --addpeer=/ip4/5.78.193.245/tcp/8150/p2p/16Uiu2HAkwosZsQdtgAQHoJ57MFKpWnyfGJtSpt2R2aJMgR6ywGME --addpeer=/ip4/3.218.54.171/tcp/8150/p2p/16Uiu2HAmUZBdpuutiLPuru1UQnX8hf6GyvG7yU2B832sYjvNhmQG --addpeer=/ip4/102.182.77.21/tcp/8151/p2p/16Uiu2HAm2uPLqM1dfd3ddbzg3FDAmvuvyo3vbBSXpVHurqAsUxWQ --addpeer=/ip4/121.91.173.235/tcp/8150/p2p/16Uiu2HAkvH1U2kQqQFh6fSVQPGgABaKNHRMT7DceGe6kRtYr6ndY --addpeer=/ip4/102.182.77.16/tcp/8152/p2p/16Uiu2HAm99a8KYuUkL5LGEQbpRNhz5nzScrwYpEh47BfSaVMCg5G --addpeer=/ip4/54.214.229.250/tcp/8154/p2p/16Uiu2HAm1vZgJXKhUfWWC7nz9wzNpUDiYAid7zCZSKb1hhU7QBNB --addpeer=/ip4/54.201.253.248/tcp/8150/p2p/16Uiu2HAm5bpb5ssgN47BT4ChQjmbpGA2zAPJskWGMPknrFwaEtE9 --modules=Blockdag --modules=miner --miner --miningaddr=0x1719E0ee598c15957448D5E568948101DF78e7A0 --obsoleteheight=20 --miningnopendingtx --debuglevel=warn --nofilelogging\nroot         171       0 50 21:33 ?        00:00:00 ps -ef",
+    "datadir_mount": "/home/jeremy/blockdag-source/stack/data/node -> /var/lib/bdagStack/node",
+    "required_startup_invariant": "Blockdag and miner modules only, miner enabled, non-zero mining address configured. Do not add the separate P2P node module; peer multiaddrs are expected and are not that module flag."
+  },
+  "live_evidence": {
+    "dashboard_status": {
+      "status": "ok",
+      "overall": "ok",
+      "mode": "mining",
+      "can_accept_shares": true,
+      "can_submit_blocks": true,
+      "chain_block_count": "12198136",
+      "updated_at": "2026-06-21T21:33:09Z",
+      "sync_progress": {
+        "best_peer_mainorder": 12198135,
+        "chain_block_count": 12198136,
+        "chain_rpc_source": "getBlockCount",
+        "chain_syncing": false,
+        "current_block": 12198136,
+        "eth_syncing": false,
+        "evm_block_count": "11831670",
+        "evm_chain_syncing": false,
+        "evm_rpc_url": "http://host.docker.internal:18545",
+        "highest_block": 12198136,
+        "native_is_current": true,
+        "p2p_connections": 11,
+        "p2p_network_gap": 0,
+        "p2p_network_height": 12198135,
+        "peer_count": 11,
+        "peer_mainorder_gap": 0,
+        "remaining_blocks": 0,
+        "source": "native-rpc",
+        "status": "synced"
+      },
+      "pool_metrics": {
+        "accepted_block_recent": true,
+        "accepted_block_submissions": 2366,
+        "accepted_block_submissions_delta": 4,
+        "accepted_block_submissions_rate_per_second": 0.8,
+        "active_connections": 4,
+        "authorized_miners": 4,
+        "backend_main_order": 12198111,
+        "backend_mineable": 0,
+        "backend_p2p_mining_fresh": 1,
+        "backend_peer_lead_blocks": 0,
+        "backend_submit_ready": 0,
+        "blocks_found_total": 2396,
+        "expired_miners": 0,
+        "invalidated_miners": 0,
+        "last_accepted_block_submission_age_seconds": 0,
+        "last_accepted_block_submission_at_epoch": 1782077585,
+        "ready_miners": 4,
+        "rejected_block_submissions": 30,
+        "shares_accepted_total": 3673,
+        "shares_rejected_total": 1106,
+        "stale_miners": 0,
+        "template_age_seconds": 1.7690000000000001
+      },
+      "pool_health": {
+        "accepted_block_count": "2366",
+        "block_submit_error_count": "30",
+        "block_submit_success_count": "2366",
+        "source_job_health": {
+          "authorized_miners": "4",
+          "ready_miners": "4"
+        },
+        "stale_jobs": false,
+        "valid_share_count": "3673"
+      },
+      "miner_health_counts": {
+        "managed_count": 4,
+        "connected_count": 4,
+        "configured_count": 4,
+        "tracked_count": 4,
+        "identity_contract": "mac-only",
+        "source": "redis-asic-status"
+      }
+    },
+    "dashboard_healthz": {
+      "global_age_seconds": 3,
+      "global_chain_latest_block": "11831670",
+      "global_latest_block": "11831670",
+      "global_status": "ok",
+      "global_stream_lag_blocks": "0",
+      "redis": true,
+      "status": "ok"
+    },
+    "pool_metric_lines": {
+      "pool_block_submit_outcomes_total": [
+        "pool_block_submit_outcomes_total{outcome=\"accepted\",pool_id=\"0\",reason=\"ok\"} 2370",
+        "pool_block_submit_outcomes_total{outcome=\"rejected\",pool_id=\"0\",reason=\"node-syncing\"} 30",
+        "pool_block_submit_outcomes_total{outcome=\"rejected-local\",pool_id=\"0\",reason=\"duplicate-block\"} 2",
+        "pool_block_submit_outcomes_total{outcome=\"rejected-local\",pool_id=\"0\",reason=\"old-template-sequence\"} 1",
+        "pool_block_submit_outcomes_total{outcome=\"rejected-local\",pool_id=\"0\",reason=\"stale-job\"} 122",
+        "pool_block_submit_outcomes_total{outcome=\"rejected-local\",pool_id=\"0\",reason=\"stale-parent\"} 17"
+      ],
+      "pool_job_health_authorized_miners": [
+        "pool_job_health_authorized_miners{pool_id=\"0\"} 4"
+      ],
+      "pool_job_health_current_job_expired_miners": [
+        "pool_job_health_current_job_expired_miners{pool_id=\"0\"} 0"
+      ],
+      "pool_job_health_current_job_invalidated_miners": [
+        "pool_job_health_current_job_invalidated_miners{pool_id=\"0\"} 0"
+      ],
+      "pool_job_health_current_job_stale_miners": [
+        "pool_job_health_current_job_stale_miners{pool_id=\"0\"} 0"
+      ],
+      "pool_job_health_ok": [
+        "pool_job_health_ok{pool_id=\"0\"} 1"
+      ],
+      "pool_job_health_ready_miners": [
+        "pool_job_health_ready_miners{pool_id=\"0\"} 4"
+      ],
+      "pool_rpc_backend_node_health_mineable": [
+        "pool_rpc_backend_node_health_mineable{node=\"node\",pool_id=\"0\"} 0"
+      ],
+      "pool_rpc_backend_node_health_p2p_fresh_consensus_peer_count": [
+        "pool_rpc_backend_node_health_p2p_fresh_consensus_peer_count{node=\"node\",pool_id=\"0\"} 11"
+      ],
+      "pool_rpc_backend_node_health_p2p_mining_fresh": [
+        "pool_rpc_backend_node_health_p2p_mining_fresh{node=\"node\",pool_id=\"0\"} 1"
+      ],
+      "pool_rpc_backend_node_health_submit_ready": [
+        "pool_rpc_backend_node_health_submit_ready{node=\"node\",pool_id=\"0\"} 0"
+      ],
+      "pool_rpc_backend_node_health_template_age_seconds": [
+        "pool_rpc_backend_node_health_template_age_seconds{node=\"node\",pool_id=\"0\"} 1.694"
+      ],
+      "pool_rpc_backend_node_health_template_coinbase_valid": [
+        "pool_rpc_backend_node_health_template_coinbase_valid{node=\"node\",pool_id=\"0\"} 1"
+      ],
+      "pool_shares_accepted_total": [
+        "pool_shares_accepted_total{pool_id=\"0\"} 3676"
+      ],
+      "pool_shares_rejected_total": [
+        "pool_shares_rejected_total{pool_id=\"0\",reason=\"duplicate_block_global\"} 2",
+        "pool_shares_rejected_total{pool_id=\"0\",reason=\"duplicate_share\"} 1",
+        "pool_shares_rejected_total{pool_id=\"0\",reason=\"invalidated_job\"} 759",
+        "pool_shares_rejected_total{pool_id=\"0\",reason=\"non_current_job\"} 204",
+        "pool_shares_rejected_total{pool_id=\"0\",reason=\"stale_block_candidate\"} 140"
+      ],
+      "pool_template_conversion_stall_failure_ratio": [
+        "pool_template_conversion_stall_failure_ratio{pool_id=\"0\"} 8.928571428571429"
+      ]
+    },
+    "asic_performance_summary": {
+      "age_seconds": 4,
+      "generated_at_unix_ms": 1782077585880,
+      "lanes_count": 4,
+      "ready_count": 4,
+      "blocks_30m_total": 601,
+      "lanes_detail": [
+        {
+          "asic_mac": "28:e2:97:1e:c0:b5",
+          "remote_host": "192.168.1.101",
+          "ready": true,
+          "health": "ok",
+          "current_job_age_ms": 1336,
+          "blocks_30m": 143,
+          "blocks_1h": 346,
+          "blocks_24h": 623,
+          "rejected_30m": 7,
+          "rejected_local_30m": 7,
+          "protocol_variant": "stratum-v1-basic",
+          "last_accepted_unix_ms": 1782077584508,
+          "worker": "0x1719E0ee598c15957448D5E568948101DF78e7A0"
+        },
+        {
+          "asic_mac": "28:e2:97:3e:39:63",
+          "remote_host": "192.168.1.14",
+          "ready": true,
+          "health": "ok",
+          "current_job_age_ms": 1336,
+          "blocks_30m": 159,
+          "blocks_1h": 328,
+          "blocks_24h": 598,
+          "rejected_30m": 2,
+          "rejected_local_30m": 11,
+          "protocol_variant": "stratum-v1-basic",
+          "last_accepted_unix_ms": 1782077575932,
+          "worker": "0x1719E0ee598c15957448D5E568948101DF78e7A0"
+        },
+        {
+          "asic_mac": "28:e2:97:4d:44:3a",
+          "remote_host": "192.168.1.105",
+          "ready": true,
+          "health": "ok",
+          "current_job_age_ms": 1336,
+          "blocks_30m": 145,
+          "blocks_1h": 332,
+          "blocks_24h": 555,
+          "rejected_30m": 3,
+          "rejected_local_30m": 7,
+          "protocol_variant": "stratum-v1-basic",
+          "last_accepted_unix_ms": 1782077582865,
+          "worker": "0x1719E0ee598c15957448D5E568948101DF78e7A0"
+        },
+        {
+          "asic_mac": "2a:71:c7:f5:1f:1e",
+          "remote_host": "192.168.1.102",
+          "ready": true,
+          "health": "ok",
+          "current_job_age_ms": 1336,
+          "blocks_30m": 154,
+          "blocks_1h": 344,
+          "blocks_24h": 590,
+          "rejected_30m": 2,
+          "rejected_local_30m": 11,
+          "protocol_variant": "stratum-v1-basic",
+          "last_accepted_unix_ms": 1782077581937,
+          "worker": "0x1719E0ee598c15957448D5E568948101DF78e7A0"
+        }
+      ]
+    },
+    "pre_savepoint_observation": "A transient 23:31 SAST drop invalidated four jobs after node-syncing/parent invalidation, then recovered without code or service changes; this is the failure mode the upgrade must harden."
+  },
+  "non_regression_contract": {
+    "must_preserve": [
+      "live node startup uses Blockdag and miner modules only; peer multiaddrs are allowed, the separate P2P node module is not",
+      "dashboard mode remains mining when native node and pool are healthy",
+      "can_accept_shares and can_submit_blocks stay true in healthy state",
+      "fresh consensus peers >= 2 and p2p_mining_fresh=true before mining is considered safe",
+      "four ASIC lanes remain MAC-identified, connected, ready, and health=ok",
+      "zero/missing/mismatched coinbase templates never reach ASIC jobs or block submit path",
+      "watchdog must not restart node for advisory EVM sync when native mining proof is current and recent accepted work exists"
+    ],
+    "minimum_live_gates": {
+      "dashboard_can_accept_shares": true,
+      "dashboard_can_submit_blocks": true,
+      "node_p2p_fresh_consensus_peer_count": 2,
+      "pool_active_connections": 4,
+      "pool_ready_miners": 4,
+      "asic_ready_lanes": 4
+    },
+    "baseline_snapshot": {
+      "pool_accepted_block_submissions": 2366,
+      "pool_ready_miners": 4,
+      "pool_active_connections": 4,
+      "asic_blocks_30m_total": 601
+    }
+  },
+  "rollback_commands": [
+    "cd /home/jeremy/blockdag-source/stack-redis",
+    "Restore only the changed service first using recorded image/config data.",
+    "Dashboard rollback: restore recorded dashboard image/config, then docker compose up -d --no-deps --no-build dashboard.",
+    "Pool rollback: restore recorded pool image/config, then docker compose up -d --no-deps --no-build pool and verify ready_miners=4 plus accepted submits rise.",
+    "Node rollback: stop pool first; restore recorded node image/config with Blockdag/miner modules only; preserve/quarantine datadir deliberately; start node; verify native health; then start pool."
+  ]
+}

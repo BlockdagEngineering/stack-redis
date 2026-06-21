@@ -27,6 +27,7 @@ class NoMinerCollectStatusTests(unittest.TestCase):
                 "POOL_ENV_FILE",
                 "EVM_REFERENCE_GAP_WATCH_FILE",
                 "POOL_PAID_WORK_STATE_FILE",
+                "TEMPLATE_SAFETY_STATE_FILE",
                 "POOL_PAID_WORK_RECENT_SECONDS",
                 "ensure_runtime",
                 "docker_access_error",
@@ -52,6 +53,7 @@ class NoMinerCollectStatusTests(unittest.TestCase):
         self.old_time = pool_ops.time.time
         self.tmpdir = tempfile.TemporaryDirectory()
         pool_ops.POOL_PAID_WORK_STATE_FILE = pathlib.Path(self.tmpdir.name) / "pool-paid-work-state.json"
+        pool_ops.TEMPLATE_SAFETY_STATE_FILE = pathlib.Path(self.tmpdir.name) / "template-safety-state.json"
         self.addCleanup(self.restore_globals)
         self.addCleanup(self.tmpdir.cleanup)
 

@@ -110,13 +110,13 @@ class BootstrapPeerDefaultTests(unittest.TestCase):
         self.assertIn("BOOTSTRAP_PEER_ADDRESSES: ${BOOTSTRAP_PEER_ADDRESSES:-}", compose)
         self.assertIn(f"addpeer={self.LIVE_PUBLIC_BOOTSTRAP_PEER}", node_conf)
 
-    def test_release_defaults_keep_compose_and_node_config_on_p2p_port_8150(self) -> None:
+    def test_release_defaults_keep_compose_on_safe_local_p2p_port_8155(self) -> None:
         env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
         compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
         node_conf = (ROOT / "node.conf.example").read_text(encoding="utf-8")
 
-        self.assertRegex(env_example, r"(?m)^P2P_PORT=8150$")
-        self.assertIn("P2P_PORT: ${P2P_PORT:-8150}", compose)
+        self.assertRegex(env_example, r"(?m)^P2P_PORT=8155$")
+        self.assertIn("P2P_PORT: ${P2P_PORT:-8155}", compose)
         self.assertRegex(node_conf, r"(?m)^port=8150$")
         self.assertNotRegex(node_conf, r"(?m)^port=8154$")
 

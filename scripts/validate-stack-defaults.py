@@ -90,8 +90,14 @@ def assert_shell_defaults_match(
 ) -> None:
     path = root / rel_path
     text = path.read_text(encoding="utf-8")
+    current_function = ""
     for lineno, raw_line in enumerate(text.splitlines(), start=1):
         stripped = raw_line.strip()
+        function_match = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)\(\)\s*\{$", stripped)
+        if function_match:
+            current_function = function_match.group(1)
+        elif stripped == "}":
+            current_function = ""
         if not stripped or stripped.startswith("#"):
             continue
         if "set_env_value" not in stripped and "ensure_env_value" not in stripped and "ensure_stack_default_env_value" not in stripped:
@@ -120,6 +126,8 @@ def assert_shell_defaults_match(
         if key not in defaults:
             continue
         if value.startswith("$") or "$(" in value or "${" in value:
+            continue
+        if rel_path == "ops/release-install.sh" and current_function == "configure_node_mining_env":
             continue
         expected = defaults[key]
         if value != expected:

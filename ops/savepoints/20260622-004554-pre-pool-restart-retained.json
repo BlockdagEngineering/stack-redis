@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "savepoint_id": "20260622-004554-pre-pool-restart-retained",
+  "recorded_at": "2026-06-22T00:45:54+0200",
+  "timezone": "Africa/Johannesburg",
+  "purpose": "Pre-pool-build/restart rollback point after patched node recovered to safe mining health and before replacing the stopped pool image.",
+  "retention": "Retain until post-upgrade working stack is proven and the user explicitly allows cleanup.",
+  "safety_invariant": "Live node must use Blockdag and miner modules only, with --miner and non-zero --miningaddr=0x1719E0ee598c15957448D5E568948101DF78e7A0. The peer module must remain excluded.",
+  "live_config": {
+    "P2P_PORT": "8155",
+    "BDAG_NODE_MINING_NO_PENDING_TX": "0",
+    "BDAG_ENABLE_NODE_MINING": "1",
+    "BDAG_NODE_MODULES": "Blockdag,miner",
+    "POOL_COINBASE_ADDRESS": "0x1719E0ee598c15957448D5E568948101DF78e7A0",
+    "MINING_POOL_ADDRESS": "0x1719E0ee598c15957448D5E568948101DF78e7A0"
+  },
+  "compose_hashes": {
+    "dashboard": "e03f4a8bb3888d03330d9472539c32e0a4893687873b226ce12c92c9412a2162",
+    "node": "a5728598ce0ac1066702259a5a21222ae332b9f66885287acd8f952fa3e0d257",
+    "pool": "3cc1bff3269cba209e027936c6f19ed844abc881d2e10bd0111807726ea628d1",
+    "pool-db": "65ffec4edf19c98fb1bc7919809f6a4a013270b8c2e5878f5528ed49e4002ab1",
+    "status-sampler": "9d60a4b5400ef9e3431e282622311aaaff140c76375cfffe3ac6613c28f1e091"
+  },
+  "images": {
+    "node_live": "sha256:c1b1c24457dc052f0d4352e16cbfbf99144633d5bc3f5f7cf17fb57475933845",
+    "node_live_tag": "stack-node:patched-candidate-20260622-0027",
+    "pool_stopped_before_build": "sha256:6c9f9647273e036e8061657ce6c31d8ccc6e4a12ffab6325a2a25e47ce3051f4",
+    "pool_rollback_tag": "stack-pool:pre-native-submit-gate-20260622-004554",
+    "dashboard_live": "sha256:ade262780dbc75954ace95ff0f88c8eccc702453127e898bb59e2b2c7709afb6",
+    "status_sampler_live": "sha256:6e45c75e084826a9ec44f0bd101b124610b450f31908396b9972d99685cd7739"
+  },
+  "live_node_command": {
+    "container": "node",
+    "status": "running",
+    "image": "sha256:c1b1c24457dc052f0d4352e16cbfbf99144633d5bc3f5f7cf17fb57475933845",
+    "entrypoint": [
+      "/usr/local/bin/docker-entrypoint-nodeworker.sh",
+      "/usr/local/bin/nodeworker",
+      "--node-binary=/usr/local/bin/blockdag-node",
+      "--node-args=--configfile /etc/bdagStack/node.conf",
+      "--rpc-url=ws://127.0.0.1:18546",
+      "--dag-rpc-url=http://127.0.0.1:38131",
+      "--persist-root=/var/lib/bdagStack/nodeworker",
+      "--health-min-peers=2",
+      "--rollout-window=30m"
+    ]
+  },
+  "live_pool_state": {
+    "container": "pool",
+    "status": "exited",
+    "image": "sha256:6c9f9647273e036e8061657ce6c31d8ccc6e4a12ffab6325a2a25e47ce3051f4",
+    "entrypoint": [
+      "/usr/local/bin/mining-pool"
+    ]
+  },
+  "native_template_health": {
+    "reason_code": "ok",
+    "mineable_now": true,
+    "submit_ready": true,
+    "template_coinbase_valid": true,
+    "template_coinbase_address": "0x1719E0ee598c15957448D5E568948101DF78e7A0",
+    "p2p_mining_fresh": true,
+    "p2p_fresh_consensus_peer_count": 14,
+    "p2p_consensus_peer_count": 15,
+    "p2p_best_peer_lead_blocks": 0,
+    "main_order": 12203798
+  },
+  "source_refs": {
+    "pool": {
+      "branch": "codex/native-safe-mining-20260620-pool",
+      "head": "e02f5b5d68ca62888cbd145fd6928e04c98d3555",
+      "dirty_summary": [
+        "M internal/pool/server/evm_head_guard.go",
+        "M internal/pool/server/handler.go",
+        "M internal/pool/server/jobBroadcast.go",
+        "M internal/pool/server/job_broadcast_test.go",
+        "M internal/pool/server/late_submit_policy.go",
+        "M internal/pool/server/maturity.go",
+        "M internal/pool/server/metrics.go",
+        "M internal/pool/server/node_health.go",
+        "M internal/pool/server/rpc_router.go",
+        "M internal/pool/server/rpc_router_test.go",
+        "M internal/pool/server/submit_test.go"
+      ]
+    },
+    "stack-redis": {
+      "branch": "codex/native-safe-mining-20260620-stack",
+      "head": "7b3c812d476bd4d3ef96a9b449de1d692330e40b",
+      "dirty_summary": [
+        "M .env.example",
+        "M docker-compose.yml",
+        "M docker/entrypoint-nodeworker.sh",
+        "M ops/allow-p2p-iptables.sh",
+        "M ops/config/stack-defaults.env",
+        "M ops/install-p2p-services.sh",
+        "M ops/pool_ops.py",
+        "M ops/status_sampler.py",
+        "M ops/systemd/bdag-p2p-firewall.service",
+        "M ops/tests/test_deployment_portability.py",
+        "M ops/tests/test_nodeworker_entrypoint.py",
+        "M ops/tests/test_status_sampler_mining_imperative.py",
+        "plus prior watchdog/status-sampler safety changes"
+      ]
+    }
+  },
+  "validated_before_build": [
+    "pool: go test ./... -count=1",
+    "stack-redis: 191 targeted unittest safety tests",
+    "stack-redis: release_bootstrap_static_test.py",
+    "stack-redis: validate-release-build.sh",
+    "stack-redis: git grep hard p2p module gate returned no matches"
+  ],
+  "rollback_commands": [
+    "docker tag stack-pool:pre-native-submit-gate-20260622-004554 stack-pool:latest",
+    "docker compose up -d --no-deps pool",
+    "If node rollback becomes necessary, stop pool first, restore node image/config deliberately, verify native template health, then start pool."
+  ]
+}

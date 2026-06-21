@@ -367,7 +367,7 @@ def configured_node_obsolete_height() -> str:
 
 
 def node_mining_no_pending_tx_enabled() -> bool:
-    return env_enabled_value(config_value("BDAG_NODE_MINING_NO_PENDING_TX", "1"), True)
+    return env_enabled_value(config_value("BDAG_NODE_MINING_NO_PENDING_TX", "0"), False)
 
 
 def node_mining_runtime_args(address: str) -> str:
@@ -401,7 +401,10 @@ def node_mining_args_are_safe_and_complete(args: str, address: str) -> bool:
     obsolete_height = configured_node_obsolete_height()
     if obsolete_height and node_args_assignment_value(args, "--obsoleteheight") != obsolete_height:
         return False
-    if node_mining_no_pending_tx_enabled() and not node_args_have_bool_flag(args, "--miningnopendingtx"):
+    if node_mining_no_pending_tx_enabled():
+        if not node_args_have_bool_flag(args, "--miningnopendingtx"):
+            return False
+    elif node_args_have_bool_flag(args, "--miningnopendingtx"):
         return False
     if constrained_storage_profile():
         for flag, wanted in NODE_MINING_CONSTRAINED_ASSIGNMENTS.items():

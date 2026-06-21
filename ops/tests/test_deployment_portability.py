@@ -363,9 +363,9 @@ root 41658 41563 0 16:41 ? 00:00:00 /run/rosetta/rosetta /usr/sbin/runuser runus
         unit = (ROOT_DIR / "ops" / "systemd" / "bdag-p2p-firewall.service").read_text(encoding="utf-8")
 
         combined = "\n".join([env_example, firewall, installer, unit])
-        self.assertIn("P2P_PORT=8150", env_example)
-        self.assertIn('PORT="${P2P_PORT:-8150}"', firewall)
-        self.assertIn("Environment=P2P_PORT=8150", unit)
+        self.assertIn("P2P_PORT=8155", env_example)
+        self.assertIn('PORT="${P2P_PORT:-8155}"', firewall)
+        self.assertIn("Environment=P2P_PORT=8155", unit)
         self.assertNotIn("BDAG_P2P_PORTS", combined)
         self.assertNotIn("--dports", firewall)
 

@@ -122,6 +122,31 @@ class PoolEfficiencyLossLedgerTests(unittest.TestCase):
         self.assertFalse(pool_ops.selected_backend_native_p2p_current_safe(peer_lead))
         self.assertFalse(pool_ops.selected_backend_native_p2p_current_safe(stale))
 
+    def test_selected_backend_safety_rejects_invalid_template_coinbase(self) -> None:
+        source_health = {
+            "healthy": True,
+            "node_template_coinbase_valid": False,
+            "node_mineable": True,
+            "node_submit_ready": True,
+            "node_p2p_mining_fresh": True,
+            "node_p2p_fresh_consensus_peer_count": 3,
+            "node_p2p_best_peer_lead_blocks": 0,
+        }
+
+        self.assertFalse(pool_ops.selected_backend_mining_safe(source_health))
+        self.assertFalse(pool_ops.selected_backend_native_p2p_current_safe(source_health))
+        self.assertIn("template_coinbase_valid=false", pool_ops.selected_backend_unready_reasons(source_health))
+
+    def test_template_coinbase_valid_signal_keeps_missing_template_unknown(self) -> None:
+        self.assertIsNone(pool_ops.template_coinbase_valid_signal(False, "", "node_syncing"))
+        self.assertFalse(
+            pool_ops.template_coinbase_valid_signal(
+                False,
+                "0x0000000000000000000000000000000000000000",
+                "zero-template-coinbase",
+            )
+        )
+
     def test_selected_backend_safety_fails_closed_on_unknown_peer_floor_or_lead(self) -> None:
         base = {
             "healthy": True,
@@ -352,6 +377,28 @@ pool_block_submit_outcomes_total{outcome="accepted",pool_id="0",reason="ok"} 4
         self.assertTrue(payload["selected_backend_source_health"]["healthy"])
         self.assertTrue(payload["selected_backend_source_health"]["node_mineable"])
         self.assertTrue(pool_ops.selected_backend_mining_safe(payload["selected_backend_source_health"]))
+
+    def test_pool_metrics_parse_template_coinbase_rejects_and_local_stale_ratio(self) -> None:
+        metrics = """
+pool_active_connections 4
+pool_template_coinbase_rejects_total{pool_id="0",reason="zero-template-address",source="ws-push"} 7
+pool_template_coinbase_rejects_total{pool_id="0",reason="wrong-template-address",source="http-fetch"} 2
+pool_block_submit_outcomes_total{outcome="accepted",pool_id="0",reason="ok"} 10
+pool_block_submit_outcomes_total{outcome="rejected-local",pool_id="0",reason="stale-job"} 3
+pool_block_submit_outcomes_total{outcome="rejected-local",pool_id="0",reason="stale-parent"} 2
+"""
+        pool_ops.fetch_text_url = lambda *_args, **_kwargs: metrics
+
+        payload = pool_ops.collect_pool_prometheus_metrics(
+            {"asic-pool": {"running": True, "network_ips": ["10.0.0.2"]}}
+        )
+        stale_stats = pool_ops.local_stale_block_submit_stats(payload["block_submit_outcomes"])
+
+        self.assertEqual(payload["template_coinbase_rejects"]["ws-push:zero-template-address"], 7)
+        self.assertEqual(pool_ops.zero_coinbase_reject_total(payload["template_coinbase_rejects"]), 7)
+        self.assertEqual(stale_stats["accepted"], 10)
+        self.assertEqual(stale_stats["local_stale"], 5)
+        self.assertEqual(stale_stats["local_stale_ratio"], 0.333333)
 
 
 if __name__ == "__main__":

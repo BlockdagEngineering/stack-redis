@@ -149,6 +149,24 @@ class NodeworkerEntrypointTest(unittest.TestCase):
         self.assertNotIn("--allowminingwhennearlysynced", result.stdout)
         self.assertNotIn("--allowsubmitwhennotsynced", result.stdout)
 
+    def test_node_mining_env_derives_args_from_pool_address(self) -> None:
+        result = self.run_entrypoint(
+            {
+                "BDAG_ENABLE_NODE_MINING": "1",
+                "BDAG_NODE_MODULES": "Blockdag,miner",
+                "BDAG_NODE_MINING_ARGS": "",
+                "MINING_POOL_ADDRESS": "0xA1Ee1005c4Ff181e93e717D2C624554b66AB7DFc",
+            }
+        )
+
+        self.assert_stdout_contains(result, "--miner")
+        self.assert_stdout_contains(result, "--miningaddr=0xA1Ee1005c4Ff181e93e717D2C624554b66AB7DFc")
+        self.assert_stdout_contains(result, "--modules=Blockdag")
+        self.assert_stdout_contains(result, "--modules=miner")
+        self.assertNotIn("modules=" + "p2p", result.stdout)
+        self.assertNotIn("--allowminingwhennearlysynced", result.stdout)
+        self.assertNotIn("--allowsubmitwhennotsynced", result.stdout)
+
     def test_node_mining_env_allows_blockdag_and_miner_rpc_modules(self) -> None:
         result = self.run_entrypoint(
             {
@@ -162,6 +180,21 @@ class NodeworkerEntrypointTest(unittest.TestCase):
 
         self.assert_stdout_contains(result, "--modules=Blockdag")
         self.assert_stdout_contains(result, "--modules=miner")
+        self.assertNotIn("modules=" + "p2p", result.stdout)
+
+    def test_node_mining_env_rejects_forbidden_peer_rpc_module(self) -> None:
+        result = self.run_entrypoint(
+            {
+                "BDAG_ENABLE_NODE_MINING": "1",
+                "BDAG_NODE_MODULES": "Blockdag,miner," + "p2p",
+                "BDAG_NODE_MINING_ARGS": (
+                    "--miner --miningaddr=0xA1Ee1005c4Ff181e93e717D2C624554b66AB7DFc"
+                ),
+            }
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("forbidden peer module", result.stderr)
 
     def test_entrypoint_prepares_runtime_config_before_privilege_drop(self) -> None:
         entrypoint = ENTRYPOINT.read_text(encoding="utf-8")
@@ -185,7 +218,7 @@ class NodeworkerEntrypointTest(unittest.TestCase):
         runuser_index = entrypoint.index("exec runuser -u bdagStack -g bdagStack -- \"$@\"")
 
         self.assertIn("configured_p2p_port()", entrypoint)
-        self.assertIn("local port=\"${P2P_PORT:-8150}\"", entrypoint)
+        self.assertIn("local port=\"${P2P_PORT:-8155}\"", entrypoint)
         self.assertIn("valid_tcp_port", entrypoint)
         self.assertIn("set_config_value \"$runtime_config\" port \"$desired_port\"", entrypoint)
         self.assertIn("node config P2P port ${current_port:-<missing>} differs", entrypoint)
@@ -270,7 +303,7 @@ class NodeworkerEntrypointTest(unittest.TestCase):
                 "BDAG_EPHEMERAL_DIR": str(runtime_dir),
                 "BDAG_ENTRYPOINT_CHOWN_MODE": "never",
                 "FAKE_BDAGSTACK_CAN_READ_CONFIG": "1",
-                "P2P_PORT": "8150",
+                "P2P_PORT": "8155",
             }
             result = subprocess.run(
                 [
@@ -287,8 +320,8 @@ class NodeworkerEntrypointTest(unittest.TestCase):
             )
 
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn("node config P2P port 8154 differs from P2P_PORT=8150", result.stderr)
-            self.assertRegex(runtime_config.read_text(encoding="utf-8"), r"(?m)^port=8150$")
+            self.assertIn("node config P2P port 8154 differs from P2P_PORT=8155", result.stderr)
+            self.assertRegex(runtime_config.read_text(encoding="utf-8"), r"(?m)^port=8155$")
             self.assertRegex(config_file.read_text(encoding="utf-8"), r"(?m)^port=8154$")
 
 
