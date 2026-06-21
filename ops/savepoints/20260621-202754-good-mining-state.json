@@ -1,0 +1,158 @@
+{
+  "schema_version": 1,
+  "savepoint_id": "20260621-202754-stack-redis-good-mining-state",
+  "recorded_at": "2026-06-21T20:27:54+02:00",
+  "host": "jeremy",
+  "timezone": "Africa/Johannesburg",
+  "purpose": "Non-regression save point for the current good stack-redis mining state. Future changes must preserve or measurably improve this state before being treated as progress.",
+  "source_commits": {
+    "stack-redis": {
+      "branch": "codex/native-safe-mining-20260620-stack",
+      "commit": "c305b662db2aaf4241c6705721408b4445a017c1"
+    },
+    "pool": {
+      "branch": "codex/native-safe-mining-20260620-pool",
+      "commit": "e02f5b5d68ca62888cbd145fd6928e04c98d3555"
+    },
+    "blockdag-corechain": {
+      "branch": "codex/native-safe-mining-20260620-corechain",
+      "commit": "33a449269607790e42bc38bcfa3fd213d82ed02e"
+    },
+    "redis-dash": {
+      "branch": "codex/native-safe-mining-20260620-dashboard",
+      "commit": "8a28b1817f3e10fe1505be5ba1dab93913cb6400"
+    }
+  },
+  "runtime_images": {
+    "stack-node": "sha256:229ad85f2eaa4427daf5bd554cf8ddc4279b5af97a83e70e0fa1e96c2ce2e8f7",
+    "stack-pool": "sha256:10636aca234fde99d09e32631cfd2c426f6135de0e9c3fb66cb5c35d2d642c10",
+    "stack-dashboard": "sha256:5cbcb0623ff97b7eb3fda55e84e16074c2e980e3185b819e8544ce0b1645370a",
+    "stack-status-sampler": "sha256:f5b2d0284e3f8a7fc25a73e7badd30f1e137043dd9bb79c3d3e57cc748837b50",
+    "stack-watchdog": "sha256:77117da6e9d9f9dcaee8a104dfe109db20db446f9ca96308f4a447886e1fd514",
+    "stack-sentinel": "sha256:af5e5fb015d4bf408dd6bddb6691cebff017486f6a6734baf7373647cbdcb53b"
+  },
+  "live_evidence": {
+    "dashboard_status": {
+      "status": "ok",
+      "overall": "ok",
+      "mode": "mining",
+      "can_accept_shares": true,
+      "can_submit_blocks": true,
+      "chain_block_count": 12183089,
+      "miner_health": {
+        "managed": 4,
+        "connected": 4,
+        "configured": 4
+      },
+      "asic_performance": {
+        "lanes": 4,
+        "ready": 4,
+        "accepted_30m": 564,
+        "rejected_local_30m": 43
+      }
+    },
+    "node_template_health": {
+      "checked_at_unix_ms": 1782066456306,
+      "main_order": 12183088,
+      "mineable_now": true,
+      "submit_ready": true,
+      "get_block_template_ready": true,
+      "sync_reason_code": "ok",
+      "p2p_mining_fresh": true,
+      "p2p_consensus_peer_count": 3,
+      "p2p_fresh_consensus_peer_count": 3,
+      "p2p_best_peer_lead_blocks": -2,
+      "p2p_best_peer_graph_state_age_ms": 756,
+      "chain_current": true
+    },
+    "pool_metrics": {
+      "active_connections": 4,
+      "ready_miners": 4,
+      "block_submit_outcomes": {
+        "accepted_ok": 566,
+        "rejected_node_syncing": 5,
+        "rejected_local_duplicate_block": 1,
+        "rejected_local_old_template_sequence": 1,
+        "rejected_local_stale_job": 39,
+        "rejected_local_stale_parent": 2
+      },
+      "template_coinbase_rejects": {
+        "ws_push_zero_template_address": 1162
+      }
+    },
+    "asic_performance": {
+      "generated_at_unix_ms": 1782066456237,
+      "lanes": 4,
+      "ready": 4,
+      "accepted_30m": 566,
+      "rejected_local_30m": 43,
+      "lanes_detail": [
+        {
+          "asic_mac": "28:e2:97:1e:c0:b5",
+          "remote_host": "192.168.1.101",
+          "ready": true,
+          "health": "ok",
+          "current_job_age_ms": 252,
+          "blocks_30m": 138,
+          "rejected_local_30m": 10
+        },
+        {
+          "asic_mac": "28:e2:97:3e:39:63",
+          "remote_host": "192.168.1.14",
+          "ready": true,
+          "health": "ok",
+          "current_job_age_ms": 252,
+          "blocks_30m": 143,
+          "rejected_local_30m": 8
+        },
+        {
+          "asic_mac": "28:e2:97:4d:44:3a",
+          "remote_host": "192.168.1.105",
+          "ready": true,
+          "health": "ok",
+          "current_job_age_ms": 252,
+          "blocks_30m": 136,
+          "rejected_local_30m": 12
+        },
+        {
+          "asic_mac": "2a:71:c7:f5:1f:1e",
+          "remote_host": "192.168.1.102",
+          "ready": true,
+          "health": "ok",
+          "current_job_age_ms": 252,
+          "blocks_30m": 149,
+          "rejected_local_30m": 13
+        }
+      ]
+    }
+  },
+  "non_regression_contract": {
+    "must_preserve": [
+      "dashboard mode must remain mining when node and pool are healthy",
+      "dashboard can_accept_shares and can_submit_blocks must remain true in healthy state",
+      "native node getTemplateHealth must report mineable_now, submit_ready, get_block_template_ready, p2p_mining_fresh, and chain_current",
+      "native node must have at least two fresh consensus peers before the pool is treated as mining-safe",
+      "pool must keep all four ASIC lanes identified by asic_mac, connected, ready, and health=ok",
+      "pool must reject missing, zero, invalid, or mismatched coinbase templates before miner broadcast",
+      "dashboard status must expose ASIC performance rows for all four local X100 miners"
+    ],
+    "minimum_live_gates": {
+      "dashboard_can_accept_shares": true,
+      "dashboard_can_submit_blocks": true,
+      "node_p2p_fresh_consensus_peer_count": 2,
+      "pool_active_connections": 4,
+      "pool_ready_miners": 4,
+      "asic_ready_lanes": 4
+    },
+    "performance_baseline": {
+      "sample_window_minutes": 30,
+      "accepted_blocks_total": 566,
+      "expected_asic_count": 4,
+      "note": "Short-window production is stochastic. Do not lower the operational baseline without a longer comparison window and evidence that the new state increases paid on-chain blocks."
+    }
+  },
+  "known_follow_up": {
+    "issue": "pool_template_coinbase_rejects_total continues increasing for source=ws-push and reason=zero-template-address",
+    "policy": "This is a source-quality issue to fix upstream. Do not weaken the pool coinbase invariant or allow zero-coinbase templates to reach ASIC work."
+  }
+}
