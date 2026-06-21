@@ -34,7 +34,8 @@
       "node mineable or synced state",
       "peer sanity with self and loopback peers filtered",
       "functional getBlockTemplate response",
-      "short mining RPC stability window"
+      "short mining RPC stability window",
+      "live node mutation guard for pool or paid-block evidence"
     ],
     "production_safety": "does not restart services or alter chain, pool, or database state"
   }
@@ -63,6 +64,7 @@
       <tr><td>Peer sanity</td><td>At least one active sane peer remains after filtering the node itself, empty or unparseable addresses, loopback, unspecified, and inactive peers.</td><td>The node may be isolated or accidentally connected only to itself/local addresses, or peer discovery may be advertising unusable peers.</td></tr>
       <tr><td>Template function</td><td><code>getBlockTemplate</code> returns required mining fields including height, parent, roots, coinbase address, and <code>nbits</code>.</td><td>The pool cannot create valid Stratum jobs even if containers look healthy.</td></tr>
       <tr><td>Mining RPC stability</td><td>The mineable/synced, peer sanity, and template checks keep passing across the configured short sample window.</td><td>The node or RPC path may be flapping during startup, peer discovery, or IBD recovery.</td></tr>
+      <tr><td>Live node mutation guard</td><td>Status-sampler tests prove node config edits and <code>node</code> recreates are blocked while <code>pool</code> is running or any accepted-block history exists.</td><td>A repair loop could restart a live mining node, lose the current datadir/identity view, and force the pool into catch-up instead of paid block production.</td></tr>
       <tr><td>Deployment portability</td><td>The local RC validator passes from a clean temporary source copy and the dashboard collectors use Python HTTP rather than host-only tools.</td><td>The release may work on the maintainer machine but fail on Pi5, Linux AMD64, macOS Docker Desktop, or Windows Docker Desktop because local runtime state or missing host utilities leaked into validation.</td></tr>
     </tbody>
   </table>
@@ -90,6 +92,7 @@
 # For CI or an installer:
 ./scripts/release-readiness-check.py --json</code></pre>
   <p class="warn">Do not bypass a failed gate by marking the deployment healthy. Fix the failing dependency or wait for sync/template readiness, then rerun the checker.</p>
+  <p class="warn">Do not use catch-up, peer-list, cache, or template-support repair paths to recreate a node that is serving a live pool or has accepted-block history. Stop the mining path intentionally before datadir restore or node replacement work, then re-enter service only after native template health is safe.</p>
 </main>
 </body>
 </html>

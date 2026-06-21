@@ -305,6 +305,18 @@ fresh paid-block evidence has expired. Chain-state restore is stricter than
 catch-up display state: it requires native peer-lag evidence and ignores
 EVM/public-reference lag by itself.
 
+Node config edits and service recreates are cold/idle operations. Before the
+pool is live, automation may prepare missing node mining/template support only
+after native safety gates pass. Once `pool` is running, or once any
+accepted-block history exists, automation must not rewrite node
+mining/template flags, peer lists, cache settings, or recreate `node`. Recovery
+should fail closed by pausing templates, preserving the existing node
+identity/data path, and waiting for native `getTemplateHealth` to prove
+`chain_current`, `p2p_mining_fresh`, `mineable_now`, and `submit_ready`. If
+chain data must be restored, stop the mining path deliberately, quarantine the
+old datadir, preserve `network.key`, restore a verified raw datadir or
+snapshot, and restart the existing `node` container without a Compose recreate.
+
 Dashboard block height is sourced from chain RPC `getBlockCount`; template
 height, logs, and main-order values are shown only as
 diagnostics. Build and release flows should run through

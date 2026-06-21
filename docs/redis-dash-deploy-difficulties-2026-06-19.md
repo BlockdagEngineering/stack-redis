@@ -213,6 +213,46 @@ During the fixed run, the pool correctly moved from zero ready miners while the
 node was behind peers to four ready miners after native health returned
 `submit_ready=true`.
 
+### 2026-06-21 Live Node Mutation Incident
+
+The stack later proved a separate automation hazard. While the pool had already
+accepted thousands of blocks, the status sampler saw ASIC demand and enabled
+node mining/template support. The accepted-block "recent" check had aged out by
+roughly 70 seconds, so the repair path edited runtime config and recreated the
+`node` service. The recreated node exposed near-genesis chain data even though
+the previous node had been mining close to the live chain, forcing the pool into
+`node_syncing` and correctly pausing jobs.
+
+Root failure:
+
+- paid work was treated as recent-only, not as durable evidence that the node is
+  production-active;
+- catch-up/runtime and node-template repairs were allowed to mutate node config
+  before proving the pool was cold or idle;
+- Compose recreate was used where preserving the existing node process identity
+  and datadir view mattered more than applying a convenience config repair.
+
+Mitigations now required by source:
+
+- Any running `pool` container, recent paid work, or lifetime accepted-block
+  evidence blocks node config edits and `node` recreates from status-sampler
+  automation. Cold/idle setup may prepare missing node mining/template support
+  before the pool is live, but only after native safety gates pass.
+- `recreate_node_services()` is the central guard for status-sampler node
+  recreates. Repair paths must call it rather than constructing their own
+  Compose recreate command.
+- Catch-up runtime adjustment may pause templates, but it must not rewrite node
+  mining flags, cache settings, peer lists, or recreate `node` while a live pool
+  or accepted-block history exists.
+- Chain restore is an explicit operator/self-heal flow: stop the mining path,
+  quarantine the old datadir, preserve `network.key`, restore a verified
+  datadir/snapshot, start the existing node, and require native
+  `getTemplateHealth` to prove `chain_current`, `p2p_mining_fresh`,
+  `mineable_now`, and `submit_ready` before mining resumes.
+- Release tests must include stale-but-present paid-work evidence. A lifetime
+  accepted-block count is enough to block live node mutation even when the last
+  accepted block is outside the short freshness window.
+
 ### ASIC Pool APIs Can Wedge While Controllers Stay Alive
 
 X100 controllers can still answer `/mcb/status` and `/mcb/setting` while the

@@ -1214,6 +1214,38 @@ def pool_has_recent_paid_work(payload: dict[str, Any]) -> bool:
     return False
 
 
+def pool_has_any_paid_work_evidence(payload: dict[str, Any]) -> bool:
+    sync_health = dict_value(payload.get("sync_health"))
+    paid_work = dict_value(sync_health.get("pool_paid_work_state"))
+    sources = (
+        paid_work,
+        dict_value(payload.get("pool")),
+        dict_value(payload.get("pool_health")),
+        dict_value(payload.get("pool_metrics")),
+    )
+    for source in sources:
+        for key in (
+            "accepted_block_submissions",
+            "accepted_block_submission_count",
+            "block_submit_success_count",
+            "accepted_blocks",
+            "blocks_found",
+        ):
+            if safe_int(source.get(key)) > 0:
+                return True
+    return False
+
+
+def live_pool_state_blocks_node_runtime_mutation(payload: dict[str, Any]) -> bool:
+    if pool_container_running(payload):
+        return True
+    if pool_has_recent_paid_work(payload):
+        return True
+    if pool_has_any_paid_work_evidence(payload):
+        return True
+    return False
+
+
 def status_payload_has_miner_activity_visibility_gap(payload: dict[str, Any]) -> bool:
     if not MINING_IMPERATIVE_MINER_ACTIVITY_REPAIR_ENABLED:
         return False
@@ -1307,6 +1339,8 @@ def node_mining_template_support_should_repair(payload: dict[str, Any]) -> bool:
     if not valid_mining_address(address):
         return False
     if not pool_start_gate.pool_start_decision(payload).allowed:
+        return False
+    if live_pool_state_blocks_node_runtime_mutation(payload):
         return False
     args = config_value("BDAG_NODE_MINING_ARGS")
     append_args = config_value("NODE_ARGS_APPEND")
@@ -1408,6 +1442,25 @@ def automation_repair_mutation_allowed(
 
 
 def recreate_node_services(payload: dict[str, Any], reason: str) -> tuple[bool, list[dict[str, Any]]]:
+    if live_pool_state_blocks_node_runtime_mutation(payload):
+        node_results = [
+            {
+                "service": service,
+                "returncode": None,
+                "ok": False,
+                "blocked": True,
+                "blocked_reason": "live pool or paid-block evidence blocks node recreate",
+            }
+            for service in node_services_for_recreate()
+        ]
+        record_incident(
+            "mining_imperative_node_recreate_live_pool_blocked",
+            "critical",
+            "Mining imperative left node services unchanged because live pool or paid-block evidence blocks recreate",
+            {"reason": reason, "node_recreate_results": node_results},
+            payload,
+        )
+        return False, node_results
     node_results = []
     ok = True
     for service in node_services_for_recreate():
@@ -1536,6 +1589,16 @@ def repair_miner_activity_visibility(payload: dict[str, Any]) -> bool:
 
 def repair_fastsync_orphan_peers(payload: dict[str, Any]) -> bool:
     peer_ids = fastsync_orphan_peer_ids(payload)
+    if live_pool_state_blocks_node_runtime_mutation(payload):
+        log("mining imperative left FastSync peer config unchanged because live pool state blocks node mutation")
+        record_incident(
+            "mining_imperative_fastsync_peer_quarantine_live_pool_blocked",
+            "critical",
+            "FastSync orphan peer quarantine was deferred because live pool or paid-block evidence blocks node mutation",
+            {"peer_ids": peer_ids},
+            payload,
+        )
+        return False
     if not automation_repair_mutation_allowed(
         automation_control.ACTION_CONFIG_EDIT,
         target="fastsync-peer-config",
@@ -1669,6 +1732,9 @@ def catchup_target_node_cache_mb() -> int:
 def apply_catchup_node_runtime(payload: dict[str, Any], policy: dict[str, Any]) -> bool:
     if pool_has_recent_paid_work(payload):
         log("catch-up runtime adjustment skipped because accepted block submissions remain recent")
+        return False
+    if live_pool_state_blocks_node_runtime_mutation(payload):
+        log("catch-up runtime adjustment skipped because live pool/miner state blocks node mutation")
         return False
     if not automation_repair_mutation_allowed(
         automation_control.ACTION_CONFIG_EDIT,
