@@ -292,6 +292,7 @@ class NoMinerCollectStatusTests(unittest.TestCase):
                         "node_mineable": True,
                         "node_submit_ready": True,
                         "node_p2p_mining_fresh": True,
+                        "node_p2p_fresh_consensus_peer_count": 3,
                         "node_p2p_best_peer_lead_blocks": 0,
                         "ws_connected": True,
                     }
@@ -301,6 +302,7 @@ class NoMinerCollectStatusTests(unittest.TestCase):
                     "node_mineable": True,
                     "node_submit_ready": True,
                     "node_p2p_mining_fresh": True,
+                    "node_p2p_fresh_consensus_peer_count": 3,
                     "node_p2p_best_peer_lead_blocks": 0,
                     "ws_connected": True,
                 },
@@ -355,6 +357,146 @@ class NoMinerCollectStatusTests(unittest.TestCase):
         self.assertEqual(status["sync_warnings"], [])
         self.assertTrue(status["sync_health"]["selected_backend_mining_safe"])
         self.assertEqual(status["sync_health"]["pool_metrics_accepted_block_submissions"], 8)
+
+    def test_no_logs_status_allows_submit_on_native_safe_small_peer_lead_without_recent_paid_work(self) -> None:
+        now = datetime(2026, 6, 21, 6, 55, 0, tzinfo=timezone.utc).timestamp()
+        pool_ops.time.time = lambda: now
+        pool_ops.NODES = ["node"]
+        pool_ops.OBSERVER_NODES = []
+        pool_ops.STACK_SERVICES = ["postgres", "node", "pool"]
+        pool_ops.SERVICES = list(pool_ops.STACK_SERVICES)
+        pool_ops.POOL_CONTAINER = "pool"
+        pool_ops.POOL_CONTAINERS = ["pool"]
+        pool_ops.ensure_runtime = lambda: None
+        pool_ops.docker_access_error = lambda: None
+        pool_ops.local_ipv4_addresses = lambda: ["192.168.1.100"]
+        pool_ops.default_miner_pool_settings = lambda: {
+            "pool_url": "stratum+tcp://192.168.1.100:3334",
+            "worker_user": "0x0000000000000000000000000000000000000000",
+            "pool_password": "x",
+        }
+        pool_ops.run = lambda command, timeout=20: pool_ops.CommandResult(command, 0, "", "", 0.0)
+        pool_ops.read_latest_action = lambda: None
+        pool_ops.discover_observer_node_services = lambda: []
+        pool_ops.docker_top = lambda _name: (
+            "UID PID PPID C STIME TTY TIME CMD\n"
+            "root 1 0 0 20:10 ? 00:00:01 /usr/local/bin/bdag\n"
+        )
+        pool_ops.docker_logs = lambda _name, lines=160: (_ for _ in ()).throw(
+            AssertionError("no-logs collection must not read docker logs")
+        )
+        pool_ops.docker_logs_many = lambda _names, lines=160: (_ for _ in ()).throw(
+            AssertionError("no-logs collection must not read docker logs")
+        )
+        pool_ops.collect_miner_health = lambda: (_ for _ in ()).throw(
+            AssertionError("no-logs collection must not scan miner APIs")
+        )
+        pool_ops.collect_template_probe_health = lambda: (_ for _ in ()).throw(
+            AssertionError("no-logs collection must not run template probes")
+        )
+        pool_ops.collect_host_pressure = lambda: {
+            "iowait_percent": 0.0,
+            "io_some_avg10": 0.0,
+            "io_full_avg10": 0.0,
+            "iowait_warning_active": False,
+            "samples": [],
+        }
+        pool_ops.docker_inspect = lambda names: {
+            name: {
+                "name": name,
+                "image": "test",
+                "running": True,
+                "status": "running",
+                "restart_count": 0,
+                "exit_code": 0,
+                "error": "",
+                "ports": {},
+            }
+            for name in names
+        }
+        pool_ops.collect_pool_prometheus_metrics = lambda _containers: {
+            "generated_at": "2026-06-21T06:55:00+0000",
+            "status": "ok",
+            "active_connections": 4.0,
+            "selected_backend": "node",
+            "block_submit_outcomes": {},
+            "blocks": {"found": 0},
+            "shares_accepted_total": 12.0,
+            "source_job_health": {"ok": True, "authorized_miners": 4, "ready_miners": 4},
+            "source_backend_health": {
+                "node": {
+                    "healthy": True,
+                    "node_mineable": True,
+                    "node_submit_ready": True,
+                    "node_p2p_mining_fresh": True,
+                    "node_p2p_fresh_consensus_peer_count": 3,
+                    "node_p2p_best_peer_lead_blocks": 4,
+                    "ws_connected": True,
+                }
+            },
+            "selected_backend_source_health": {
+                "healthy": True,
+                "node_mineable": True,
+                "node_submit_ready": True,
+                "node_p2p_mining_fresh": True,
+                "node_p2p_fresh_consensus_peer_count": 3,
+                "node_p2p_best_peer_lead_blocks": 4,
+                "ws_connected": True,
+            },
+            "template_conversion_stall": {},
+            "loss_ledger": {},
+        }
+        pool_ops.collect_sync_progress = lambda: {
+            "status": "syncing",
+            "percent": 99.9,
+            "current_block": 12_124_000,
+            "highest_block": 12_124_004,
+            "remaining_blocks": 4,
+            "source": "nodes",
+            "error": "eth_syncing active",
+            "chain_syncing": True,
+            "nodes": {
+                "node": {
+                    "status": "syncing",
+                    "percent": 99.9,
+                    "current_block": 12_124_000,
+                    "highest_block": 12_124_004,
+                    "remaining_blocks": 4,
+                    "source": "node:eth_syncing",
+                    "error": "eth_syncing active",
+                    "chain_syncing": True,
+                    "chain_block_count": 12_124_000,
+                    "chain_main_height": 12_124_000,
+                    "chain_rpc_source": "getBlockCount",
+                    "chain_rpc_latency_ms": 3.3,
+                    "chain_rpc_attempts": 1,
+                    "chain_rpc_retry_limit": 2,
+                    "chain_rpc_error": "",
+                }
+            },
+        }
+        pool_ops.observe_sync_progress_health = lambda _sync_progress: {
+            "active_nodes": [],
+            "active_node_count": 0,
+            "node_rates_blocks_per_second": {},
+            "lookback_seconds": 2700,
+        }
+        pool_ops.read_sync_coordinator_state = lambda: {}
+
+        status = pool_ops.collect_status(include_logs=False)
+
+        self.assertEqual(status["overall"], "ok", status["sync_warnings"])
+        self.assertEqual(status["mode"], "mining")
+        self.assertTrue(status["can_submit_blocks"])
+        self.assertTrue(status["can_mine"])
+        self.assertEqual(status["sync_warnings"], [])
+        self.assertFalse(status["sync_health"]["pool_has_recent_paid_work"])
+        self.assertTrue(status["sync_health"]["selected_backend_raw_mining_safe"])
+        self.assertTrue(status["sync_health"]["selected_backend_native_p2p_current_safe"])
+        self.assertTrue(status["sync_health"]["native_chain_progress_safe"])
+        joined_maintenance = "\n".join(status["maintenance_warnings"])
+        self.assertIn("selected pool backend is still catching up by 4 blocks", joined_maintenance)
+        self.assertIn("selected backend is mineable, submit-ready, and native P2P fresh", joined_maintenance)
 
     def test_no_logs_status_treats_raw_backend_flicker_as_advisory_when_paid_work_is_fresh(self) -> None:
         now = datetime(2026, 6, 21, 3, 45, 0, tzinfo=timezone.utc).timestamp()
@@ -427,6 +569,7 @@ class NoMinerCollectStatusTests(unittest.TestCase):
                     "node_mineable": False,
                     "node_submit_ready": False,
                     "node_p2p_mining_fresh": True,
+                    "node_p2p_fresh_consensus_peer_count": 3,
                     "node_p2p_best_peer_lead_blocks": 4,
                     "ws_connected": True,
                 }
@@ -436,6 +579,7 @@ class NoMinerCollectStatusTests(unittest.TestCase):
                 "node_mineable": False,
                 "node_submit_ready": False,
                 "node_p2p_mining_fresh": True,
+                "node_p2p_fresh_consensus_peer_count": 3,
                 "node_p2p_best_peer_lead_blocks": 4,
                 "ws_connected": True,
             },
@@ -1007,6 +1151,8 @@ class NoMinerCollectStatusTests(unittest.TestCase):
                 "node_mineable": True,
                 "node_submit_ready": True,
                 "node_p2p_mining_fresh": True,
+                "node_p2p_fresh_consensus_peer_count": 3,
+                "node_p2p_best_peer_lead_blocks": 0,
                 "ws_connected": True,
             },
             "template_conversion_stall": {},

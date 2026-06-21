@@ -72,6 +72,35 @@ def safe_native_status() -> dict[str, object]:
     }
 
 
+def advisory_evm_sync_status() -> dict[str, object]:
+    status = safe_native_status()
+    status["mode"] = "catchup_pause"
+    status["overall"] = "syncing"
+    status["status_reason"] = "catch-up pause active: EVM reference is behind, native mining safety is current"
+    status["catchup_policy"] = {
+        "active": True,
+        "remaining_blocks_advisory": True,
+        "native_advisory_safe": True,
+    }
+    status["sync_health"] = {
+        "catchup_pause_active": True,
+        "native_chain_progress_safe": True,
+    }
+    sync_progress = status["sync_progress"]
+    sync_progress["status"] = "syncing"
+    sync_progress["remaining_blocks"] = 5
+    sync_progress["chain_syncing"] = False
+    sync_progress["evm_chain_syncing"] = True
+    sync_progress["mining_advisory_sync"] = True
+    node = sync_progress["nodes"]["blockdag-node-1"]
+    node["status"] = "syncing"
+    node["remaining_blocks"] = 5
+    node["chain_syncing"] = False
+    node["evm_chain_syncing"] = True
+    node["mining_advisory_sync"] = True
+    return status
+
+
 class SingleGateOrchestrationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.original_stack_services = list(pool_ops.STACK_SERVICES)
@@ -109,6 +138,47 @@ class SingleGateOrchestrationTests(unittest.TestCase):
 
         self.assertFalse(decision.allowed)
         self.assertIn("sync progress is syncing with 5 block(s) remaining", decision.reason)
+
+    def test_shared_gate_allows_native_safe_advisory_evm_sync(self) -> None:
+        decision = pool_start_gate.pool_start_decision(advisory_evm_sync_status())
+
+        self.assertTrue(decision.allowed, decision.reason)
+
+    def test_shared_gate_blocks_advisory_evm_sync_when_native_proof_is_unsafe(self) -> None:
+        status = advisory_evm_sync_status()
+        node = status["sync_progress"]["nodes"]["blockdag-node-1"]
+        node["native_template_health"] = native_health(
+            p2p_mining_fresh=False,
+            p2p_mining_fresh_reason_code="no_fresh_peers",
+        )
+
+        decision = pool_start_gate.pool_start_decision(status)
+
+        self.assertFalse(decision.allowed)
+        self.assertIn("p2p_mining_fresh_not_true:no_fresh_peers", decision.reason)
+        self.assertIn("chain catch-up pause is active", decision.reason)
+
+    def test_shared_gate_peer_lead_threshold_is_inclusive_and_fails_closed_when_unknown(self) -> None:
+        for lead in (10, 11, 12):
+            status = safe_native_status()
+            node = status["sync_progress"]["nodes"]["blockdag-node-1"]
+            node["native_template_health"] = native_health(p2p_best_peer_lead_blocks=lead)
+            decision = pool_start_gate.pool_start_decision(status)
+            self.assertTrue(decision.allowed, f"lead={lead}: {decision.reason}")
+
+        unsafe = safe_native_status()
+        unsafe["sync_progress"]["nodes"]["blockdag-node-1"]["native_template_health"] = native_health(
+            p2p_best_peer_lead_blocks=13
+        )
+        self.assertFalse(pool_start_gate.pool_start_decision(unsafe).allowed)
+
+        unknown = safe_native_status()
+        unknown["sync_progress"]["nodes"]["blockdag-node-1"]["native_template_health"].pop(
+            "p2p_best_peer_lead_blocks"
+        )
+        decision = pool_start_gate.pool_start_decision(unknown)
+        self.assertFalse(decision.allowed)
+        self.assertIn("p2p_peer_lead_unknown", decision.reason)
 
     def test_shared_gate_blocks_synced_status_without_native_proof(self) -> None:
         decision = pool_start_gate.pool_start_decision(

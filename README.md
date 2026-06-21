@@ -305,6 +305,14 @@ fresh paid-block evidence has expired. Chain-state restore is stricter than
 catch-up display state: it requires native peer-lag evidence and ignores
 EVM/public-reference lag by itself.
 
+EVM/public-reference lag is advisory only after native mining proof is complete:
+`getTemplateHealth` or backend metrics must prove current chain, fresh P2P,
+fresh consensus peer floor, peer lead inside the configured safety window,
+template readiness, and submit readiness. Unknown peer count or unknown peer
+lead fails closed. When miners are connected, zero ready miner lanes keeps
+`can_submit_blocks=false` unless fresh paid-block evidence proves the submit
+path is already converting work.
+
 Node config edits and service recreates are cold/idle operations. Before the
 pool is live, automation may prepare missing node mining/template support only
 after native safety gates pass. Once `pool` is running, or once any

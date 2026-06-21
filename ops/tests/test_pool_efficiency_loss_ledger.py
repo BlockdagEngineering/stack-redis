@@ -93,7 +93,7 @@ class PoolEfficiencyLossLedgerTests(unittest.TestCase):
                     "node_submit_ready": False,
                     "node_p2p_mining_fresh": True,
                     "node_p2p_fresh_consensus_peer_count": 2,
-                    "node_p2p_best_peer_lead_blocks": 10,
+                    "node_p2p_best_peer_lead_blocks": pool_ops.CATCHUP_NATIVE_P2P_MAX_PEER_LEAD_BLOCKS,
                 }
             )
         )
@@ -109,7 +109,7 @@ class PoolEfficiencyLossLedgerTests(unittest.TestCase):
             "healthy": True,
             "node_p2p_mining_fresh": True,
             "node_p2p_fresh_consensus_peer_count": 3,
-            "node_p2p_best_peer_lead_blocks": 11,
+            "node_p2p_best_peer_lead_blocks": pool_ops.CATCHUP_NATIVE_P2P_MAX_PEER_LEAD_BLOCKS + 1,
         }
         stale = {
             "healthy": True,
@@ -121,6 +121,38 @@ class PoolEfficiencyLossLedgerTests(unittest.TestCase):
         self.assertFalse(pool_ops.selected_backend_native_p2p_current_safe(peer_loss))
         self.assertFalse(pool_ops.selected_backend_native_p2p_current_safe(peer_lead))
         self.assertFalse(pool_ops.selected_backend_native_p2p_current_safe(stale))
+
+    def test_selected_backend_safety_fails_closed_on_unknown_peer_floor_or_lead(self) -> None:
+        base = {
+            "healthy": True,
+            "node_mineable": True,
+            "node_submit_ready": True,
+            "node_p2p_mining_fresh": True,
+            "node_p2p_fresh_consensus_peer_count": 3,
+            "node_p2p_best_peer_lead_blocks": 0,
+        }
+
+        self.assertTrue(pool_ops.selected_backend_mining_safe(base))
+        self.assertTrue(pool_ops.selected_backend_native_p2p_current_safe(base))
+
+        missing_peers = dict(base)
+        missing_peers.pop("node_p2p_fresh_consensus_peer_count")
+        self.assertFalse(pool_ops.selected_backend_mining_safe(missing_peers))
+        self.assertFalse(pool_ops.selected_backend_native_p2p_current_safe(missing_peers))
+
+        missing_lead = dict(base)
+        missing_lead.pop("node_p2p_best_peer_lead_blocks")
+        self.assertFalse(pool_ops.selected_backend_mining_safe(missing_lead))
+        self.assertFalse(pool_ops.selected_backend_native_p2p_current_safe(missing_lead))
+
+        for lead in (10, 11, 12):
+            safe = dict(base, node_p2p_best_peer_lead_blocks=lead)
+            self.assertTrue(pool_ops.selected_backend_mining_safe(safe), f"lead={lead}")
+            self.assertTrue(pool_ops.selected_backend_native_p2p_current_safe(safe), f"lead={lead}")
+
+        unsafe = dict(base, node_p2p_best_peer_lead_blocks=13)
+        self.assertFalse(pool_ops.selected_backend_mining_safe(unsafe))
+        self.assertFalse(pool_ops.selected_backend_native_p2p_current_safe(unsafe))
 
     def test_selected_backend_source_degradation_is_advisory_with_recent_paid_work(self) -> None:
         advisory = pool_ops.selected_backend_source_degradation(True, True)
@@ -304,6 +336,7 @@ pool_rpc_backend_healthy{node="node",pool_id="0"} 1
 pool_rpc_backend_node_health_mineable{node="node",pool_id="0"} 1
 pool_rpc_backend_node_health_submit_ready{node="node",pool_id="0"} 1
 pool_rpc_backend_node_health_p2p_mining_fresh{node="node",pool_id="0"} 1
+pool_rpc_backend_node_health_p2p_fresh_consensus_peer_count{node="node",pool_id="0"} 3
 pool_rpc_backend_node_health_p2p_best_peer_lead_blocks{node="node",pool_id="0"} 0
 pool_job_health_ok{pool_id="0"} 1
 pool_job_health_ready_miners{pool_id="0"} 3

@@ -278,6 +278,45 @@ def native_mining_safety_proven(status: dict[str, Any]) -> tuple[bool, str]:
     return False, "native mining safety proof is unsafe: " + "; ".join(details[:4])
 
 
+def native_safe_advisory_sync(status: dict[str, Any], native_safe: bool) -> bool:
+    if not native_safe:
+        return False
+    sync_health = status.get("sync_health") if isinstance(status.get("sync_health"), dict) else {}
+    catchup_policy = status.get("catchup_policy") if isinstance(status.get("catchup_policy"), dict) else {}
+    if any(
+        sync_health.get(key) is True
+        for key in (
+            "mining_advisory_sync",
+            "native_chain_progress_safe",
+            "selected_backend_native_p2p_current_safe",
+            "selected_backend_mining_safe",
+        )
+    ):
+        return True
+    if catchup_policy.get("remaining_blocks_advisory") is True or catchup_policy.get("native_advisory_safe") is True:
+        return True
+
+    def progress_is_advisory(progress: Any) -> bool:
+        if not isinstance(progress, dict):
+            return False
+        return bool(
+            progress.get("mining_advisory_sync") is True
+            or (
+                progress.get("evm_chain_syncing") is True
+                and progress.get("chain_syncing") is not True
+            )
+        )
+
+    sync_progress = status.get("sync_progress")
+    if progress_is_advisory(sync_progress):
+        return True
+    if isinstance(sync_progress, dict):
+        nodes = sync_progress.get("nodes")
+        if isinstance(nodes, dict) and any(progress_is_advisory(node) for node in nodes.values()):
+            return True
+    return False
+
+
 def pool_start_decision(status: dict[str, Any] | None, *, status_source: str = "direct") -> PoolStartGateDecision:
     if not isinstance(status, dict):
         return PoolStartGateDecision(False, ("stack status unavailable; cannot prove pool start is safe",), status_source)
@@ -298,15 +337,18 @@ def pool_start_decision(status: dict[str, Any] | None, *, status_source: str = "
 
     sync_health = status.get("sync_health") if isinstance(status.get("sync_health"), dict) else {}
     catchup_policy = status.get("catchup_policy") if isinstance(status.get("catchup_policy"), dict) else {}
+    native_safe, native_reason = native_mining_safety_proven(status)
+    advisory_native_sync = native_safe_advisory_sync(status, native_safe)
+
     if sync_health.get("public_chain_divergence") or sync_health.get("public_chain_divergence_nodes"):
         reasons.append("public-chain divergence containment is active")
-    if catchup_policy.get("active") or sync_health.get("catchup_pause_active"):
+    if (catchup_policy.get("active") or sync_health.get("catchup_pause_active")) and not advisory_native_sync:
         reasons.append("chain catch-up pause is active")
 
     sync_progress = status.get("sync_progress") if isinstance(status.get("sync_progress"), dict) else {}
     sync_status = str(sync_progress.get("status") or "").strip().lower()
     sync_lag = _sync_progress_lag_blocks(status)
-    if sync_status in {"syncing", "catchup_pause"}:
+    if sync_status in {"syncing", "catchup_pause"} and not advisory_native_sync:
         if sync_lag > 0:
             reasons.append(f"sync progress is {sync_status} with {sync_lag} block(s) remaining")
         else:
@@ -321,9 +363,9 @@ def pool_start_decision(status: dict[str, Any] | None, *, status_source: str = "
 
     mode = str(status.get("mode") or "").strip().lower()
     overall = str(status.get("overall") or "").strip().lower()
-    if mode in UNSAFE_MODES:
+    if mode in UNSAFE_MODES and not advisory_native_sync:
         reasons.append(f"status mode is not safe for pool start: {mode}")
-    if overall == "syncing":
+    if overall == "syncing" and not advisory_native_sync:
         reasons.append("overall stack status is syncing")
     if overall == "down" and mode not in READY_DOWN_MODES:
         reasons.append(f"overall stack status is down with non-ready mode: {mode or 'unknown'}")
@@ -332,7 +374,6 @@ def pool_start_decision(status: dict[str, Any] | None, *, status_source: str = "
     if isinstance(rpc_template, dict) and rpc_template.get("all_nodes_ready") is False:
         reasons.append("node template health is not ready")
 
-    native_safe, native_reason = native_mining_safety_proven(status)
     if not native_safe:
         reasons.append(native_reason)
 
@@ -353,6 +394,8 @@ def pool_start_decision(status: dict[str, Any] | None, *, status_source: str = "
         ("client in initial download", "node reports initial download"),
     )
     for needle, message in text_blockers:
+        if advisory_native_sync and needle != "public-chain divergence":
+            continue
         if needle in reason_text and message not in reasons:
             reasons.append(message)
 

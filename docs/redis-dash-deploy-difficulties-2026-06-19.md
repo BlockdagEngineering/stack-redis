@@ -252,6 +252,15 @@ Mitigations now required by source:
 - Release tests must include stale-but-present paid-work evidence. A lifetime
   accepted-block count is enough to block live node mutation even when the last
   accepted block is outside the short freshness window.
+- EVM/public-reference lag and cached catch-up state are advisory only when
+  native mining proof is complete: current chain, fresh P2P, fresh consensus
+  peer floor, safe peer lead, template readiness, and submit readiness. Unknown
+  peer count or unknown peer lead fails closed.
+- A selected backend may not be treated as mining-safe from `p2p_mining_fresh`
+  alone. Backend metrics must also include enough peer-count and peer-lead
+  evidence, and connected miners with zero ready lanes keep
+  `can_submit_blocks=false` unless fresh paid-block evidence proves the submit
+  path is already working.
 
 ### ASIC Pool APIs Can Wedge While Controllers Stay Alive
 

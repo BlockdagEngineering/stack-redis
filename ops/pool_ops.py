@@ -275,7 +275,7 @@ CATCHUP_NATIVE_P2P_MIN_FRESH_CONSENSUS_PEERS = env_int(
 )
 CATCHUP_NATIVE_P2P_MAX_PEER_LEAD_BLOCKS = env_int(
     "BDAG_CATCHUP_NATIVE_P2P_MAX_PEER_LEAD_BLOCKS",
-    10,
+    pool_start_gate.MAX_NATIVE_PEER_LEAD_BLOCKS,
     minimum=0,
 )
 SYNC_PROGRESS_ACTIVE_LOOKBACK_SECONDS = int(os.environ.get("BDAG_SYNC_PROGRESS_ACTIVE_LOOKBACK_SECONDS", "2700"))
@@ -847,10 +847,26 @@ def selected_backend_mining_safe(selected_source_health: Mapping[str, Any] | Non
         return False
     if selected_source_health.get("node_p2p_mining_fresh") is not True:
         return False
-    peer_lead = safe_float(selected_source_health.get("node_p2p_best_peer_lead_blocks"), 0.0)
-    if peer_lead is not None and peer_lead > 10:
+    if not selected_backend_peer_floor_safe(selected_source_health):
+        return False
+    if not selected_backend_peer_lead_safe(selected_source_health):
         return False
     return True
+
+
+def selected_backend_peer_floor_safe(selected_source_health: Mapping[str, Any]) -> bool:
+    fresh_peers = safe_int(selected_source_health.get("node_p2p_fresh_consensus_peer_count"), -1)
+    if fresh_peers >= 0:
+        return fresh_peers >= CATCHUP_NATIVE_P2P_MIN_FRESH_CONSENSUS_PEERS
+    consensus_peers = safe_int(selected_source_health.get("node_p2p_consensus_peer_count"), -1)
+    if consensus_peers >= 0:
+        return consensus_peers >= CATCHUP_NATIVE_P2P_MIN_FRESH_CONSENSUS_PEERS
+    return False
+
+
+def selected_backend_peer_lead_safe(selected_source_health: Mapping[str, Any]) -> bool:
+    peer_lead = safe_float(selected_source_health.get("node_p2p_best_peer_lead_blocks"), None)
+    return bool(peer_lead is not None and peer_lead <= CATCHUP_NATIVE_P2P_MAX_PEER_LEAD_BLOCKS)
 
 
 def selected_backend_native_p2p_current_safe(selected_source_health: Mapping[str, Any] | None) -> bool:
@@ -860,14 +876,9 @@ def selected_backend_native_p2p_current_safe(selected_source_health: Mapping[str
         return False
     if selected_source_health.get("node_p2p_mining_fresh") is not True:
         return False
-    fresh_peers = safe_int(selected_source_health.get("node_p2p_fresh_consensus_peer_count"), -1)
-    if fresh_peers >= 0 and fresh_peers < CATCHUP_NATIVE_P2P_MIN_FRESH_CONSENSUS_PEERS:
+    if not selected_backend_peer_floor_safe(selected_source_health):
         return False
-    consensus_peers = safe_int(selected_source_health.get("node_p2p_consensus_peer_count"), -1)
-    if fresh_peers < 0 and consensus_peers >= 0 and consensus_peers < CATCHUP_NATIVE_P2P_MIN_FRESH_CONSENSUS_PEERS:
-        return False
-    peer_lead = safe_float(selected_source_health.get("node_p2p_best_peer_lead_blocks"), 0.0)
-    if peer_lead is not None and peer_lead > CATCHUP_NATIVE_P2P_MAX_PEER_LEAD_BLOCKS:
+    if not selected_backend_peer_lead_safe(selected_source_health):
         return False
     return True
 
@@ -889,8 +900,9 @@ def selected_backend_recent_paid_work_safe(
         return False
     if selected_source_health.get("node_last_template_build_error_blocking") is True:
         return False
-    peer_lead = safe_float(selected_source_health.get("node_p2p_best_peer_lead_blocks"), 0.0)
-    if peer_lead is not None and peer_lead > 10:
+    if not selected_backend_peer_floor_safe(selected_source_health):
+        return False
+    if not selected_backend_peer_lead_safe(selected_source_health):
         return False
     metrics = pool_metrics if isinstance(pool_metrics, Mapping) else {}
     job_health = source_job_health if isinstance(source_job_health, Mapping) else {}
@@ -6223,6 +6235,21 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
         if isinstance(selected_source_health, dict)
         else None
     )
+    source_ready_miners = safe_int(source_job_health.get("ready_miners"), -1)
+    source_ready_miners_known = "ready_miners" in source_job_health
+    source_job_no_ready_miners = bool(
+        connected_miners > 0
+        and not pool_has_recent_paid_work
+        and source_ready_miners_known
+        and source_ready_miners <= 0
+    )
+    source_job_readiness_unknown = bool(
+        connected_miners > 0
+        and not pool_has_recent_paid_work
+        and not source_ready_miners_known
+    )
+    pool["source_job_no_ready_miners"] = source_job_no_ready_miners
+    pool["source_job_readiness_unknown"] = source_job_readiness_unknown
     pool_initial_download_needs_repair = bool(pool.get("initial_download") and not pool_initial_download_transient)
     pool["initial_download_transient"] = pool_initial_download_transient
     pool["initial_download_needs_repair"] = pool_initial_download_needs_repair
@@ -6241,7 +6268,14 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
     sync_health["source_degradation_advisory_safe"] = source_degradation_advisory_safe
     sync_health["source_degradation_advisory_basis"] = source_degradation_advisory_basis
     sync_health["selected_backend_mining_safe"] = selected_source_mining_safe
-    if connected_miners > 0 and readiness_override_safe and sync_warnings:
+    advisory_sync_warning_basis = ""
+    if readiness_override_safe:
+        advisory_sync_warning_basis = "accepted block submission remains fresh"
+    elif raw_selected_source_mining_safe and source_job_health_ok is not False:
+        advisory_sync_warning_basis = "selected backend is mineable, submit-ready, and native P2P fresh"
+    elif native_chain_progress_safe and not selected_source_unready_reasons and source_job_health_ok is not False:
+        advisory_sync_warning_basis = source_degradation_advisory_basis
+    if connected_miners > 0 and advisory_sync_warning_basis and sync_warnings:
         advisory_sync_warnings = [
             item for item in sync_warnings
             if is_recent_mining_sync_noise(item)
@@ -6256,7 +6290,7 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
                 if not is_recent_mining_sync_noise(item)
             ]
             for item in advisory_sync_warnings:
-                add_maintenance_warning(f"{item}; accepted block submission remains fresh")
+                add_maintenance_warning(f"{item}; {advisory_sync_warning_basis}")
     readiness_contract = selected_backend_readiness_contract(
         str(pool.get("selected_backend") or ""),
         selected_source_health,
@@ -6302,6 +6336,12 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
     elif connected_miners > 0 and source_health_transient_degraded:
         backend = pool.get("selected_backend") or "selected backend"
         add_maintenance_warning(f"pool source health says {backend} is degraded, but {source_degradation_advisory_basis}")
+    if source_job_no_ready_miners:
+        add_sync_warning(
+            f"pool source job health reports zero ready miners while {connected_miners} miner(s) are connected"
+        )
+    elif source_job_readiness_unknown:
+        add_sync_warning("pool source job readiness is unknown while miners are connected")
     if connected_miners > 0 and pool.get("share_stall"):
         age = pool.get("last_valid_share_age_seconds")
         age_text = f"{age}s" if age is not None else "unknown"

@@ -297,6 +297,59 @@ class StatusSamplerMiningImperativeTests(unittest.TestCase):
         self.assertTrue(decision["evm_reference_gap"]["restore_suppressed_by_native_paid_work"])
         self.assertIn("native mining safety", decision["evm_reference_gap"]["reason"])
 
+    def test_evm_reference_gap_stall_is_advisory_when_native_chain_progress_is_safe_without_recent_paid_work(self) -> None:
+        now = 1_779_200_000
+        payload = self.evm_gap_payload(lag=14_140, local=11_691_000)
+        payload["sync_health"] = {"native_chain_progress_safe": True}
+        payload["sync_progress"]["nodes"] = {
+            "node": {"native_template_health": self.native_template_health(True)}
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            status_sampler.EVM_REFERENCE_GAP_WATCH_FILE = pathlib.Path(tmpdir) / "evm-gap-watch.json"
+            status_sampler.EVM_REFERENCE_GAP_WATCH_FILE.write_text(
+                json.dumps(
+                    {
+                        "candidate": True,
+                        "best_lag_blocks": 14_100,
+                        "first_unimproved_epoch": now - 901,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with mock.patch.object(status_sampler.time, "time", return_value=now):
+                decision = status_sampler.chain_state_restore_decision(payload)
+
+        self.assertFalse(decision["should_repair"])
+        self.assertFalse(decision["evm_reference_gap"]["restore_required"])
+        self.assertTrue(decision["evm_reference_gap"]["would_restore_required"])
+        self.assertTrue(decision["evm_reference_gap"]["restore_suppressed_by_native_mining_safety"])
+        self.assertIn("native mining safety", decision["evm_reference_gap"]["reason"])
+
+    def test_evm_reference_gap_still_restores_when_native_template_proof_is_unsafe(self) -> None:
+        now = 1_779_200_000
+        payload = self.evm_gap_payload(lag=14_140, local=11_691_000)
+        payload["sync_progress"]["nodes"] = {
+            "node": {"native_template_health": self.native_template_health(False)}
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            status_sampler.EVM_REFERENCE_GAP_WATCH_FILE = pathlib.Path(tmpdir) / "evm-gap-watch.json"
+            status_sampler.EVM_REFERENCE_GAP_WATCH_FILE.write_text(
+                json.dumps(
+                    {
+                        "candidate": True,
+                        "best_lag_blocks": 14_100,
+                        "first_unimproved_epoch": now - 901,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with mock.patch.object(status_sampler.time, "time", return_value=now):
+                decision = status_sampler.chain_state_restore_decision(payload)
+
+        self.assertTrue(decision["should_repair"])
+        self.assertTrue(decision["evm_reference_gap"]["restore_required"])
+        self.assertFalse(decision["evm_reference_gap"]["restore_suppressed_by_native_mining_safety"])
+
     def test_stalled_import_watch_resets_invalid_zero_epoch(self) -> None:
         now = 1_779_200_000
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -361,6 +414,20 @@ class StatusSamplerMiningImperativeTests(unittest.TestCase):
             "evm_reference_gap_stalled": True,
             "evm_reference_gap_watch": {"restore_required": True},
             "pool_has_recent_paid_work": True,
+        }
+        payload["sync_progress"]["nodes"] = {
+            "node": {"native_template_health": self.native_template_health(True)}
+        }
+
+        self.assertEqual([], status_sampler.chain_state_restore_hard_reasons(payload))
+
+    def test_cached_evm_restore_flag_is_not_hard_when_native_chain_progress_is_safe_without_paid_work(self) -> None:
+        payload = self.evm_gap_payload(lag=14_140, local=11_691_000)
+        payload["sync_health"] = {
+            "needs_chain_data_restore": True,
+            "evm_reference_gap_stalled": True,
+            "evm_reference_gap_watch": {"restore_required": True},
+            "native_chain_progress_safe": True,
         }
         payload["sync_progress"]["nodes"] = {
             "node": {"native_template_health": self.native_template_health(True)}
@@ -557,6 +624,57 @@ class StatusSamplerMiningImperativeTests(unittest.TestCase):
         self.assertEqual(policy["lag_blocks"], 24)
         self.assertEqual(policy["trigger"], "")
 
+    def test_catchup_policy_treats_remaining_blocks_as_advisory_when_native_chain_progress_is_safe(self) -> None:
+        payload = self.stopped_pool_payload(sync_status="syncing", remaining_blocks=14_982)
+        payload["sync_health"] = {"native_chain_progress_safe": True}
+        payload["catchup_policy"] = {
+            "active": True,
+            "syncing_active": True,
+            "lag_blocks": 14_982,
+            "threshold_blocks": 300,
+        }
+        payload["sync_progress"]["nodes"] = {
+            "node": {
+                "remaining_blocks": 14_982,
+                "peer_ahead_blocks": 4,
+                "native_template_health": self.native_template_health(True),
+            }
+        }
+
+        policy = status_sampler.catchup_policy_from_payload(payload)
+
+        self.assertFalse(policy["active"])
+        self.assertFalse(policy["syncing_active"])
+        self.assertTrue(policy["mining_ready"])
+        self.assertTrue(policy["remaining_blocks_advisory"])
+        self.assertTrue(policy["native_advisory_safe"])
+        self.assertEqual(policy["lag_blocks"], 4)
+        self.assertEqual(policy["trigger"], "")
+
+    def test_catchup_policy_keeps_pause_when_native_template_proof_is_unsafe(self) -> None:
+        payload = self.stopped_pool_payload(sync_status="syncing", remaining_blocks=14_982)
+        payload["catchup_policy"] = {
+            "active": True,
+            "syncing_active": True,
+            "lag_blocks": 14_982,
+            "threshold_blocks": 300,
+        }
+        payload["sync_progress"]["nodes"] = {
+            "node": {
+                "remaining_blocks": 14_982,
+                "peer_ahead_blocks": 14_982,
+                "native_template_health": self.native_template_health(False),
+            }
+        }
+
+        policy = status_sampler.catchup_policy_from_payload(payload)
+
+        self.assertTrue(policy["active"])
+        self.assertTrue(policy["syncing_active"])
+        self.assertFalse(policy["native_advisory_safe"])
+        self.assertFalse(policy["remaining_blocks_advisory"])
+        self.assertEqual(policy["trigger"], "node_syncing")
+
     def test_apply_catchup_node_runtime_skips_recent_paid_work(self) -> None:
         payload = self.stopped_pool_payload(sync_status="syncing", remaining_blocks=14_982)
         payload["sync_health"] = {"pool_has_recent_paid_work": True}
@@ -570,6 +688,30 @@ class StatusSamplerMiningImperativeTests(unittest.TestCase):
         applied = status_sampler.apply_catchup_node_runtime(
             payload,
             {"active": True, "lag_blocks": 14_982, "threshold_blocks": 300},
+        )
+
+        self.assertFalse(applied)
+
+    def test_apply_catchup_node_runtime_skips_native_safe_evm_advisory_sync(self) -> None:
+        payload = self.stopped_pool_payload(sync_status="syncing", remaining_blocks=14_982)
+        payload["sync_health"] = {"native_chain_progress_safe": True}
+        payload["sync_progress"]["nodes"] = {
+            "node": {
+                "remaining_blocks": 14_982,
+                "peer_ahead_blocks": 4,
+                "native_template_health": self.native_template_health(True),
+            }
+        }
+        status_sampler.set_runtime_env_value = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("runtime env must not be changed when native mining safety is proven")
+        )
+        status_sampler.run = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("node must not be recreated when native mining safety is proven")
+        )
+
+        applied = status_sampler.apply_catchup_node_runtime(
+            payload,
+            status_sampler.catchup_policy_from_payload(payload),
         )
 
         self.assertFalse(applied)

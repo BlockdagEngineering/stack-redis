@@ -508,13 +508,31 @@ def public_chain_divergence_reasons(payload: dict[str, Any]) -> list[str]:
     return sorted(set(str(item) for item in reasons if item))
 
 
+def native_chain_progress_advisory_safe(payload: dict[str, Any]) -> tuple[bool, str]:
+    sync_health = dict_value(payload.get("sync_health"))
+    for key, reason in (
+        ("native_chain_progress_safe", "native chain progress is already marked safe"),
+        ("selected_backend_native_p2p_current_safe", "selected backend native P2P/current-chain proof is marked safe"),
+        ("selected_backend_mining_safe", "selected backend is marked mining-safe"),
+        ("native_progress_paid_work_safe", "native progress and recent paid work are already marked safe"),
+    ):
+        if sync_health.get(key) is True:
+            return True, reason
+    native_safe, native_reason = pool_start_gate.native_mining_safety_proven(payload)
+    if native_safe:
+        return True, native_reason
+    return False, native_reason
+
+
 def catchup_lag_blocks(payload: dict[str, Any]) -> int:
     values: list[int] = []
     paid_work_recent = pool_has_recent_paid_work(payload)
-    lag_keys = ("peer_ahead_blocks",) if paid_work_recent else ("remaining_blocks", "peer_ahead_blocks")
+    native_advisory_safe, _native_advisory_reason = native_chain_progress_advisory_safe(payload)
+    remaining_blocks_advisory = bool(paid_work_recent or native_advisory_safe)
+    lag_keys = ("peer_ahead_blocks",) if remaining_blocks_advisory else ("remaining_blocks", "peer_ahead_blocks")
     policy = dict_value(payload.get("catchup_policy"))
     policy_lag = safe_int(policy.get("lag_blocks"), -1)
-    if policy_lag >= 0 and not paid_work_recent:
+    if policy_lag >= 0 and not remaining_blocks_advisory:
         values.append(policy_lag)
 
     sync = dict_value(payload.get("sync_progress"))
@@ -628,8 +646,14 @@ def catchup_policy_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
     sync = dict_value(payload.get("sync_progress"))
     sync_status = str(sync.get("status") or "").strip().lower()
     paid_work_recent = pool_has_recent_paid_work(payload)
-    mining_ready = bool(policy.get("mining_ready", payload.get("can_mine") is True) or paid_work_recent)
-    cached_syncing_active = bool(policy.get("syncing_active")) and not paid_work_recent
+    native_advisory_safe, native_advisory_reason = native_chain_progress_advisory_safe(payload)
+    remaining_blocks_advisory = bool(paid_work_recent or native_advisory_safe)
+    mining_ready = bool(
+        policy.get("mining_ready", payload.get("can_mine") is True)
+        or paid_work_recent
+        or native_advisory_safe
+    )
+    cached_syncing_active = bool(policy.get("syncing_active")) and not remaining_blocks_advisory
     syncing_active = bool(
         cached_syncing_active
         or (
@@ -662,7 +686,7 @@ def catchup_policy_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
     active = bool(policy.get("active")) if "active" in policy else False
     if not active:
         active = bool(CATCHUP_PAUSE_ENABLED and (syncing_active or io_pressure_active or lag_threshold_active))
-    if active and paid_work_recent and not (syncing_active or io_pressure_active or lag_threshold_active):
+    if active and remaining_blocks_advisory and not (syncing_active or io_pressure_active or lag_threshold_active):
         active = False
     trigger = str(policy.get("trigger") or "")
     if not trigger and active:
@@ -691,7 +715,9 @@ def catchup_policy_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "backend_unready_under_pressure": backend_unready_under_pressure,
         "lag_threshold_active": lag_threshold_active,
         "mining_ready": mining_ready,
-        "remaining_blocks_advisory": paid_work_recent,
+        "remaining_blocks_advisory": remaining_blocks_advisory,
+        "native_advisory_safe": native_advisory_safe,
+        "native_advisory_reason": native_advisory_reason if native_advisory_safe else "",
     }
 
 
@@ -759,15 +785,12 @@ def evm_reference_gap_native_paid_advisory(payload: dict[str, Any]) -> tuple[boo
     sync_health = dict_value(payload.get("sync_health"))
     if sync_health.get("native_progress_paid_work_safe") is True:
         return True, "native progress and recent paid work are already marked safe"
-    if sync_health.get("selected_backend_mining_safe") is True and sync_health.get("pool_has_recent_paid_work") is True:
-        return True, "selected backend is mining-safe and recent paid work is present"
-
-    native_safe, native_reason = pool_start_gate.native_mining_safety_proven(payload)
-    if not native_safe:
-        return False, native_reason
-    if not pool_has_recent_paid_work(payload):
-        return False, "native safety proof exists but recent paid work is missing"
-    return True, native_reason
+    if sync_health.get("selected_backend_mining_safe") is True:
+        reason = "selected backend is mining-safe"
+        if sync_health.get("pool_has_recent_paid_work") is True:
+            reason += " and recent paid work is present"
+        return True, reason
+    return native_chain_progress_advisory_safe(payload)
 
 
 def sync_progress_height(payload: dict[str, Any]) -> int:
@@ -1023,8 +1046,10 @@ def update_evm_reference_gap_watch(payload: dict[str, Any]) -> dict[str, Any]:
         "candidate": True,
         "restore_required": restore_required,
         "would_restore_required": would_restore_required,
+        "restore_suppressed_by_native_mining_safety": bool(would_restore_required and advisory_safe),
         "restore_suppressed_by_native_paid_work": bool(would_restore_required and advisory_safe),
         "native_paid_work_advisory_reason": advisory_reason if advisory_safe else "",
+        "native_mining_safety_advisory_reason": advisory_reason if advisory_safe else "",
         "reason": reason,
         "sample": sample,
         "lag_blocks": lag,
@@ -1732,6 +1757,13 @@ def catchup_target_node_cache_mb() -> int:
 def apply_catchup_node_runtime(payload: dict[str, Any], policy: dict[str, Any]) -> bool:
     if pool_has_recent_paid_work(payload):
         log("catch-up runtime adjustment skipped because accepted block submissions remain recent")
+        return False
+    native_advisory_safe, native_advisory_reason = native_chain_progress_advisory_safe(payload)
+    if policy.get("native_advisory_safe") is True or native_advisory_safe:
+        log(
+            "catch-up runtime adjustment skipped because native mining safety makes "
+            f"EVM/public lag advisory: {policy.get('native_advisory_reason') or native_advisory_reason}"
+        )
         return False
     if live_pool_state_blocks_node_runtime_mutation(payload):
         log("catch-up runtime adjustment skipped because live pool/miner state blocks node mutation")
