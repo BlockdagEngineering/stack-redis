@@ -84,6 +84,44 @@ class PoolEfficiencyLossLedgerTests(unittest.TestCase):
             ],
         )
 
+    def test_native_p2p_current_safety_survives_template_readiness_flicker(self) -> None:
+        self.assertTrue(
+            pool_ops.selected_backend_native_p2p_current_safe(
+                {
+                    "healthy": True,
+                    "node_mineable": False,
+                    "node_submit_ready": False,
+                    "node_p2p_mining_fresh": True,
+                    "node_p2p_fresh_consensus_peer_count": 2,
+                    "node_p2p_best_peer_lead_blocks": 10,
+                }
+            )
+        )
+
+    def test_native_p2p_current_safety_rejects_peer_loss_and_peer_lead(self) -> None:
+        peer_loss = {
+            "healthy": True,
+            "node_p2p_mining_fresh": True,
+            "node_p2p_fresh_consensus_peer_count": 1,
+            "node_p2p_best_peer_lead_blocks": 0,
+        }
+        peer_lead = {
+            "healthy": True,
+            "node_p2p_mining_fresh": True,
+            "node_p2p_fresh_consensus_peer_count": 3,
+            "node_p2p_best_peer_lead_blocks": 11,
+        }
+        stale = {
+            "healthy": True,
+            "node_p2p_mining_fresh": False,
+            "node_p2p_fresh_consensus_peer_count": 3,
+            "node_p2p_best_peer_lead_blocks": 0,
+        }
+
+        self.assertFalse(pool_ops.selected_backend_native_p2p_current_safe(peer_loss))
+        self.assertFalse(pool_ops.selected_backend_native_p2p_current_safe(peer_lead))
+        self.assertFalse(pool_ops.selected_backend_native_p2p_current_safe(stale))
+
     def test_selected_backend_source_degradation_is_advisory_with_recent_paid_work(self) -> None:
         advisory = pool_ops.selected_backend_source_degradation(True, True)
         hard = pool_ops.selected_backend_source_degradation(True, False)
@@ -127,6 +165,32 @@ class PoolEfficiencyLossLedgerTests(unittest.TestCase):
         self.assertTrue(policy["mining_ready"])
         self.assertTrue(policy["remaining_blocks_advisory"])
         self.assertEqual(policy["lag_blocks"], 24)
+
+    def test_catchup_policy_treats_evm_lag_as_advisory_when_native_p2p_is_safe(self) -> None:
+        source_health = {
+            "node_mineable": False,
+            "node_submit_ready": False,
+            "node_p2p_mining_fresh": True,
+            "node_p2p_fresh_consensus_peer_count": 7,
+            "node_p2p_best_peer_lead_blocks": 0,
+        }
+        policy = pool_ops.build_catchup_policy(
+            {
+                "status": "syncing",
+                "remaining_blocks": 14_982,
+                "nodes": {"node": {"remaining_blocks": 14_982}},
+            },
+            {"node": {"remaining_blocks": 14_982}},
+            {"pool": {"running": True}},
+            source_health,
+            mining_ready=pool_ops.selected_backend_native_p2p_current_safe(source_health),
+            ignore_remaining_blocks=pool_ops.selected_backend_native_p2p_current_safe(source_health),
+        )
+
+        self.assertFalse(policy["active"])
+        self.assertEqual(policy["lag_blocks"], 0)
+        self.assertTrue(policy["mining_ready"])
+        self.assertTrue(policy["remaining_blocks_advisory"])
 
     def test_catchup_policy_uses_io_pressure_as_primary_trigger(self) -> None:
         policy = pool_ops.build_catchup_policy(

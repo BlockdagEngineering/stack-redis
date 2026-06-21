@@ -104,7 +104,7 @@ class ReadinessCheckTests(unittest.TestCase):
             pow_type=10,
             mining_address="",
             skip_postgres=True,
-            postgres_service="postgres",
+            postgres_service=None,
             pg_url=None,
             schema_file=None,
             json=False,
@@ -177,7 +177,7 @@ class ReadinessCheckTests(unittest.TestCase):
         self.assertTrue(node_result.skipped)
         self.assertTrue(all(result.ok for result in results), results)
 
-    def test_template_health_gate_rejects_submit_not_ready(self) -> None:
+    def test_template_health_gate_allows_submit_ready_flicker_when_template_and_p2p_are_safe(self) -> None:
         args = self.args()
         with mock.patch.object(
             readiness,
@@ -190,8 +190,26 @@ class ReadinessCheckTests(unittest.TestCase):
             },
         ):
             result = readiness.check_sync_or_mineable(args)
-        self.assertFalse(result.ok)
+        self.assertTrue(result.ok)
         self.assertIn("submit_ready=false", result.detail)
+
+    def test_template_health_gate_rejects_submit_not_ready_without_mineable_template(self) -> None:
+        args = self.args()
+        with mock.patch.object(
+            readiness,
+            "rpc_call",
+            return_value={
+                "mineable_now": False,
+                "submit_ready": False,
+                "p2p_mining_fresh": True,
+                "get_block_template_ready": True,
+                "sync_allowed": False,
+                "chain_current": False,
+            },
+        ):
+            result = readiness.check_sync_or_mineable(args)
+        self.assertFalse(result.ok)
+        self.assertIn("not mineable/current enough", result.detail)
 
     def test_template_health_gate_rejects_stale_p2p(self) -> None:
         args = self.args()
@@ -319,6 +337,48 @@ class ReadinessCheckTests(unittest.TestCase):
 
         self.assertTrue(result.ok)
         self.assertIn("required indexes present", result.detail)
+
+    def test_postgres_schema_defaults_to_pool_db_compose_service(self) -> None:
+        args = self.args()
+        args.skip_postgres = False
+
+        proc = mock.Mock(returncode=0, stdout="", stderr="")
+        with mock.patch.object(readiness.subprocess, "run", return_value=proc) as run:
+            result = readiness.check_postgres_schema(args, {})
+
+        self.assertTrue(result.ok)
+        command = run.call_args.args[0]
+        self.assertIn("pool-db", command)
+        self.assertNotIn("postgres", command[: command.index("psql")])
+
+    def test_postgres_schema_falls_back_to_legacy_postgres_service(self) -> None:
+        args = self.args()
+        args.skip_postgres = False
+
+        failed = mock.Mock(
+            returncode=1,
+            stdout="",
+            stderr='service "pool-db" is not running',
+        )
+        passed = mock.Mock(returncode=0, stdout="", stderr="")
+        with mock.patch.object(readiness.subprocess, "run", side_effect=[failed, passed]) as run:
+            result = readiness.check_postgres_schema(args, {})
+
+        self.assertTrue(result.ok)
+        self.assertEqual(run.call_count, 2)
+        self.assertIn("pool-db", run.call_args_list[0].args[0])
+        self.assertIn("postgres", run.call_args_list[1].args[0])
+
+    def test_postgres_schema_does_not_fallback_on_query_failure(self) -> None:
+        args = self.args()
+        args.skip_postgres = False
+
+        failed = mock.Mock(returncode=1, stdout="", stderr="ERROR: relation miners does not exist")
+        with mock.patch.object(readiness.subprocess, "run", return_value=failed) as run:
+            with self.assertRaises(readiness.CheckError):
+                readiness.check_postgres_schema(args, {})
+
+        self.assertEqual(run.call_count, 1)
 
 
 if __name__ == "__main__":

@@ -155,6 +155,33 @@ def method_not_found(err: RPCError) -> bool:
     return err.code == -32601 or "method not found" in err.message.lower()
 
 
+def postgres_service_candidates(args: argparse.Namespace, env: dict[str, str]) -> list[str]:
+    explicit = str(args.postgres_service or "").strip()
+    if explicit:
+        return [explicit]
+    candidates = [
+        env.get("BDAG_POSTGRES_SERVICE"),
+        env.get("BDAG_POOL_DB_SERVICE"),
+        "pool-db",
+        "postgres",
+    ]
+    result: list[str] = []
+    for item in candidates:
+        service = str(item or "").strip()
+        if service and service not in result:
+            result.append(service)
+    return result
+
+
+def postgres_service_lookup_failed(stderr: str) -> bool:
+    lowered = stderr.lower()
+    return (
+        "no such service" in lowered
+        or "is not running" in lowered
+        or "service " in lowered and "not running" in lowered
+    )
+
+
 def check_postgres_schema(args: argparse.Namespace, env: dict[str, str]) -> CheckResult:
     if args.skip_postgres:
         return CheckResult("postgres_schema", True, "skipped by request", skipped=True)
@@ -225,37 +252,53 @@ ORDER BY 1;
     if args.pg_url:
         cmd = ["psql", args.pg_url, "-v", "ON_ERROR_STOP=1", "-Atc", query]
         run_env = os.environ.copy()
+        proc = subprocess.run(
+            cmd,
+            cwd=ROOT,
+            env=run_env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
     else:
-        cmd = [
-            "docker",
-            "compose",
-            "exec",
-            "-T",
-            "-e",
-            f"PGPASSWORD={postgres_password}",
-            args.postgres_service,
-            "psql",
-            "-v",
-            "ON_ERROR_STOP=1",
-            "-U",
-            postgres_user,
-            "-d",
-            postgres_db,
-            "-Atc",
-            query,
-        ]
         run_env = os.environ.copy()
         run_env.update(env)
-
-    proc = subprocess.run(
-        cmd,
-        cwd=ROOT,
-        env=run_env,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        check=False,
-    )
+        proc = None
+        candidates = postgres_service_candidates(args, env)
+        for index, service in enumerate(candidates):
+            cmd = [
+                "docker",
+                "compose",
+                "exec",
+                "-T",
+                "-e",
+                f"PGPASSWORD={postgres_password}",
+                service,
+                "psql",
+                "-v",
+                "ON_ERROR_STOP=1",
+                "-U",
+                postgres_user,
+                "-d",
+                postgres_db,
+                "-Atc",
+                query,
+            ]
+            proc = subprocess.run(
+                cmd,
+                cwd=ROOT,
+                env=run_env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            if proc.returncode == 0:
+                break
+            if index + 1 >= len(candidates) or not postgres_service_lookup_failed(proc.stderr):
+                break
+        assert proc is not None
     if proc.returncode != 0:
         stderr = proc.stderr.replace(postgres_password, "[redacted]")
         raise CheckError(f"Postgres schema query failed: {stderr.strip()}")
@@ -287,8 +330,6 @@ def check_sync_or_mineable(args: argparse.Namespace) -> CheckResult:
         if health.get("last_template_build_error_blocking") is True:
             code = health.get("last_template_build_error_code") or "template_build_error"
             blocking_reasons.append(f"blocking template build error: {code}")
-        if health.get("submit_ready") is False:
-            blocking_reasons.append("submit_ready=false")
         if health.get("get_block_template_ready") is False:
             reason = health.get("get_block_template_reason_code") or "unknown"
             blocking_reasons.append(f"get_block_template_ready=false:{reason}")
@@ -302,8 +343,16 @@ def check_sync_or_mineable(args: argparse.Namespace) -> CheckResult:
                 "; ".join(blocking_reasons),
             )
         mineable = bool(health.get("mineable_now") or health.get("submit_ready"))
+        template_ready = health.get("get_block_template_ready") is not False
+        p2p_fresh = health.get("p2p_mining_fresh") is not False
         sync_allowed = bool(health.get("sync_allowed"))
         chain_current = bool(health.get("chain_current") or health.get("p2p_current"))
+        if health.get("submit_ready") is False and mineable and template_ready and p2p_fresh:
+            return CheckResult(
+                "node_mineable_or_synced",
+                True,
+                "template health is mineable with transient submit_ready=false; P2P/template proof is safe",
+            )
         if mineable:
             return CheckResult(
                 "node_mineable_or_synced",
@@ -552,7 +601,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pow-type", type=int, default=10)
     parser.add_argument("--mining-address", default=None)
     parser.add_argument("--skip-postgres", action="store_true")
-    parser.add_argument("--postgres-service", default="postgres")
+    parser.add_argument(
+        "--postgres-service",
+        default=None,
+        help="Compose service for Postgres; defaults to pool-db with postgres fallback.",
+    )
     parser.add_argument("--pg-url", default=None, help="Optional direct psql URL.")
     parser.add_argument("--schema-file", default=None)
     parser.add_argument("--json", action="store_true", help="Emit JSON summary.")

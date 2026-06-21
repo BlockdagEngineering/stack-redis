@@ -277,6 +277,83 @@ pool_template_conversion_stall_window_candidates{kind="total",pool_id="0"} 41
         self.assertEqual(summary["status_age_seconds_max"], 3.0)
         self.assertEqual(summary["status_sampler_hit_values"], ["false", "true"])
 
+    def test_summarize_samples_treats_new_reject_counters_as_zero_at_window_start(self) -> None:
+        samples = [
+            {
+                "sampled_at": "2026-05-26T00:00:00+00:00",
+                "sampled_epoch": 100,
+                "source": "fixture",
+                "current_block": 1000,
+                "current_block_source": "native",
+                "adaptive_workers": {},
+                "pool_block_submit_accepted_total": 7,
+                "pool_block_submit_rejected_by_reason": {},
+                "pool_shares_accepted_total": 20,
+                "pool_share_reject_by_reason": {},
+            },
+            {
+                "sampled_at": "2026-05-26T00:05:00+00:00",
+                "sampled_epoch": 400,
+                "source": "fixture",
+                "current_block": 1100,
+                "current_block_source": "native",
+                "adaptive_workers": {},
+                "pool_block_submit_accepted_total": 150,
+                "pool_block_submit_rejected_total": 7,
+                "pool_block_submit_rejected_by_reason": {
+                    "stale-job": 1,
+                    "stale-parent": 4,
+                    "tip-overdue": 2,
+                },
+                "pool_shares_accepted_total": 120,
+                "pool_shares_rejected_total": 5,
+                "pool_share_reject_by_reason": {"stale_block_candidate": 5},
+            },
+        ]
+
+        summary = measurement.summarize_samples(samples)
+
+        self.assertEqual(summary["pool_block_submit_accepted_delta"], 143)
+        self.assertEqual(summary["pool_block_submit_rejected_delta"], 7)
+        self.assertEqual(summary["pool_block_submit_rejected_per_accepted"], 0.048951)
+        self.assertEqual(
+            summary["pool_block_submit_rejected_by_reason_delta"],
+            {"stale-job": 1, "stale-parent": 4, "tip-overdue": 2},
+        )
+        self.assertEqual(summary["pool_shares_rejected_delta"], 5)
+        self.assertEqual(summary["pool_share_reject_ratio"], 0.047619)
+
+    def test_summarize_samples_keeps_reject_counter_unknown_when_first_metrics_scrape_failed(self) -> None:
+        samples = [
+            {
+                "sampled_at": "2026-05-26T00:00:00+00:00",
+                "sampled_epoch": 100,
+                "source": "fixture",
+                "current_block": 1000,
+                "current_block_source": "native",
+                "adaptive_workers": {},
+                "pool_metrics_error": "connection refused",
+                "pool_block_submit_accepted_total": 7,
+            },
+            {
+                "sampled_at": "2026-05-26T00:05:00+00:00",
+                "sampled_epoch": 400,
+                "source": "fixture",
+                "current_block": 1100,
+                "current_block_source": "native",
+                "adaptive_workers": {},
+                "pool_block_submit_accepted_total": 150,
+                "pool_block_submit_rejected_total": 7,
+                "pool_block_submit_rejected_by_reason": {"tip-overdue": 7},
+            },
+        ]
+
+        summary = measurement.summarize_samples(samples)
+
+        self.assertIsNone(summary["pool_block_submit_rejected_delta"])
+        self.assertIsNone(summary["pool_block_submit_rejected_per_accepted"])
+        self.assertEqual(summary["pool_block_submit_rejected_by_reason_delta"], {"tip-overdue": 7})
+
     def test_collect_status_sample_limits_local_status_cache_age(self) -> None:
         original_collect_status_cached = measurement.collect_status_cached
         original_collect_pool_metrics_sample = measurement.collect_pool_metrics_sample

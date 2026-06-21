@@ -302,9 +302,11 @@ def summarize_samples(samples: list[dict[str, Any]]) -> dict[str, Any]:
     def values(field: str) -> list[float]:
         return [value for value in (number(sample.get(field)) for sample in samples) if value is not None]
 
-    def counter_delta(field: str) -> float | None:
+    def counter_delta(field: str, *, missing_initial_zero: bool = False) -> float | None:
         first_value = number(first.get(field))
         last_value = number(last.get(field))
+        if first_value is None and missing_initial_zero and last_value is not None and not first.get("pool_metrics_error"):
+            first_value = 0.0
         if first_value is None or last_value is None:
             return None
         if last_value < first_value:
@@ -334,9 +336,9 @@ def summarize_samples(samples: list[dict[str, Any]]) -> dict[str, Any]:
         return sorted(found)
 
     accepted_delta = counter_delta("pool_block_submit_accepted_total")
-    rejected_delta = counter_delta("pool_block_submit_rejected_total")
+    rejected_delta = counter_delta("pool_block_submit_rejected_total", missing_initial_zero=True)
     shares_accepted_delta = counter_delta("pool_shares_accepted_total")
-    shares_rejected_delta = counter_delta("pool_shares_rejected_total")
+    shares_rejected_delta = counter_delta("pool_shares_rejected_total", missing_initial_zero=True)
 
     worker_ranges: dict[str, dict[str, int]] = {}
     for sample in samples:

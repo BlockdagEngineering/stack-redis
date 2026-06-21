@@ -268,6 +268,16 @@ CATCHUP_IO_PRESSURE_MIN_LAG_BLOCKS = env_int("BDAG_CATCHUP_IO_PRESSURE_MIN_LAG_B
 CATCHUP_IOWAIT_WARN_PERCENT = env_float("BDAG_CATCHUP_IOWAIT_WARN_PERCENT", 15.0, minimum=0.0)
 CATCHUP_IO_SOME_AVG10_WARN = env_float("BDAG_CATCHUP_IO_SOME_AVG10_WARN", 20.0, minimum=0.0)
 CATCHUP_IO_FULL_AVG10_WARN = env_float("BDAG_CATCHUP_IO_FULL_AVG10_WARN", 10.0, minimum=0.0)
+CATCHUP_NATIVE_P2P_MIN_FRESH_CONSENSUS_PEERS = env_int(
+    "BDAG_CATCHUP_NATIVE_P2P_MIN_FRESH_CONSENSUS_PEERS",
+    2,
+    minimum=1,
+)
+CATCHUP_NATIVE_P2P_MAX_PEER_LEAD_BLOCKS = env_int(
+    "BDAG_CATCHUP_NATIVE_P2P_MAX_PEER_LEAD_BLOCKS",
+    10,
+    minimum=0,
+)
 SYNC_PROGRESS_ACTIVE_LOOKBACK_SECONDS = int(os.environ.get("BDAG_SYNC_PROGRESS_ACTIVE_LOOKBACK_SECONDS", "2700"))
 DEFAULT_POOL_ENV_FILE = PROJECT_ROOT / ".env"
 POOL_ENV_FILE = path_from_env("BDAG_POOL_ENV_FILE", DEFAULT_POOL_ENV_FILE, PROJECT_ROOT)
@@ -839,6 +849,25 @@ def selected_backend_mining_safe(selected_source_health: Mapping[str, Any] | Non
         return False
     peer_lead = safe_float(selected_source_health.get("node_p2p_best_peer_lead_blocks"), 0.0)
     if peer_lead is not None and peer_lead > 10:
+        return False
+    return True
+
+
+def selected_backend_native_p2p_current_safe(selected_source_health: Mapping[str, Any] | None) -> bool:
+    if not isinstance(selected_source_health, Mapping) or not selected_source_health:
+        return False
+    if selected_source_health.get("healthy") is False:
+        return False
+    if selected_source_health.get("node_p2p_mining_fresh") is not True:
+        return False
+    fresh_peers = safe_int(selected_source_health.get("node_p2p_fresh_consensus_peer_count"), -1)
+    if fresh_peers >= 0 and fresh_peers < CATCHUP_NATIVE_P2P_MIN_FRESH_CONSENSUS_PEERS:
+        return False
+    consensus_peers = safe_int(selected_source_health.get("node_p2p_consensus_peer_count"), -1)
+    if fresh_peers < 0 and consensus_peers >= 0 and consensus_peers < CATCHUP_NATIVE_P2P_MIN_FRESH_CONSENSUS_PEERS:
+        return False
+    peer_lead = safe_float(selected_source_health.get("node_p2p_best_peer_lead_blocks"), 0.0)
+    if peer_lead is not None and peer_lead > CATCHUP_NATIVE_P2P_MAX_PEER_LEAD_BLOCKS:
         return False
     return True
 
@@ -6102,6 +6131,11 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
         and pool_has_recent_paid_work
         and sync_progress_native_template_health_synced(sync_progress)
     )
+    native_p2p_current_safe = selected_backend_native_p2p_current_safe(selected_source_health)
+    native_chain_progress_safe = bool(
+        sync_progress_native_template_health_synced(sync_progress)
+        or native_p2p_current_safe
+    )
     readiness_override_safe = bool(recent_paid_backend_safe or native_progress_paid_work_safe)
     selected_source_mining_safe = bool(
         raw_selected_source_mining_safe
@@ -6129,14 +6163,17 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
                 "restore_suppressed_by_native_paid_work": True,
                 "native_paid_work_advisory_reason": "selected backend is mining-safe and recent paid work is present",
             }
-    if selected_source_mining_safe and (
+    if (selected_source_mining_safe or native_chain_progress_safe) and (
         str(sync_progress.get("status") or "").lower() == "syncing"
         or sync_progress.get("chain_syncing") is True
         or sync_progress.get("evm_chain_syncing") is True
     ):
         sync_progress = mark_sync_progress_mining_advisory(
             sync_progress,
-            "sync progress is advisory while native P2P is fresh and accepted block submissions remain recent",
+            (
+                "sync progress is advisory while native P2P freshness/current-chain proof is safe; "
+                "EVM/public-RPC lag alone must not pause mining"
+            ),
         )
         sync_health["mining_advisory_sync"] = True
     pool_initial_download_transient = bool(
@@ -6148,10 +6185,16 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
     source_job_health_ok = None if source_job_health_ok_raw is None else bool(source_job_health_ok_raw)
     selected_source_unready_reasons = selected_backend_unready_reasons(selected_source_health)
     selected_source_degraded = bool(selected_source_unready_reasons)
-    source_job_hard_degraded = bool(source_job_health_ok is False and not readiness_override_safe)
+    source_degradation_advisory_safe = bool(readiness_override_safe or native_chain_progress_safe)
+    source_degradation_advisory_basis = (
+        "accepted block submission remains fresh"
+        if readiness_override_safe
+        else "native P2P freshness/current-chain proof remains safe"
+    )
+    source_job_hard_degraded = bool(source_job_health_ok is False and not source_degradation_advisory_safe)
     selected_source_degradation = selected_backend_source_degradation(
         selected_source_degraded,
-        readiness_override_safe,
+        source_degradation_advisory_safe,
     )
     source_selected_backend_hard_degraded = bool(selected_source_degradation["hard"])
     source_selected_backend_advisory_degraded = bool(selected_source_degradation["advisory"])
@@ -6190,9 +6233,13 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
     sync_health["pool_metrics_accepted_block_submissions"] = _prometheus_json_number(metrics_accepted_block_submissions)
     sync_health["pool_paid_work_state"] = paid_work_state
     sync_health["selected_backend_raw_mining_safe"] = raw_selected_source_mining_safe
+    sync_health["selected_backend_native_p2p_current_safe"] = native_p2p_current_safe
+    sync_health["native_chain_progress_safe"] = native_chain_progress_safe
     sync_health["selected_backend_recent_paid_work_safe"] = recent_paid_backend_safe
     sync_health["native_progress_paid_work_safe"] = native_progress_paid_work_safe
     sync_health["readiness_override_safe"] = readiness_override_safe
+    sync_health["source_degradation_advisory_safe"] = source_degradation_advisory_safe
+    sync_health["source_degradation_advisory_basis"] = source_degradation_advisory_basis
     sync_health["selected_backend_mining_safe"] = selected_source_mining_safe
     if connected_miners > 0 and readiness_override_safe and sync_warnings:
         advisory_sync_warnings = [
@@ -6239,7 +6286,7 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
     if connected_miners > 0 and source_job_hard_degraded:
         add_sync_warning("pool source job health reports not-ok and accepted block submission is stale")
     elif connected_miners > 0 and source_job_health_ok is False:
-        add_maintenance_warning("pool source job health is advisory-degraded while accepted block submission remains fresh")
+        add_maintenance_warning(f"pool source job health is advisory-degraded while {source_degradation_advisory_basis}")
     if connected_miners > 0 and source_selected_backend_hard_degraded:
         backend = pool.get("selected_backend") or "selected backend"
         add_sync_warning(
@@ -6249,12 +6296,12 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
     elif connected_miners > 0 and source_selected_backend_advisory_degraded:
         backend = pool.get("selected_backend") or "selected backend"
         add_maintenance_warning(
-            f"pool source health says {backend} is degraded, but accepted block submission remains fresh "
+            f"pool source health says {backend} is degraded, but {source_degradation_advisory_basis} "
             f"({', '.join(selected_source_unready_reasons)})"
         )
     elif connected_miners > 0 and source_health_transient_degraded:
         backend = pool.get("selected_backend") or "selected backend"
-        add_maintenance_warning(f"pool source health says {backend} is degraded, but accepted block submission remains fresh")
+        add_maintenance_warning(f"pool source health says {backend} is degraded, but {source_degradation_advisory_basis}")
     if connected_miners > 0 and pool.get("share_stall"):
         age = pool.get("last_valid_share_age_seconds")
         age_text = f"{age}s" if age is not None else "unknown"
@@ -6460,17 +6507,25 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
         sync_health["node_importing"] = bool(active_import_nodes)
         if active_import_nodes:
             sync_health["node_importing_nodes"] = active_import_nodes
+    catchup_ignore_remaining_blocks = bool(pool_has_recent_paid_work or native_chain_progress_safe)
     catchup_mining_ready = bool(
-        (sync_progress.get("status") == "synced" or selected_source_mining_safe or pool_has_recent_paid_work)
+        (
+            sync_progress.get("status") == "synced"
+            or selected_source_mining_safe
+            or pool_has_recent_paid_work
+            or native_chain_progress_safe
+        )
         and (
             pool_has_recent_paid_work
             or not selected_source_unready_reasons
             or readiness_override_safe
+            or native_chain_progress_safe
         )
         and (
             pool_has_recent_paid_work
             or source_job_health_ok is not False
             or readiness_override_safe
+            or native_chain_progress_safe
         )
         and not pool.get("initial_download")
     )
@@ -6481,7 +6536,7 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
         selected_source_health,
         host_pressure,
         mining_ready=catchup_mining_ready,
-        ignore_remaining_blocks=pool_has_recent_paid_work,
+        ignore_remaining_blocks=catchup_ignore_remaining_blocks,
     )
     if catchup_policy.get("active"):
         pool_down_message = f"{POOL_CONTAINER} is not running"
