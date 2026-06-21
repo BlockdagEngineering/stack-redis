@@ -385,7 +385,7 @@ Recovery that worked:
 - Recreate the pool after pinning the best observed ASIC timing so the pool
   starts with `POOL_TEMPLATE_TTL_REFRESH_MS=100`,
   `POOL_MAX_BLOCK_CANDIDATE_JOB_AGE_MS=1750`,
-  `POOL_RECENT_STALE_BLOCK_CANDIDATE_SUBMIT_GRACE_MS=250`, and multiple block
+  `POOL_RECENT_STALE_BLOCK_CANDIDATE_SUBMIT_GRACE_MS=1750`, and multiple block
   candidates enabled.
 
 Mitigations now required by source:

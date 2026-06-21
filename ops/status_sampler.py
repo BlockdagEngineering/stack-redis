@@ -359,11 +359,27 @@ def node_args_assignment_value(args: str, flag: str) -> str | None:
     return None
 
 
+def configured_node_obsolete_height() -> str:
+    value = config_value("BDAG_NODE_OBSOLETE_HEIGHT", "20").strip()
+    if not value.isdigit():
+        return ""
+    return value
+
+
+def node_mining_no_pending_tx_enabled() -> bool:
+    return env_enabled_value(config_value("BDAG_NODE_MINING_NO_PENDING_TX", "1"), True)
+
+
 def node_mining_runtime_args(address: str) -> str:
     parts = [
         *NODE_MINING_REQUIRED_BOOL_FLAGS,
         f"--miningaddr={address}",
     ]
+    obsolete_height = configured_node_obsolete_height()
+    if obsolete_height:
+        parts.append(f"--obsoleteheight={obsolete_height}")
+    if node_mining_no_pending_tx_enabled():
+        parts.append("--miningnopendingtx")
     if constrained_storage_profile():
         # A USB-backed ASIC router should mine and relay blocks, not serve as a
         # catch-up source for other peers while it is trying to convert shares
@@ -382,6 +398,11 @@ def node_mining_args_are_safe_and_complete(args: str, address: str) -> bool:
     for flag in NODE_MINING_REQUIRED_BOOL_FLAGS:
         if not node_args_have_bool_flag(args, flag):
             return False
+    obsolete_height = configured_node_obsolete_height()
+    if obsolete_height and node_args_assignment_value(args, "--obsoleteheight") != obsolete_height:
+        return False
+    if node_mining_no_pending_tx_enabled() and not node_args_have_bool_flag(args, "--miningnopendingtx"):
+        return False
     if constrained_storage_profile():
         for flag, wanted in NODE_MINING_CONSTRAINED_ASSIGNMENTS.items():
             if node_args_assignment_value(args, flag) != wanted:

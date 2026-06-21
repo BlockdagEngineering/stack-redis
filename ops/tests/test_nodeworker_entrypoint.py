@@ -77,6 +77,33 @@ class NodeworkerEntrypointTest(unittest.TestCase):
 
         self.assert_stdout_contains(result, "NODE_ARGS_APPEND=--debuglevel=warn --nofilelogging")
 
+    def test_print_mode_appends_mining_template_safety_args(self) -> None:
+        result = self.run_entrypoint(
+            {
+                "BDAG_NODE_OBSOLETE_HEIGHT": "20",
+                "BDAG_NODE_MINING_NO_PENDING_TX": "1",
+            }
+        )
+
+        self.assert_stdout_contains(result, "--obsoleteheight=20")
+        self.assert_stdout_contains(result, "--miningnopendingtx")
+        self.assert_stdout_contains(result, "--debuglevel=warn")
+
+    def test_print_mode_keeps_operator_mining_template_overrides(self) -> None:
+        result = self.run_entrypoint(
+            {
+                "NODE_ARGS_APPEND": "--obsoleteheight=7 --miningnopendingtx",
+                "BDAG_NODE_OBSOLETE_HEIGHT": "20",
+                "BDAG_NODE_MINING_NO_PENDING_TX": "1",
+            }
+        )
+
+        self.assert_stdout_contains(
+            result,
+            "NODE_ARGS_APPEND=--obsoleteheight=7 --miningnopendingtx --debuglevel=warn --nofilelogging",
+        )
+        self.assertNotIn("--obsoleteheight=20", result.stdout)
+
     def test_print_mode_does_not_emit_removed_sync_flags(self) -> None:
         result = self.run_entrypoint(
             {

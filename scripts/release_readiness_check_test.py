@@ -19,6 +19,10 @@ readiness = importlib.util.module_from_spec(SPEC)
 sys.modules["release_readiness_check"] = readiness
 SPEC.loader.exec_module(readiness)
 
+GOOD_ADDRESS = "0x1234567890abcdef1234567890abcdef12345678"
+OTHER_ADDRESS = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd"
+ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
+
 
 class MockRPCHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
@@ -63,7 +67,7 @@ class MockRPCHandler(BaseHTTPRequestHandler):
                 "previousblockhash": "abcd",
                 "txroot": "tx",
                 "stateroot": "state",
-                "coinbase_address": "0x0000000000000000000000000000000000000000",
+                "coinbase_address": GOOD_ADDRESS,
                 "pow_diff_reference": {"nbits": "1d00ffff"},
             },
         }[method]
@@ -102,7 +106,7 @@ class ReadinessCheckTests(unittest.TestCase):
             stability_samples=1,
             stability_interval=0.0,
             pow_type=10,
-            mining_address="",
+            mining_address=GOOD_ADDRESS,
             skip_postgres=True,
             postgres_service=None,
             pg_url=None,
@@ -115,6 +119,94 @@ class ReadinessCheckTests(unittest.TestCase):
         self.assertTrue(all(result.ok for result in results), results)
         peer_result = next(result for result in results if result.name == "peer_sanity")
         self.assertIn("1 sane peers", peer_result.detail)
+
+    def test_get_block_template_passes_expected_coinbase_to_rpc(self) -> None:
+        args = self.args()
+        calls = []
+
+        def fake_rpc_call(url, user, password, method, params=None, timeout=5.0):
+            calls.append((method, params))
+            if method == "getBlockTemplate":
+                return {
+                    "height": 42,
+                    "previousblockhash": "abcd",
+                    "txroot": "tx",
+                    "stateroot": "state",
+                    "coinbase_address": GOOD_ADDRESS.upper().replace("X", "x", 1),
+                    "pow_diff_reference": {"nbits": "1d00ffff"},
+                }
+            raise AssertionError(method)
+
+        with mock.patch.object(readiness, "rpc_call", side_effect=fake_rpc_call):
+            result = readiness.check_get_block_template(args)
+
+        self.assertTrue(result.ok)
+        self.assertEqual(calls, [("getBlockTemplate", [[], 10, GOOD_ADDRESS])])
+        self.assertIn(f"coinbase={GOOD_ADDRESS}", result.detail)
+
+    def test_get_block_template_rejects_missing_expected_address(self) -> None:
+        args = self.args()
+        args.mining_address = ""
+
+        with mock.patch.object(readiness, "rpc_call") as rpc_call:
+            result = readiness.check_get_block_template(args)
+
+        self.assertFalse(result.ok)
+        self.assertIn("missing non-zero expected mining address", result.detail)
+        rpc_call.assert_not_called()
+
+    def test_get_block_template_rejects_zero_coinbase(self) -> None:
+        args = self.args()
+
+        def fake_rpc_call(url, user, password, method, params=None, timeout=5.0):
+            if method == "getBlockTemplate":
+                return {
+                    "height": 42,
+                    "previousblockhash": "abcd",
+                    "txroot": "tx",
+                    "stateroot": "state",
+                    "coinbase_address": ZERO_ADDRESS,
+                    "pow_diff_reference": {"nbits": "1d00ffff"},
+                }
+            raise AssertionError(method)
+
+        with mock.patch.object(readiness, "rpc_call", side_effect=fake_rpc_call):
+            result = readiness.check_get_block_template(args)
+
+        self.assertFalse(result.ok)
+        self.assertIn("template coinbase is invalid or zero", result.detail)
+
+    def test_get_block_template_rejects_coinbase_mismatch(self) -> None:
+        args = self.args()
+
+        def fake_rpc_call(url, user, password, method, params=None, timeout=5.0):
+            if method == "getBlockTemplate":
+                return {
+                    "height": 42,
+                    "previousblockhash": "abcd",
+                    "txroot": "tx",
+                    "stateroot": "state",
+                    "coinbase_address": OTHER_ADDRESS,
+                    "pow_diff_reference": {"nbits": "1d00ffff"},
+                }
+            raise AssertionError(method)
+
+        with mock.patch.object(readiness, "rpc_call", side_effect=fake_rpc_call):
+            result = readiness.check_get_block_template(args)
+
+        self.assertFalse(result.ok)
+        self.assertIn(f"template coinbase {OTHER_ADDRESS}", result.detail)
+        self.assertIn(f"expected {GOOD_ADDRESS}", result.detail)
+
+    def test_expected_mining_address_precedence(self) -> None:
+        args = self.args()
+        args.mining_address = ""
+        env = {
+            "MINING_POOL_ADDRESS": OTHER_ADDRESS,
+            "POOL_COINBASE_ADDRESS": GOOD_ADDRESS.upper().replace("X", "x", 1),
+        }
+
+        self.assertEqual(readiness.expected_mining_address(args, env), GOOD_ADDRESS)
 
     def test_peer_gate_fails_when_minimum_exceeds_filtered_peers(self) -> None:
         args = self.args()
@@ -165,7 +257,7 @@ class ReadinessCheckTests(unittest.TestCase):
                     "previousblockhash": "abcd",
                     "txroot": "tx",
                     "stateroot": "state",
-                    "coinbase_address": "0x0000000000000000000000000000000000000000",
+                    "coinbase_address": GOOD_ADDRESS,
                     "pow_diff_reference": {"nbits": "1d00ffff"},
                 }
             raise AssertionError(method)
@@ -280,7 +372,7 @@ class ReadinessCheckTests(unittest.TestCase):
                     "previousblockhash": "abcd",
                     "txroot": "tx",
                     "stateroot": "state",
-                    "coinbase_address": "0x0000000000000000000000000000000000000000",
+                    "coinbase_address": GOOD_ADDRESS,
                     "pow_diff_reference": {"nbits": "1d00ffff"},
                 }
             raise AssertionError(method)
@@ -313,7 +405,13 @@ class ReadinessCheckTests(unittest.TestCase):
 
         proc = mock.Mock(
             returncode=0,
-            stdout="block_submissions.candidate_hash\nindex:block_submissions_created_at_idx\n",
+            stdout=(
+                "block_submissions.candidate_hash\n"
+                "block_submissions.asic_mac\n"
+                "block_submissions.lane_id\n"
+                "index:block_submissions_created_at_idx\n"
+                "index:block_submissions_lane_created_idx\n"
+            ),
             stderr="",
         )
         with mock.patch.object(readiness.subprocess, "run", return_value=proc) as run:
@@ -321,10 +419,17 @@ class ReadinessCheckTests(unittest.TestCase):
 
         self.assertFalse(result.ok)
         self.assertIn("block_submissions.candidate_hash", result.detail)
+        self.assertIn("block_submissions.asic_mac", result.detail)
+        self.assertIn("block_submissions.lane_id", result.detail)
         self.assertIn("index:block_submissions_created_at_idx", result.detail)
+        self.assertIn("index:block_submissions_lane_created_idx", result.detail)
         query = run.call_args.args[0][-1]
         self.assertIn("block_submissions", query)
+        self.assertIn("('block_submissions','asic_mac')", query)
+        self.assertIn("('block_submissions','lane_id')", query)
         self.assertIn("block_submissions_outcome_created_idx", query)
+        self.assertIn("block_submissions_lane_outcome_created_idx", query)
+        self.assertIn("block_submissions_asic_created_idx", query)
 
     def test_postgres_schema_passes_with_credit_unique_index(self) -> None:
         args = self.args()

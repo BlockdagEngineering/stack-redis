@@ -461,6 +461,30 @@ apply_node_mining_runtime_args() {
   done
 }
 
+apply_node_mining_template_runtime_args() {
+  local node_args obsolete_height no_pending
+  node_args="$(node_args_from_argv "$@" || true)"
+
+  obsolete_height="${BDAG_NODE_OBSOLETE_HEIGHT:-}"
+  if [ -n "$obsolete_height" ]; then
+    case "$obsolete_height" in
+      *[!0-9]*)
+        log "ignoring invalid BDAG_NODE_OBSOLETE_HEIGHT=$obsolete_height"
+        ;;
+      *)
+        append_node_arg_prefix_once "--obsoleteheight=$obsolete_height" "$node_args ${NODE_ARGS_APPEND:-}"
+        ;;
+    esac
+  fi
+
+  no_pending="${BDAG_NODE_MINING_NO_PENDING_TX:-0}"
+  case "$no_pending" in
+    1|true|TRUE|yes|YES|on|ON)
+      append_node_arg_once "--miningnopendingtx" "$node_args ${NODE_ARGS_APPEND:-}"
+      ;;
+  esac
+}
+
 apply_node_log_runtime_args() {
   local node_args level normalized_level no_file_logging
   node_args="$(node_args_from_argv "$@" || true)"
@@ -893,6 +917,7 @@ maybe_http_snapshot_bootstrap() {
 
 apply_ordered_fastsync_peers "$@"
 apply_no_fastsync_serve_guard "$@"
+apply_node_mining_template_runtime_args "$@"
 apply_node_mining_runtime_args "$@"
 apply_node_log_runtime_args "$@"
 apply_archival_flag "$@"
