@@ -164,6 +164,25 @@ Mitigations now required by source:
   zero peer lead). It becomes a hard blocker only when native safety is missing
   or public/reference evidence shows explicit divergence or solo-mining risk.
 
+### Dashboard EVM Polling Must Back Off During Sync
+
+After node logging was reduced, the remaining avoidable pressure came from
+redis-dash EVM polling and trend backfill retrying while the EVM gateway was
+still syncing or had no active relay peer. That produced repeated gateway
+warnings and extra node work without improving mining readiness.
+
+Mitigations now required by source:
+
+- Redis-dash treats explicit EVM sync/no-relay responses as a cooldown signal
+  and pauses live polling, warmup, and trend catch-up during
+  `BDAG_EVM_SYNC_BACKOFF_SECONDS` instead of hammering `eth_getBlockByNumber`.
+- The first `eth_getBlockByNumber(latest)` sync/no-peer failure is terminal for
+  that pass; redis-dash must not immediately fall through to `eth_blockNumber`
+  and another `latest` request.
+- Stack defaults set `BDAG_EVM_SYNC_BACKOFF_SECONDS=60`, which keeps the UI
+  responsive when EVM is healthy while protecting the native mining path during
+  catch-up.
+
 ### Peer Lists And Peerstores Need Durable Service Endpoints
 
 Observed high NAT ports and stale peer IDs are not durable bootstrap addresses.
@@ -326,3 +345,22 @@ Mitigations now required by source:
   socket read errors keep their existing behavior.
 - Set `POOL_STRATUM_CONNECTION_LOG_INTERVAL_SECONDS=0` only during focused
   Stratum debugging when every retry line is worth the extra log I/O.
+
+### Node Import Logs Can Steal Catch-Up I/O
+
+When the node runs at the upstream default `debuglevel=info`, catch-up emits an
+`Imported new chain segment` line for almost every imported block. On a
+USB-backed mining appliance this produced roughly a thousand Docker log lines
+per minute while the chain was still behind peers, adding avoidable disk I/O to
+the same host that needed to catch up before mining could resume.
+
+Mitigations now required by source:
+
+- The node entrypoint defaults `BDAG_NODE_DEBUG_LEVEL=warn` and
+  `BDAG_NODE_NO_FILE_LOGGING=1`, appending `--debuglevel=warn` and
+  `--nofilelogging` independently of `NODE_ARGS_APPEND`.
+- `NODE_ARGS_APPEND` is still reserved for operator/mining flags. Runtime code
+  quotes env-file values with spaces so generated `.env` files remain
+  sourceable by install/support scripts.
+- The mining-appliance preflight warns when an install is configured for
+  high-volume node logging.

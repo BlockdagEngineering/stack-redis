@@ -461,6 +461,32 @@ apply_node_mining_runtime_args() {
   done
 }
 
+apply_node_log_runtime_args() {
+  local node_args level normalized_level no_file_logging
+  node_args="$(node_args_from_argv "$@" || true)"
+  level="${BDAG_NODE_DEBUG_LEVEL:-warn}"
+  normalized_level="$(lower_ascii "$level")"
+  case "$normalized_level" in
+    ""|default|none|off|disable|disabled)
+      ;;
+    trace|debug|info|warn|error|critical)
+      append_node_arg_prefix_once "--debuglevel=$normalized_level" "$node_args ${NODE_ARGS_APPEND:-}"
+      ;;
+    *)
+      log "invalid BDAG_NODE_DEBUG_LEVEL=$level; using warn"
+      append_node_arg_prefix_once "--debuglevel=warn" "$node_args ${NODE_ARGS_APPEND:-}"
+      ;;
+  esac
+
+  no_file_logging="${BDAG_NODE_NO_FILE_LOGGING:-1}"
+  if env_value_true "$no_file_logging"; then
+    append_node_arg_once "--nofilelogging" "$node_args ${NODE_ARGS_APPEND:-}"
+  elif ! env_value_false "$no_file_logging"; then
+    log "invalid BDAG_NODE_NO_FILE_LOGGING=$no_file_logging; using enabled"
+    append_node_arg_once "--nofilelogging" "$node_args ${NODE_ARGS_APPEND:-}"
+  fi
+}
+
 mount_source_for_path() {
   local path="$1" real best_src="" best_target="" src target fstype rest
   real="$(readlink -m "$path" 2>/dev/null || printf '%s' "$path")"
@@ -868,6 +894,7 @@ maybe_http_snapshot_bootstrap() {
 apply_ordered_fastsync_peers "$@"
 apply_no_fastsync_serve_guard "$@"
 apply_node_mining_runtime_args "$@"
+apply_node_log_runtime_args "$@"
 apply_archival_flag "$@"
 maybe_http_snapshot_bootstrap "$@"
 

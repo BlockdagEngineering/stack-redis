@@ -67,12 +67,15 @@ class NodeworkerEntrypointTest(unittest.TestCase):
     def test_print_mode_reports_node_args_append(self) -> None:
         result = self.run_entrypoint({"NODE_ARGS_APPEND": "--miner --maxpeers=160"})
 
-        self.assert_stdout_contains(result, "NODE_ARGS_APPEND=--miner --maxpeers=160")
+        self.assert_stdout_contains(
+            result,
+            "NODE_ARGS_APPEND=--miner --maxpeers=160 --debuglevel=warn --nofilelogging",
+        )
 
-    def test_print_mode_reports_empty_node_args_append(self) -> None:
+    def test_print_mode_reports_default_low_io_node_log_args(self) -> None:
         result = self.run_entrypoint({})
 
-        self.assert_stdout_contains(result, "NODE_ARGS_APPEND=")
+        self.assert_stdout_contains(result, "NODE_ARGS_APPEND=--debuglevel=warn --nofilelogging")
 
     def test_print_mode_does_not_emit_removed_sync_flags(self) -> None:
         result = self.run_entrypoint(
@@ -82,10 +85,24 @@ class NodeworkerEntrypointTest(unittest.TestCase):
             }
         )
 
-        self.assert_stdout_contains(result, "NODE_ARGS_APPEND=--cache=1024")
+        self.assert_stdout_contains(
+            result,
+            "NODE_ARGS_APPEND=--cache=1024 --debuglevel=warn --nofilelogging",
+        )
         combined = result.stdout + result.stderr
         self.assertNotIn("FAST", combined.upper())
         self.assertEqual("", result.stderr)
+
+    def test_print_mode_allows_operator_debug_level_override(self) -> None:
+        result = self.run_entrypoint(
+            {
+                "BDAG_NODE_DEBUG_LEVEL": "error",
+                "BDAG_NODE_NO_FILE_LOGGING": "0",
+            }
+        )
+
+        self.assert_stdout_contains(result, "NODE_ARGS_APPEND=--debuglevel=error")
+        self.assertNotIn("--nofilelogging", result.stdout)
 
     def test_node_mining_env_appends_guard_args_without_forcing_rpc_module(self) -> None:
         result = self.run_entrypoint(
@@ -100,6 +117,8 @@ class NodeworkerEntrypointTest(unittest.TestCase):
         self.assertNotIn("--fastartifactsync", result.stdout)
         self.assert_stdout_contains(result, "--miner")
         self.assert_stdout_contains(result, "--miningaddr=0xA1Ee1005c4Ff181e93e717D2C624554b66AB7DFc")
+        self.assert_stdout_contains(result, "--debuglevel=warn")
+        self.assert_stdout_contains(result, "--nofilelogging")
         self.assertNotIn("--allowminingwhennearlysynced", result.stdout)
         self.assertNotIn("--allowsubmitwhennotsynced", result.stdout)
 

@@ -92,6 +92,7 @@ class StackDefaultsTests(unittest.TestCase):
             "POOL_PREEMPTIVE_BLOCK_CANDIDATE_REFRESH_DELAY_MS": "0",
             "POOL_PREEMPTIVE_BLOCK_CANDIDATE_REFRESH_INTERVAL_MS": "20",
             "POOL_PREEMPTIVE_BLOCK_CANDIDATE_REFRESH_TIMEOUT_MS": "1000",
+            "BDAG_EVM_SYNC_BACKOFF_SECONDS": "60",
         }
         for key, value in expected.items():
             self.assertEqual(defaults[key], value)

@@ -42,6 +42,8 @@ from pool_ops import (
     write_status_sampler_payload,
 )
 
+SAFE_ENV_VALUE_RE = re.compile(r"^[A-Za-z0-9_./:@,%+=-]*$")
+
 
 def env_float(name: str, default: float, minimum: float | None = None) -> float:
     try:
@@ -249,6 +251,7 @@ def set_env_file_value(path: Any, key: str, value: str) -> bool:
     env_path = path if hasattr(path, "read_text") else PROJECT_ROOT / str(path)
     if not env_path.exists():
         return False
+    formatted_value = format_env_value(value)
     lines = env_path.read_text(encoding="utf-8", errors="replace").splitlines()
     changed = False
     found = False
@@ -259,13 +262,13 @@ def set_env_file_value(path: Any, key: str, value: str) -> bool:
         assignment = stripped[7:].strip() if prefix else stripped
         if assignment.startswith(f"{key}="):
             found = True
-            replacement = f"{prefix}{key}={value}" if prefix else f"{key}={value}"
+            replacement = f"{prefix}{key}={formatted_value}" if prefix else f"{key}={formatted_value}"
             output.append(replacement)
             changed = changed or line != replacement
         else:
             output.append(line)
     if not found:
-        output.append(f"{key}={value}")
+        output.append(f"{key}={formatted_value}")
         changed = True
     if not changed:
         return False
@@ -273,6 +276,18 @@ def set_env_file_value(path: Any, key: str, value: str) -> bool:
     tmp.write_text("\n".join(output) + "\n", encoding="utf-8")
     os.replace(tmp, env_path)
     return True
+
+
+def format_env_value(value: str) -> str:
+    if SAFE_ENV_VALUE_RE.match(value):
+        return value
+    escaped = (
+        value.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("$", "\\$")
+        .replace("`", "\\`")
+    )
+    return f'"{escaped}"'
 
 
 def set_runtime_env_value(key: str, value: str) -> list[str]:

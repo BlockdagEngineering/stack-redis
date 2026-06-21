@@ -133,6 +133,23 @@ class StatusSamplerMiningImperativeTests(unittest.TestCase):
     def command_result(self, command: list[str], returncode: int = 0, stdout: str = "", stderr: str = ""):
         return pool_ops.CommandResult(command, returncode, stdout, stderr, 0.0)
 
+    def test_set_env_file_value_quotes_values_with_spaces(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            env_path = pathlib.Path(tmp) / ".env"
+            env_path.write_text("NODE_ARGS_APPEND=\n", encoding="utf-8")
+
+            changed = status_sampler.set_env_file_value(
+                env_path,
+                "NODE_ARGS_APPEND",
+                "--miner --miningaddr=0xA1Ee1005c4Ff181e93e717D2C624554b66AB7DFc",
+            )
+
+            self.assertTrue(changed)
+            self.assertIn(
+                'NODE_ARGS_APPEND="--miner --miningaddr=0xA1Ee1005c4Ff181e93e717D2C624554b66AB7DFc"',
+                env_path.read_text(encoding="utf-8"),
+            )
+
     def pool_compose_start_seen(self, commands: list[list[str]]) -> bool:
         return any(
             "compose" in command
