@@ -23,15 +23,19 @@ from mining_health_triage import build_mining_health_triage
 from stack_status_source import collect_stack_status
 from pool_ops import (
     LOG_DIR,
+    MINER_HASHRATE_PROBE_TIMEOUT,
     NODES,
     POOL_CONTAINER,
     POOL_ENV_FILE,
     PROJECT_ROOT,
     RUNTIME_DIR,
     action_log_path,
+    collect_pool_job_state_activity,
     configure_miner,
     default_miner_pool_settings,
     ensure_runtime,
+    get_miner_cgminer_devs,
+    get_miner_pools,
     is_lan_ipv4,
     now_iso,
     record_earnings_snapshot,
@@ -95,6 +99,12 @@ DEFAULT_ASIC_API_STALL_STALE_SECONDS = int(os.environ.get("BDAG_WATCHDOG_ASIC_AP
 DEFAULT_ASIC_API_STALL_CONFIRM_SECONDS = int(os.environ.get("BDAG_WATCHDOG_ASIC_API_STALL_CONFIRM_SECONDS", "120"))
 DEFAULT_ASIC_API_STALL_REPAIR_COOLDOWN = int(
     os.environ.get("BDAG_WATCHDOG_ASIC_API_STALL_REPAIR_COOLDOWN", str(DEFAULT_MINER_RESTART_COOLDOWN))
+)
+DEFAULT_ASIC_MISSING_LANE_CONFIRM_SECONDS = int(
+    os.environ.get("BDAG_WATCHDOG_ASIC_MISSING_LANE_CONFIRM_SECONDS", "45")
+)
+DEFAULT_ASIC_API_STALL_PROBE_TIMEOUT = float(
+    os.environ.get("BDAG_WATCHDOG_ASIC_API_STALL_PROBE_TIMEOUT", str(MINER_HASHRATE_PROBE_TIMEOUT))
 )
 DEFAULT_MINER_USEFUL_WORK_STALL_SECONDS = int(
     os.environ.get("BDAG_WATCHDOG_MINER_USEFUL_WORK_STALL_SECONDS", "150")
@@ -552,6 +562,104 @@ ASIC_API_STALL_TEXT_FRAGMENTS = (
 )
 
 
+def active_pool_job_state_macs(status: dict[str, Any]) -> set[str]:
+    miners = ((status.get("miner_health") or {}).get("miners") or [])
+    macs = {
+        str(row.get("mac") or "").strip().lower()
+        for row in miners
+        if isinstance(row, dict)
+        and row.get("pool_job_state_authorized")
+        and str(row.get("mac") or "").strip()
+    }
+    if macs:
+        return macs
+    try:
+        activity = collect_pool_job_state_activity()
+    except Exception:
+        return set()
+    return {
+        str(row.get("mac") or "").strip().lower()
+        for row in activity
+        if isinstance(row, dict)
+        and row.get("pool_job_state_authorized")
+        and str(row.get("mac") or "").strip()
+    }
+
+
+def pool_active_lane_count(status: dict[str, Any], active_macs: set[str]) -> int:
+    pool_metrics = status.get("pool_metrics") if isinstance(status.get("pool_metrics"), dict) else {}
+    source_job_health = pool_metrics.get("source_job_health") if isinstance(pool_metrics.get("source_job_health"), dict) else {}
+    return max(
+        len(active_macs),
+        int_or_none(pool_metrics.get("active_connections")) or 0,
+        int_or_none(pool_metrics.get("authorized_miners")) or 0,
+        int_or_none(pool_metrics.get("ready_miners")) or 0,
+        int_or_none(source_job_health.get("authorized_miners")) or 0,
+        int_or_none(source_job_health.get("ready_miners")) or 0,
+    )
+
+
+def probe_missing_asic_api_stall(ip: str) -> str:
+    errors: list[str] = []
+    for label, probe in (("pools", get_miner_pools), ("cgminer-devs", get_miner_cgminer_devs)):
+        try:
+            probe(ip, timeout=DEFAULT_ASIC_API_STALL_PROBE_TIMEOUT)
+        except Exception as exc:  # noqa: BLE001 - watchdog records probe evidence, then uses restart policy.
+            errors.append(f"{label}: {exc}")
+    issue_text = " ".join(errors).lower()
+    if errors and any(fragment in issue_text for fragment in ASIC_API_STALL_TEXT_FRAGMENTS):
+        return "; ".join(errors)
+    return ""
+
+
+def missing_pool_lane_api_stall_miners(status: dict[str, Any]) -> list[dict[str, Any]]:
+    mining_address = str(status.get("mining_address") or "")
+    miners = ((status.get("miner_health") or {}).get("miners") or [])
+    managed_primary = [
+        row
+        for row in miners
+        if isinstance(row, dict)
+        and row.get("managed")
+        and row.get("device_type") == "asic"
+        and is_lan_ipv4(str(row.get("ip", "")))
+        and is_primary_pool_identity(row, mining_address)
+    ]
+    if len(managed_primary) <= 1:
+        return []
+
+    active_macs = active_pool_job_state_macs(status)
+    active_lanes = pool_active_lane_count(status, active_macs)
+    if active_lanes < max(1, DEFAULT_MINER_USEFUL_WORK_MIN_HEALTHY_PEERS):
+        return []
+    if active_lanes >= len(managed_primary):
+        return []
+
+    affected: list[dict[str, Any]] = []
+    for row in managed_primary:
+        mac = str(row.get("mac") or "").strip().lower()
+        if mac and mac in active_macs:
+            continue
+        if row.get("connected") or row.get("pool_active") is True or row.get("work_pool_active") is True:
+            continue
+        issue = probe_missing_asic_api_stall(str(row.get("ip")))
+        if not issue:
+            continue
+        item = dict(row)
+        item["api_stall_issue"] = issue
+        item["api_stall_stale_age_seconds"] = (
+            int_or_none(row.get("last_pool_seen_age_seconds"))
+            or int_or_none(row.get("last_share_age_seconds"))
+            or int_or_none(row.get("last_submit_age_seconds"))
+        )
+        item["api_stall_confirm_seconds"] = DEFAULT_ASIC_MISSING_LANE_CONFIRM_SECONDS
+        item["pool_job_state_missing_lane"] = True
+        item["active_pool_lane_count"] = active_lanes
+        item["expected_pool_lane_count"] = len(managed_primary)
+        item["restart_open_first"] = True
+        affected.append(item)
+    return affected
+
+
 def asic_api_stall_primary_miners(
     status: dict[str, Any],
     stale_seconds: int = DEFAULT_ASIC_API_STALL_STALE_SECONDS,
@@ -622,7 +730,15 @@ def asic_api_stall_primary_miners(
         item["api_stall_stale_age_seconds"] = stale_age
         item["restart_open_first"] = True
         affected.append(item)
-    return affected
+    by_identity: dict[str, dict[str, Any]] = {}
+    for item in [*affected, *missing_pool_lane_api_stall_miners(status)]:
+        key = miner_stall_identity_key(item)
+        if not key:
+            continue
+        existing = by_identity.get(key)
+        if existing is None or item.get("pool_job_state_missing_lane"):
+            by_identity[key] = item
+    return list(by_identity.values())
 
 
 def useful_work_stalled_primary_miners(
@@ -2156,15 +2272,16 @@ def check_once(
             ip = str(item.get("ip"))
             identity_key = miner_stall_identity_key(item)
             stalled_for = now - int(asic_api_stall_since.get(identity_key, now) or now)
+            confirm_seconds = int_or_none(item.get("api_stall_confirm_seconds")) or DEFAULT_ASIC_API_STALL_CONFIRM_SECONDS
             cooldown_remaining = DEFAULT_ASIC_API_STALL_REPAIR_COOLDOWN - (
                 now - int(miner_restart_by_ip.get(ip, 0) or 0)
             )
-            if stalled_for >= DEFAULT_ASIC_API_STALL_CONFIRM_SECONDS and cooldown_remaining <= 0:
+            if stalled_for >= confirm_seconds and cooldown_remaining <= 0:
                 eligible_miners.append(item)
             else:
                 waiting.append(
                     f"{identity_key or ip} ip={ip} stalled_for={stalled_for}s "
-                    f"confirm={DEFAULT_ASIC_API_STALL_CONFIRM_SECONDS}s "
+                    f"confirm={confirm_seconds}s "
                     f"cooldown_remaining={max(cooldown_remaining, 0)}s"
                 )
         reason = (
