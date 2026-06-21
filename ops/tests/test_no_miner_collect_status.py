@@ -23,6 +23,8 @@ class NoMinerCollectStatusTests(unittest.TestCase):
                 "STACK_SERVICES",
                 "POOL_CONTAINER",
                 "POOL_CONTAINERS",
+                "PROJECT_ROOT",
+                "POOL_ENV_FILE",
                 "EVM_REFERENCE_GAP_WATCH_FILE",
                 "POOL_PAID_WORK_STATE_FILE",
                 "POOL_PAID_WORK_RECENT_SECONDS",
@@ -1460,6 +1462,25 @@ class BackgroundMaintenanceDecisionTests(unittest.TestCase):
         self.assertTrue(decision["task_is_lazy"])
         self.assertFalse(decision["pool_ready_required"])
         self.assertEqual([], decision["reasons"])
+
+    def test_docker_compose_command_includes_override_file_when_present(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            pool_ops.PROJECT_ROOT = root
+            pool_ops.POOL_ENV_FILE = root / ".env"
+            (root / ".env").write_text("", encoding="utf-8")
+            (root / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
+            (root / "docker-compose.override.yml").write_text("services: {}\n", encoding="utf-8")
+
+            command = pool_ops.docker_compose_command("up", "node")
+
+        compose_files = [
+            command[index + 1]
+            for index, value in enumerate(command)
+            if value == "-f" and index + 1 < len(command)
+        ]
+        self.assertIn(str(root / "docker-compose.yml"), compose_files)
+        self.assertIn(str(root / "docker-compose.override.yml"), compose_files)
 
     def test_lazy_archive_task_defers_on_load_pressure(self) -> None:
         pool_ops.BACKGROUND_MAINTENANCE_BACKOFF_ENABLED = True

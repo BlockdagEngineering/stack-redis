@@ -109,6 +109,25 @@ class PoolEfficiencyLossLedgerTests(unittest.TestCase):
         self.assertIn("Leave miners configured", policy["user_message"])
         self.assertEqual(policy["trigger"], "lag_threshold")
 
+    def test_catchup_policy_ignores_remaining_blocks_when_paid_work_recent(self) -> None:
+        policy = pool_ops.build_catchup_policy(
+            {
+                "status": "syncing",
+                "remaining_blocks": 14_982,
+                "nodes": {"node": {"remaining_blocks": 14_982, "peer_ahead_blocks": 24}},
+            },
+            {"node": {"remaining_blocks": 14_982, "peer_ahead_blocks": 24}},
+            {"pool": {"running": True}},
+            {},
+            mining_ready=True,
+            ignore_remaining_blocks=True,
+        )
+
+        self.assertFalse(policy["active"])
+        self.assertTrue(policy["mining_ready"])
+        self.assertTrue(policy["remaining_blocks_advisory"])
+        self.assertEqual(policy["lag_blocks"], 24)
+
     def test_catchup_policy_uses_io_pressure_as_primary_trigger(self) -> None:
         policy = pool_ops.build_catchup_policy(
             {"status": "syncing", "remaining_blocks": 80},

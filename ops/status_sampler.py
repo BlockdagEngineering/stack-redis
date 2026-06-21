@@ -510,20 +510,22 @@ def public_chain_divergence_reasons(payload: dict[str, Any]) -> list[str]:
 
 def catchup_lag_blocks(payload: dict[str, Any]) -> int:
     values: list[int] = []
+    paid_work_recent = pool_has_recent_paid_work(payload)
+    lag_keys = ("peer_ahead_blocks",) if paid_work_recent else ("remaining_blocks", "peer_ahead_blocks")
     policy = dict_value(payload.get("catchup_policy"))
     policy_lag = safe_int(policy.get("lag_blocks"), -1)
-    if policy_lag >= 0:
+    if policy_lag >= 0 and not paid_work_recent:
         values.append(policy_lag)
 
     sync = dict_value(payload.get("sync_progress"))
-    for key in ("remaining_blocks", "peer_ahead_blocks"):
+    for key in lag_keys:
         value = safe_int(sync.get(key), -1)
         if value >= 0:
             values.append(value)
     for info in dict_value(sync.get("nodes")).values():
         if not isinstance(info, dict):
             continue
-        for key in ("remaining_blocks", "peer_ahead_blocks"):
+        for key in lag_keys:
             value = safe_int(info.get(key), -1)
             if value >= 0:
                 values.append(value)
@@ -567,9 +569,11 @@ def catchup_policy_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
     lag = catchup_lag_blocks(payload)
     sync = dict_value(payload.get("sync_progress"))
     sync_status = str(sync.get("status") or "").strip().lower()
-    mining_ready = bool(policy.get("mining_ready", payload.get("can_mine") is True))
+    paid_work_recent = pool_has_recent_paid_work(payload)
+    mining_ready = bool(policy.get("mining_ready", payload.get("can_mine") is True) or paid_work_recent)
+    cached_syncing_active = bool(policy.get("syncing_active")) and not paid_work_recent
     syncing_active = bool(
-        policy.get("syncing_active")
+        cached_syncing_active
         or (
             CATCHUP_PAUSE_ON_SYNCING
             and sync_status in {"syncing", "catchup_pause"}
@@ -600,6 +604,8 @@ def catchup_policy_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
     active = bool(policy.get("active")) if "active" in policy else False
     if not active:
         active = bool(CATCHUP_PAUSE_ENABLED and (syncing_active or io_pressure_active or lag_threshold_active))
+    if active and paid_work_recent and not (syncing_active or io_pressure_active or lag_threshold_active):
+        active = False
     trigger = str(policy.get("trigger") or "")
     if not trigger and active:
         if syncing_active:
@@ -627,6 +633,7 @@ def catchup_policy_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "backend_unready_under_pressure": backend_unready_under_pressure,
         "lag_threshold_active": lag_threshold_active,
         "mining_ready": mining_ready,
+        "remaining_blocks_advisory": paid_work_recent,
     }
 
 
@@ -1590,6 +1597,9 @@ def catchup_target_node_cache_mb() -> int:
 
 
 def apply_catchup_node_runtime(payload: dict[str, Any], policy: dict[str, Any]) -> bool:
+    if pool_has_recent_paid_work(payload):
+        log("catch-up runtime adjustment skipped because accepted block submissions remain recent")
+        return False
     if not automation_repair_mutation_allowed(
         automation_control.ACTION_CONFIG_EDIT,
         target="catchup-node-runtime",

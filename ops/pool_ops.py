@@ -1329,8 +1329,11 @@ def docker_compose_command(*args: str) -> list[str]:
     command.extend([
         "-f",
         str(PROJECT_ROOT / "docker-compose.yml"),
-        *args,
     ])
+    override = PROJECT_ROOT / "docker-compose.override.yml"
+    if override.exists():
+        command.extend(["-f", str(override)])
+    command.extend(args)
     return command
 
 
@@ -5329,9 +5332,12 @@ def max_catchup_lag_blocks(
     sync_progress: Mapping[str, Any],
     node_details: Mapping[str, Any],
     selected_source_health: Mapping[str, Any] | None = None,
+    *,
+    ignore_remaining_blocks: bool = False,
 ) -> int:
     values: list[int] = []
-    for key in ("remaining_blocks", "peer_ahead_blocks"):
+    lag_keys = ("peer_ahead_blocks",) if ignore_remaining_blocks else ("remaining_blocks", "peer_ahead_blocks")
+    for key in lag_keys:
         value = safe_int(sync_progress.get(key), -1)
         if value >= 0:
             values.append(value)
@@ -5339,14 +5345,14 @@ def max_catchup_lag_blocks(
     for info in progress_nodes.values():
         if not isinstance(info, dict):
             continue
-        for key in ("remaining_blocks", "peer_ahead_blocks"):
+        for key in lag_keys:
             value = safe_int(info.get(key), -1)
             if value >= 0:
                 values.append(value)
     for info in node_details.values():
         if not isinstance(info, dict):
             continue
-        for key in ("remaining_blocks", "peer_ahead_blocks"):
+        for key in lag_keys:
             value = safe_int(info.get(key), -1)
             if value >= 0:
                 values.append(value)
@@ -5382,8 +5388,14 @@ def build_catchup_policy(
     selected_source_health: Mapping[str, Any] | None = None,
     host_pressure: Mapping[str, Any] | None = None,
     mining_ready: bool | None = None,
+    ignore_remaining_blocks: bool = False,
 ) -> dict[str, Any]:
-    lag = max_catchup_lag_blocks(sync_progress, node_details, selected_source_health)
+    lag = max_catchup_lag_blocks(
+        sync_progress,
+        node_details,
+        selected_source_health,
+        ignore_remaining_blocks=ignore_remaining_blocks,
+    )
     status = str(sync_progress.get("status") or "").lower()
     peer_catchup = lag > 0
     io_pressure_reasons = catchup_io_pressure_reasons(host_pressure)
@@ -5474,6 +5486,7 @@ def build_catchup_policy(
         "mining_ready": mining_ready_for_policy,
         "backend_unready_under_pressure": backend_unready_under_pressure,
         "backend_unready_reasons": backend_unready_reasons,
+        "remaining_blocks_advisory": ignore_remaining_blocks,
         "lag_threshold_active": lag_threshold_active,
         "pool_pause_recommended": active,
         "pool_pause_active": bool(active and not pool_running),
@@ -6449,8 +6462,16 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
             sync_health["node_importing_nodes"] = active_import_nodes
     catchup_mining_ready = bool(
         (sync_progress.get("status") == "synced" or selected_source_mining_safe or pool_has_recent_paid_work)
-        and (not selected_source_unready_reasons or readiness_override_safe)
-        and (source_job_health_ok is not False or readiness_override_safe)
+        and (
+            pool_has_recent_paid_work
+            or not selected_source_unready_reasons
+            or readiness_override_safe
+        )
+        and (
+            pool_has_recent_paid_work
+            or source_job_health_ok is not False
+            or readiness_override_safe
+        )
         and not pool.get("initial_download")
     )
     catchup_policy = build_catchup_policy(
@@ -6460,6 +6481,7 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
         selected_source_health,
         host_pressure,
         mining_ready=catchup_mining_ready,
+        ignore_remaining_blocks=pool_has_recent_paid_work,
     )
     if catchup_policy.get("active"):
         pool_down_message = f"{POOL_CONTAINER} is not running"

@@ -447,6 +447,45 @@ class StatusSamplerMiningImperativeTests(unittest.TestCase):
         self.assertEqual(policy["trigger"], "")
         self.assertEqual(policy["lag_blocks"], 5)
 
+    def test_catchup_policy_treats_remaining_blocks_as_advisory_when_paid_work_is_recent(self) -> None:
+        payload = self.stopped_pool_payload(sync_status="syncing", remaining_blocks=14_982)
+        payload["sync_health"] = {"pool_has_recent_paid_work": True}
+        payload["catchup_policy"] = {
+            "active": True,
+            "syncing_active": True,
+            "lag_blocks": 14_982,
+            "threshold_blocks": 300,
+        }
+        payload["sync_progress"]["nodes"] = {
+            "node": {"remaining_blocks": 14_982, "peer_ahead_blocks": 24}
+        }
+
+        policy = status_sampler.catchup_policy_from_payload(payload)
+
+        self.assertFalse(policy["active"])
+        self.assertFalse(policy["syncing_active"])
+        self.assertTrue(policy["mining_ready"])
+        self.assertTrue(policy["remaining_blocks_advisory"])
+        self.assertEqual(policy["lag_blocks"], 24)
+        self.assertEqual(policy["trigger"], "")
+
+    def test_apply_catchup_node_runtime_skips_recent_paid_work(self) -> None:
+        payload = self.stopped_pool_payload(sync_status="syncing", remaining_blocks=14_982)
+        payload["sync_health"] = {"pool_has_recent_paid_work": True}
+        status_sampler.set_runtime_env_value = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("runtime env must not be changed while paid work is recent")
+        )
+        status_sampler.run = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("node must not be recreated while paid work is recent")
+        )
+
+        applied = status_sampler.apply_catchup_node_runtime(
+            payload,
+            {"active": True, "lag_blocks": 14_982, "threshold_blocks": 300},
+        )
+
+        self.assertFalse(applied)
+
     def test_syncing_node_leaves_running_pool_up_below_lag_threshold(self) -> None:
         commands = []
         env_updates = {}
