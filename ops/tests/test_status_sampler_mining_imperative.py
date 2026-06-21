@@ -151,6 +151,20 @@ class StatusSamplerMiningImperativeTests(unittest.TestCase):
             "reason": "external public-chain proof matches local node" if safe else "public-chain proof failed",
         }
 
+    def native_template_health(self, safe: bool = True) -> dict:
+        return {
+            "chain_current": safe,
+            "p2p_mining_fresh": safe,
+            "p2p_mining_fresh_reason_code": "ok" if safe else "no_fresh_peers",
+            "p2p_fresh_consensus_peer_count": 2 if safe else 0,
+            "p2p_best_peer_lead_blocks": 0,
+            "get_block_template_ready": safe,
+            "submit_ready": safe,
+            "mineable_now": safe,
+            "template_usable": safe,
+            "sync_allowed": safe,
+        }
+
     def stopped_pool_payload(self, sync_status: str = "syncing", remaining_blocks: int = 5) -> dict:
         payload = {
             "overall": "syncing" if sync_status != "synced" else "ok",
@@ -168,7 +182,10 @@ class StatusSamplerMiningImperativeTests(unittest.TestCase):
         }
         if sync_status == "synced":
             payload["sync_progress"]["nodes"] = {
-                "blockdag-node-1": {"canonical_mining_safety": self.canonical_safety(True)}
+                "blockdag-node-1": {
+                    "canonical_mining_safety": self.canonical_safety(True),
+                    "native_template_health": self.native_template_health(True),
+                }
             }
         return payload
 
@@ -277,7 +294,7 @@ class StatusSamplerMiningImperativeTests(unittest.TestCase):
         self.assertFalse(self.pool_compose_start_seen(commands))
         self.assertNotIn(f"started_container:{status_sampler.POOL_CONTAINER}", repair["actions"])
 
-    def test_synced_status_without_canonical_proof_does_not_start_pool(self) -> None:
+    def test_synced_status_without_native_proof_does_not_start_pool(self) -> None:
         commands = []
         incidents = []
         status_sampler.MINING_IMPERATIVE_GUARD_UNITS = []
@@ -710,7 +727,7 @@ class StatusSamplerMiningImperativeTests(unittest.TestCase):
         self.assertEqual(env_updates["NODE_ARGS_APPEND"], env_updates["BDAG_NODE_MINING_ARGS"])
         self.assertTrue(any("--force-recreate" in command for command in commands))
 
-    def test_node_mining_template_support_requires_canonical_proof(self) -> None:
+    def test_node_mining_template_support_requires_native_proof(self) -> None:
         commands = []
         status_sampler.MINING_IMPERATIVE_GUARD_UNITS = []
         os.environ["MINING_ADDRESS"] = "0xA1Ee1005c4Ff181e93e717D2C624554b66AB7DFc"
@@ -723,7 +740,7 @@ class StatusSamplerMiningImperativeTests(unittest.TestCase):
         payload["miner_health"] = {"tracked_count": 1, "connected_count": 1, "managed_count": 1}
 
         status_sampler.set_runtime_env_value = lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("config edit must not run without canonical proof")
+            AssertionError("config edit must not run without native proof")
         )
         status_sampler.run = lambda command, timeout=20: commands.append(command) or self.command_result(command)
 

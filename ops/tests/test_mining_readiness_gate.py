@@ -275,7 +275,7 @@ class MiningReadinessGateTests(unittest.TestCase):
         self.assertEqual(server.url, result["backends"]["node"]["url"])
         self.assertNotIn("user:pass", json.dumps(result))
 
-    def test_reference_lag_rejects_backend(self) -> None:
+    def test_reference_lag_is_advisory_by_default(self) -> None:
         def backend_handler(method: str, _params: list[Any] | dict[str, Any], _calls: dict[str, int]) -> Any:
             if method == "getBlockCount":
                 return rpc_result(1000)
@@ -303,10 +303,70 @@ class MiningReadinessGateTests(unittest.TestCase):
                 max_reference_lag=120,
             )
 
+        self.assertTrue(result["ok"], result["failures"])
+        sample = result["backends"]["node"]["samples"][0]
+        self.assertEqual([], sample["failures"])
+        self.assertIn("reference_height_lag_121_gt_120", sample["warnings"])
+        self.assertIn("reference_main_order_lag_121_gt_120", sample["warnings"])
+
+    def test_strict_reference_lag_rejects_backend(self) -> None:
+        def backend_handler(method: str, _params: list[Any] | dict[str, Any], _calls: dict[str, int]) -> Any:
+            if method == "getBlockCount":
+                return rpc_result(1000)
+            if method == "getTemplateHealth":
+                return rpc_result(healthy_health(2000))
+            if method == "getBlockTemplate":
+                return rpc_result({"main_order": 2000, "parent": "0xparent"})
+            return rpc_error(-32601, "method not found")
+
+        def reference_handler(method: str, _params: list[Any] | dict[str, Any], _calls: dict[str, int]) -> Any:
+            if method == "getBlockCount":
+                return rpc_result(1121)
+            if method == "getTemplateHealth":
+                return rpc_result({"main_order": 2121})
+            return rpc_error(-32601, "method not found")
+
+        with FakeJsonRpcServer(backend_handler) as backend, FakeJsonRpcServer(reference_handler) as reference:
+            result = gate.evaluate_gate(
+                [gate.Backend("node", backend.url)],
+                reference_rpc_url=reference.url,
+                timeout=0.5,
+                sample_count=1,
+                sample_interval_seconds=0,
+                after_chain_incident=True,
+                max_reference_lag=120,
+                strict_reference_lag=True,
+            )
+
         self.assertFalse(result["ok"])
         failures = result["backends"]["node"]["samples"][0]["failures"]
         self.assertIn("reference_height_lag_121_gt_120", failures)
         self.assertIn("reference_main_order_lag_121_gt_120", failures)
+
+    def test_missing_p2p_freshness_rejects_backend_before_incident_mode(self) -> None:
+        def handler(method: str, _params: list[Any] | dict[str, Any], _calls: dict[str, int]) -> Any:
+            if method == "getBlockCount":
+                return rpc_result(1000)
+            if method == "getTemplateHealth":
+                health = healthy_health(2000)
+                health.pop("p2p_mining_fresh")
+                return rpc_result(health)
+            if method == "getBlockTemplate":
+                return rpc_result({"main_order": 2000, "parent": "0xparent"})
+            return rpc_error(-32601, "method not found")
+
+        with FakeJsonRpcServer(handler) as backend:
+            result = gate.evaluate_gate(
+                [gate.Backend("node", backend.url)],
+                timeout=0.5,
+                sample_count=1,
+                sample_interval_seconds=0,
+                after_chain_incident=False,
+            )
+
+        self.assertFalse(result["ok"])
+        failures = result["backends"]["node"]["samples"][0]["failures"]
+        self.assertIn("p2p_mining_fresh_missing", failures)
 
     def test_active_node_topology_accepts_direct_backend(self) -> None:
         topology = gate.validate_topology(

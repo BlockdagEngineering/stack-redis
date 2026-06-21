@@ -128,7 +128,7 @@ need_grep 'BOOTSTRAP_PEER_ADDRESSES: \$\{BOOTSTRAP_PEER_ADDRESSES:-\}' "docker-c
 	reject_grep '^addpeer=/ip4/52\.8\.80\.249/tcp/8150/p2p/' "node.conf.example"
 	reject_grep '^addpeer=/ip4/192\.168\.' "node.conf.example"
 	need_grep '^POOL_RPC_ROUTER_NODE_HEALTH_MIN_CONSENSUS_PEERS=2$' ".env.example"
-	need_grep '^POOL_RECENT_STALE_BLOCK_CANDIDATE_SUBMIT_GRACE_MS=0$' ".env.example"
+	need_grep '^POOL_RECENT_STALE_BLOCK_CANDIDATE_SUBMIT_GRACE_MS=250$' ".env.example"
 	need_grep '^POOL_PREEMPTIVE_BLOCK_CANDIDATE_REFRESH_INTERVAL_MS=20$' ".env.example"
 need_grep 'stack-redis-<tag>-linux-amd64\.zip' "README.md"
 need_grep 'stack-redis-<tag>-linux-arm64\.zip' "README.md"
