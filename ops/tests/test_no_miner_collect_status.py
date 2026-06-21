@@ -23,6 +23,7 @@ class NoMinerCollectStatusTests(unittest.TestCase):
                 "STACK_SERVICES",
                 "POOL_CONTAINER",
                 "POOL_CONTAINERS",
+                "EVM_REFERENCE_GAP_WATCH_FILE",
                 "POOL_PAID_WORK_STATE_FILE",
                 "POOL_PAID_WORK_RECENT_SECONDS",
                 "ensure_runtime",
@@ -608,6 +609,11 @@ class NoMinerCollectStatusTests(unittest.TestCase):
             "lookback_seconds": 2700,
         }
         pool_ops.read_sync_coordinator_state = lambda: {}
+        pool_ops.EVM_REFERENCE_GAP_WATCH_FILE = pathlib.Path(self.tmpdir.name) / "evm-gap-watch.json"
+        pool_ops.EVM_REFERENCE_GAP_WATCH_FILE.write_text(
+            '{"restore_required": true, "reason": "EVM reference gap stalled"}',
+            encoding="utf-8",
+        )
 
         status = pool_ops.collect_status(include_logs=False)
 
@@ -621,6 +627,11 @@ class NoMinerCollectStatusTests(unittest.TestCase):
         self.assertTrue(status["sync_health"]["readiness_override_safe"])
         self.assertTrue(status["sync_health"]["selected_backend_mining_safe"])
         self.assertEqual(status["sync_warnings"], [])
+        self.assertTrue(status["sync_health"]["evm_reference_gap_advisory"])
+        self.assertTrue(status["sync_health"]["evm_reference_gap_restore_suppressed_by_native_paid_work"])
+        self.assertFalse(status["sync_health"]["evm_reference_gap_watch"]["restore_required"])
+        self.assertTrue(status["sync_health"]["evm_reference_gap_watch"]["would_restore_required"])
+        self.assertNotIn("needs_chain_data_restore", status["sync_health"])
 
     def test_no_miner_status_promotes_busy_syncing_to_syncing(self) -> None:
         now = datetime(2026, 5, 25, 12, 0, 0, tzinfo=timezone.utc).timestamp()

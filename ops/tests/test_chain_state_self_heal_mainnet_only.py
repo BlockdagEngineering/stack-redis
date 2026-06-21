@@ -12,6 +12,8 @@ class ChainStateSelfHealMainnetOnlyTest(unittest.TestCase):
         self.assertIn("chain-state self-heal refuses non-mainnet network", script)
         self.assertIn('NETWORK="mainnet"', script)
         self.assertIn('NODE_NETWORK_DIR="$NODE_DATA_DIR/$NETWORK"', script)
+        self.assertIn("soft_evm_restore_only", script)
+        self.assertIn("native_paid_safe", script)
         self.assertNotIn('${NETWORK:-mainnet}', script)
 
 

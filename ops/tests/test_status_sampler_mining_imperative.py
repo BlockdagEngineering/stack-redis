@@ -238,6 +238,48 @@ class StatusSamplerMiningImperativeTests(unittest.TestCase):
         self.assertIn("EVM reference gap has not improved", decision["reasons"][0])
         self.assertTrue(decision["evm_reference_gap"]["restore_required"])
 
+    def test_evm_reference_gap_stall_is_advisory_when_native_paid_mining_is_safe(self) -> None:
+        now = 1_779_200_000
+        payload = self.evm_gap_payload(lag=14_140, local=11_691_000)
+        payload["sync_health"] = {"pool_has_recent_paid_work": True}
+        payload["sync_progress"]["nodes"] = {
+            "node": {"native_template_health": self.native_template_health(True)}
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            status_sampler.EVM_REFERENCE_GAP_WATCH_FILE = pathlib.Path(tmpdir) / "evm-gap-watch.json"
+            status_sampler.EVM_REFERENCE_GAP_WATCH_FILE.write_text(
+                json.dumps(
+                    {
+                        "candidate": True,
+                        "best_lag_blocks": 14_100,
+                        "first_unimproved_epoch": now - 901,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with mock.patch.object(status_sampler.time, "time", return_value=now):
+                decision = status_sampler.chain_state_restore_decision(payload)
+
+        self.assertFalse(decision["should_repair"])
+        self.assertFalse(decision["evm_reference_gap"]["restore_required"])
+        self.assertTrue(decision["evm_reference_gap"]["would_restore_required"])
+        self.assertTrue(decision["evm_reference_gap"]["restore_suppressed_by_native_paid_work"])
+        self.assertIn("native mining safety", decision["evm_reference_gap"]["reason"])
+
+    def test_cached_evm_restore_flag_is_not_hard_when_native_paid_mining_is_safe(self) -> None:
+        payload = self.evm_gap_payload(lag=14_140, local=11_691_000)
+        payload["sync_health"] = {
+            "needs_chain_data_restore": True,
+            "evm_reference_gap_stalled": True,
+            "evm_reference_gap_watch": {"restore_required": True},
+            "pool_has_recent_paid_work": True,
+        }
+        payload["sync_progress"]["nodes"] = {
+            "node": {"native_template_health": self.native_template_health(True)}
+        }
+
+        self.assertEqual([], status_sampler.chain_state_restore_hard_reasons(payload))
+
     def test_evm_reference_gap_watch_resets_when_gap_closes_enough(self) -> None:
         now = 1_779_200_000
         with tempfile.TemporaryDirectory() as tmpdir:

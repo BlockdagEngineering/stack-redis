@@ -5992,9 +5992,11 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
         "planned_pause_leader": planned_pause_leader,
     }
     evm_reference_gap_watch = read_json_file(EVM_REFERENCE_GAP_WATCH_FILE, {})
+    evm_reference_gap_restore_required = False
     if isinstance(evm_reference_gap_watch, dict) and evm_reference_gap_watch:
         sync_health["evm_reference_gap_watch"] = evm_reference_gap_watch
         if evm_reference_gap_watch.get("restore_required"):
+            evm_reference_gap_restore_required = True
             sync_health["evm_reference_gap_stalled"] = True
             sync_health["needs_chain_data_restore"] = True
     chain_blocker_nodes = {
@@ -6093,6 +6095,27 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
         or recent_paid_backend_safe
         or native_progress_paid_work_safe
     )
+    evm_reference_gap_advisory_safe = bool(
+        evm_reference_gap_restore_required
+        and pool_has_recent_paid_work
+        and selected_source_mining_safe
+        and not chain_blocker_nodes
+        and not chain_restore_nodes
+    )
+    if evm_reference_gap_advisory_safe:
+        sync_health.pop("evm_reference_gap_stalled", None)
+        if not sync_health.get("chain_state_blocker") and not sync_health.get("chain_data_restore_required"):
+            sync_health.pop("needs_chain_data_restore", None)
+        sync_health["evm_reference_gap_advisory"] = True
+        sync_health["evm_reference_gap_restore_suppressed_by_native_paid_work"] = True
+        if isinstance(evm_reference_gap_watch, dict):
+            sync_health["evm_reference_gap_watch"] = {
+                **evm_reference_gap_watch,
+                "restore_required": False,
+                "would_restore_required": True,
+                "restore_suppressed_by_native_paid_work": True,
+                "native_paid_work_advisory_reason": "selected backend is mining-safe and recent paid work is present",
+            }
     if selected_source_mining_safe and (
         str(sync_progress.get("status") or "").lower() == "syncing"
         or sync_progress.get("chain_syncing") is True

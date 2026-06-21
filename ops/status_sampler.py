@@ -637,7 +637,12 @@ def catchup_pause_active(payload: dict[str, Any]) -> bool:
 def chain_state_restore_hard_reasons(payload: dict[str, Any]) -> list[str]:
     reasons: list[str] = []
     sync_health = dict_value(payload.get("sync_health"))
-    if sync_health.get("needs_chain_data_restore") or sync_health.get("chain_data_restore_required"):
+    soft_evm_restore_only = evm_reference_gap_restore_only(sync_health)
+    evm_restore_advisory, _advisory_reason = evm_reference_gap_native_paid_advisory(payload)
+    if (
+        sync_health.get("needs_chain_data_restore")
+        or sync_health.get("chain_data_restore_required")
+    ) and not (soft_evm_restore_only and evm_restore_advisory):
         restore_nodes = dict_value(sync_health.get("chain_data_restore_nodes"))
         for node, info in restore_nodes.items():
             node_reasons = info.get("reasons") if isinstance(info, dict) else None
@@ -669,6 +674,35 @@ def chain_state_restore_hard_reasons(payload: dict[str, Any]) -> list[str]:
         if missing_trie >= CHAIN_STATE_MISSING_TRIE_RESTORE_WARNINGS:
             reasons.append(f"{node} has {missing_trie} missing-trie state warning(s)")
     return sorted(set(reasons))
+
+
+def evm_reference_gap_restore_only(sync_health: dict[str, Any]) -> bool:
+    if not (
+        sync_health.get("evm_reference_gap_stalled")
+        or dict_value(sync_health.get("evm_reference_gap_watch")).get("restore_required")
+    ):
+        return False
+    return not bool(
+        sync_health.get("chain_state_blocker")
+        or sync_health.get("chain_data_restore_required")
+        or dict_value(sync_health.get("chain_state_blocker_nodes"))
+        or dict_value(sync_health.get("chain_data_restore_nodes"))
+    )
+
+
+def evm_reference_gap_native_paid_advisory(payload: dict[str, Any]) -> tuple[bool, str]:
+    sync_health = dict_value(payload.get("sync_health"))
+    if sync_health.get("native_progress_paid_work_safe") is True:
+        return True, "native progress and recent paid work are already marked safe"
+    if sync_health.get("selected_backend_mining_safe") is True and sync_health.get("pool_has_recent_paid_work") is True:
+        return True, "selected backend is mining-safe and recent paid work is present"
+
+    native_safe, native_reason = pool_start_gate.native_mining_safety_proven(payload)
+    if not native_safe:
+        return False, native_reason
+    if not pool_has_recent_paid_work(payload):
+        return False, "native safety proof exists but recent paid work is missing"
+    return True, native_reason
 
 
 def sync_progress_height(payload: dict[str, Any]) -> int:
@@ -899,12 +933,21 @@ def update_evm_reference_gap_watch(payload: dict[str, Any]) -> dict[str, Any]:
             f"for {stalled_seconds}s while lag is {lag} block(s)"
         )
 
+    would_restore_required = restore_required
+    advisory_safe, advisory_reason = evm_reference_gap_native_paid_advisory(payload)
+    if restore_required and advisory_safe:
+        restore_required = False
+        reason = f"{reason}; advisory under native mining safety: {advisory_reason}"
+
     state = {
         "schema_version": 1,
         "updated_at": now_iso(),
         "epoch": now_epoch,
         "candidate": True,
         "restore_required": restore_required,
+        "would_restore_required": would_restore_required,
+        "restore_suppressed_by_native_paid_work": bool(would_restore_required and advisory_safe),
+        "native_paid_work_advisory_reason": advisory_reason if advisory_safe else "",
         "reason": reason,
         "sample": sample,
         "lag_blocks": lag,
