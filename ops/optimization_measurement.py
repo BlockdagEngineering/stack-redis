@@ -80,6 +80,27 @@ def metric_sum(metrics: dict[tuple[str, tuple[tuple[str, str], ...]], float], na
     return round(sum(values), 6)
 
 
+def metric_sum_by_label(
+    metrics: dict[tuple[str, tuple[tuple[str, str], ...]], float],
+    name: str,
+    group_label: str,
+    labels: dict[str, str] | None = None,
+    exclude_labels: dict[str, str] | None = None,
+) -> dict[str, float]:
+    grouped: dict[str, float] = {}
+    for (metric_name, metric_labels), value in metrics.items():
+        if metric_name != name:
+            continue
+        label_map = dict(metric_labels)
+        if labels and not all(label_map.get(key) == wanted for key, wanted in labels.items()):
+            continue
+        if exclude_labels and any(label_map.get(key) == unwanted for key, unwanted in exclude_labels.items()):
+            continue
+        key = label_map.get(group_label) or "unlabeled"
+        grouped[key] = round(grouped.get(key, 0.0) + value, 6)
+    return dict(sorted(grouped.items()))
+
+
 def metric_max(metrics: dict[tuple[str, tuple[tuple[str, str], ...]], float], name: str) -> float | None:
     values = [value for (metric_name, _), value in metrics.items() if metric_name == name]
     if not values:
@@ -108,8 +129,15 @@ def flatten_pool_metrics(metrics: dict[tuple[str, tuple[tuple[str, str], ...]], 
         "pool_blocks_found_total": metric_sum(metrics, "pool_blocks_found_total"),
         "pool_block_submit_accepted_total": metric_sum(metrics, "pool_block_submit_outcomes_total", {"outcome": "accepted"}),
         "pool_block_submit_rejected_total": round(block_rejected, 6) if block_rejected_seen else None,
+        "pool_block_submit_rejected_by_reason": metric_sum_by_label(
+            metrics,
+            "pool_block_submit_outcomes_total",
+            "reason",
+            exclude_labels={"outcome": "accepted"},
+        ),
         "pool_shares_accepted_total": metric_sum(metrics, "pool_shares_accepted_total"),
         "pool_shares_rejected_total": metric_sum(metrics, "pool_shares_rejected_total"),
+        "pool_share_reject_by_reason": metric_sum_by_label(metrics, "pool_shares_rejected_total", "reason"),
         "pool_backend_mineable": metric_max(metrics, "pool_rpc_backend_node_health_mineable"),
         "pool_backend_submit_ready": metric_max(metrics, "pool_rpc_backend_node_health_submit_ready"),
         "pool_backend_p2p_mining_fresh": metric_max(metrics, "pool_rpc_backend_node_health_p2p_mining_fresh"),
@@ -121,6 +149,12 @@ def flatten_pool_metrics(metrics: dict[tuple[str, tuple[tuple[str, str], ...]], 
         "pool_template_conversion_window_total": metric_sum(metrics, "pool_template_conversion_stall_window_candidates", {"kind": "total"}),
         "pool_template_conversion_window_failed": metric_sum(metrics, "pool_template_conversion_stall_window_candidates", {"kind": "failed"}),
         "pool_template_conversion_window_accepted": metric_sum(metrics, "pool_template_conversion_stall_window_candidates", {"kind": "accepted"}),
+        "pool_template_invalidation_by_cause": metric_sum_by_label(
+            metrics,
+            "pool_rpc_backend_node_health_template_invalidations_total",
+            "cause",
+        ),
+        "pool_clean_refresh_by_event": metric_sum_by_label(metrics, "pool_clean_template_refresh_events_total", "event"),
     }
 
 
@@ -154,6 +188,26 @@ def collect_status_sample(
     return sample
 
 
+def sync_current_block_source(sync: dict[str, Any], nodes: dict[str, Any], current_block: float | None) -> str | None:
+    source = sync.get("current_block_source")
+    if source:
+        return str(source)
+    chain_block_count = number(sync.get("chain_block_count"))
+    if current_block is not None and chain_block_count is not None and int(current_block) == int(chain_block_count):
+        return str(sync.get("source") or "native-chain-block-count")
+    node_sources: set[str] = set()
+    for node in nodes.values():
+        if not isinstance(node, dict):
+            continue
+        node_current = number(node.get("current_block"))
+        node_source = node.get("current_block_source") or node.get("chain_rpc_source")
+        if current_block is not None and node_current is not None and int(current_block) == int(node_current) and node_source:
+            node_sources.add(str(node_source))
+    if len(node_sources) == 1:
+        return next(iter(node_sources))
+    return None
+
+
 def flatten_status_sample(
     status: dict[str, Any],
     source: str,
@@ -175,6 +229,7 @@ def flatten_status_sample(
     highest_block = number(sync.get("highest_block"))
     p2p_connections = number(sync.get("p2p_connections"))
     p2p_network_gap = number(sync.get("p2p_network_gap"))
+    current_block_source = sync_current_block_source(sync, nodes, current_block)
     adaptive_workers = adaptive.get("workers") if isinstance(adaptive.get("workers"), dict) else {}
     return {
         "sampled_at": now_iso(),
@@ -194,7 +249,7 @@ def flatten_status_sample(
         "sync_status": sync.get("status"),
         "current_block": int(current_block) if current_block is not None else None,
         "highest_block": int(highest_block) if highest_block is not None else None,
-        "current_block_source": sync.get("current_block_source"),
+        "current_block_source": current_block_source,
         "remaining_blocks": int(number(sync.get("remaining_blocks")) or 0) if sync.get("remaining_blocks") is not None else None,
         "native_is_current": sync.get("native_is_current"),
         "chain_syncing": sync.get("chain_syncing"),
@@ -231,13 +286,14 @@ def summarize_samples(samples: list[dict[str, Any]]) -> dict[str, Any]:
     last_block = number(last.get("current_block"))
     first_block_source = str(first.get("current_block_source") or "")
     last_block_source = str(last.get("current_block_source") or "")
+    block_source_missing = not first_block_source or not last_block_source
     block_source_changed = bool(first_block_source and last_block_source and first_block_source != last_block_source)
     block_delta = None
     blocks_per_second = None
     block_delta_valid = False
     if first_block is not None and last_block is not None:
         raw_block_delta = int(last_block - first_block)
-        block_delta_valid = bool(raw_block_delta >= 0 and not block_source_changed)
+        block_delta_valid = bool(raw_block_delta >= 0 and not block_source_missing and not block_source_changed)
         if block_delta_valid:
             block_delta = raw_block_delta
         if elapsed > 0 and block_delta is not None:
@@ -254,6 +310,18 @@ def summarize_samples(samples: list[dict[str, Any]]) -> dict[str, Any]:
         if last_value < first_value:
             return round(last_value, 6)
         return round(last_value - first_value, 6)
+
+    def counter_delta_map(field: str) -> dict[str, float]:
+        first_values = first.get(field) if isinstance(first.get(field), dict) else {}
+        last_values = last.get(field) if isinstance(last.get(field), dict) else {}
+        deltas: dict[str, float] = {}
+        for key in sorted(set(first_values) | set(last_values)):
+            first_value = number(first_values.get(key)) or 0.0
+            last_value = number(last_values.get(key)) or 0.0
+            delta = last_value if last_value < first_value else last_value - first_value
+            if delta != 0:
+                deltas[str(key)] = round(delta, 6)
+        return deltas
 
     def bool_values(field: str) -> list[str]:
         found: set[str] = set()
@@ -295,7 +363,9 @@ def summarize_samples(samples: list[dict[str, Any]]) -> dict[str, Any]:
         "sync_status_values": sorted({str(sample.get("sync_status")) for sample in samples if sample.get("sync_status")}),
         "block_delta": block_delta,
         "block_delta_valid": block_delta_valid,
-        "block_delta_warning": "current_block source changed or moved backwards" if not block_delta_valid and first_block is not None and last_block is not None else "",
+        "block_delta_warning": "current_block source missing, changed, or moved backwards"
+        if not block_delta_valid and first_block is not None and last_block is not None
+        else "",
         "blocks_per_second": blocks_per_second,
         "current_block_first": first.get("current_block"),
         "current_block_last": last.get("current_block"),
@@ -322,6 +392,7 @@ def summarize_samples(samples: list[dict[str, Any]]) -> dict[str, Any]:
         "pool_block_submit_accepted_delta": accepted_delta,
         "pool_block_submit_rejected_delta": rejected_delta,
         "pool_block_submit_rejected_per_accepted": round(rejected_delta / accepted_delta, 6) if accepted_delta and rejected_delta is not None else None,
+        "pool_block_submit_rejected_by_reason_delta": counter_delta_map("pool_block_submit_rejected_by_reason"),
         "pool_accepted_blocks_per_hour": round(accepted_delta * 3600.0 / elapsed, 3) if accepted_delta is not None and elapsed > 0 else None,
         "pool_blocks_found_delta": counter_delta("pool_blocks_found_total"),
         "pool_shares_accepted_delta": shares_accepted_delta,
@@ -329,6 +400,9 @@ def summarize_samples(samples: list[dict[str, Any]]) -> dict[str, Any]:
         "pool_share_reject_ratio": round(shares_rejected_delta / max(1.0, shares_accepted_delta + shares_rejected_delta), 6)
         if shares_accepted_delta is not None and shares_rejected_delta is not None
         else None,
+        "pool_share_reject_by_reason_delta": counter_delta_map("pool_share_reject_by_reason"),
+        "pool_template_invalidation_by_cause_delta": counter_delta_map("pool_template_invalidation_by_cause"),
+        "pool_clean_refresh_by_event_delta": counter_delta_map("pool_clean_refresh_by_event"),
         "pool_template_conversion_failure_ratio_max": percentile(values("pool_template_conversion_failure_ratio"), 100),
         "collection_ms_p95": percentile(values("collection_ms"), 95),
         "dashboard_latency_ms_p95": percentile(values("dashboard_latency_ms"), 95),
@@ -372,11 +446,13 @@ def render_html_report(summary: dict[str, Any], samples: list[dict[str, Any]]) -
         ("Pool accepted blocks delta", summary.get("pool_block_submit_accepted_delta")),
         ("Pool rejected blocks delta", summary.get("pool_block_submit_rejected_delta")),
         ("Pool rejected / accepted", summary.get("pool_block_submit_rejected_per_accepted")),
+        ("Pool rejected reasons", json.dumps(summary.get("pool_block_submit_rejected_by_reason_delta") or {}, sort_keys=True)),
         ("Pool accepted blocks / hour", summary.get("pool_accepted_blocks_per_hour")),
         ("Pool found blocks delta", summary.get("pool_blocks_found_delta")),
         ("Pool accepted shares delta", summary.get("pool_shares_accepted_delta")),
         ("Pool rejected shares delta", summary.get("pool_shares_rejected_delta")),
         ("Pool share reject ratio", summary.get("pool_share_reject_ratio")),
+        ("Pool share reject reasons", json.dumps(summary.get("pool_share_reject_by_reason_delta") or {}, sort_keys=True)),
         ("Pool active connections max", summary.get("pool_active_connections_max")),
         ("Pool ready miners min/max", f"{summary.get('pool_ready_miners_min')} / {summary.get('pool_ready_miners_max')}"),
         ("Pool backend mineable min", summary.get("pool_backend_mineable_min")),
@@ -386,6 +462,8 @@ def render_html_report(summary: dict[str, Any], samples: list[dict[str, Any]]) -
         ("P2P connections min", summary.get("p2p_connections_min")),
         ("P2P network gap max", summary.get("p2p_network_gap_max")),
         ("Pool fresh consensus peers min", summary.get("pool_fresh_consensus_peers_min")),
+        ("Template invalidation causes", json.dumps(summary.get("pool_template_invalidation_by_cause_delta") or {}, sort_keys=True)),
+        ("Clean refresh events", json.dumps(summary.get("pool_clean_refresh_by_event_delta") or {}, sort_keys=True)),
         ("Pool conversion failure max %", summary.get("pool_template_conversion_failure_ratio_max")),
         ("Collection p95 ms", summary.get("collection_ms_p95")),
         ("Dashboard p95 ms", summary.get("dashboard_latency_ms_p95")),

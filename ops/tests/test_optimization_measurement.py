@@ -78,10 +78,14 @@ pool_block_submit_outcomes_total{outcome="rejected-local",pool_id="0",reason="st
 pool_blocks_found_total{pool_id="0"} 41
 pool_shares_accepted_total{pool_id="0"} 156
 pool_shares_rejected_total{pool_id="0",reason="invalidated_job"} 38
+pool_shares_rejected_total{pool_id="0",reason="non_current_job"} 4
 pool_rpc_backend_node_health_mineable{node="node",pool_id="0"} 1
 pool_rpc_backend_node_health_submit_ready{node="node",pool_id="0"} 1
 pool_rpc_backend_node_health_p2p_mining_fresh{node="node",pool_id="0"} 1
 pool_rpc_backend_node_health_p2p_fresh_consensus_peer_count{node="node",pool_id="0"} 4
+pool_rpc_backend_node_health_template_invalidations_total{cause="parent-changed",node="node",pool_id="0"} 5
+pool_clean_template_refresh_events_total{event="broadcast",pool_id="0"} 8
+pool_clean_template_refresh_events_total{event="readiness_hold",pool_id="0"} 2
 pool_template_conversion_stall_failure_ratio{pool_id="0"} 7.5
 pool_template_conversion_stall_window_candidates{kind="accepted",pool_id="0"} 38
 pool_template_conversion_stall_window_candidates{kind="failed",pool_id="0"} 3
@@ -95,12 +99,53 @@ pool_template_conversion_stall_window_candidates{kind="total",pool_id="0"} 41
         self.assertEqual(sample["pool_job_health_ready_miners"], 2)
         self.assertEqual(sample["pool_block_submit_accepted_total"], 38)
         self.assertEqual(sample["pool_block_submit_rejected_total"], 3)
+        self.assertEqual(sample["pool_block_submit_rejected_by_reason"], {"stale-parent": 2, "tip-overdue": 1})
+        self.assertEqual(sample["pool_share_reject_by_reason"], {"invalidated_job": 38, "non_current_job": 4})
         self.assertEqual(sample["pool_backend_mineable"], 1)
         self.assertEqual(sample["pool_backend_submit_ready"], 1)
         self.assertEqual(sample["pool_backend_p2p_mining_fresh"], 1)
         self.assertEqual(sample["pool_backend_p2p_fresh_consensus_peer_count"], 4)
+        self.assertEqual(sample["pool_template_invalidation_by_cause"], {"parent-changed": 5})
+        self.assertEqual(sample["pool_clean_refresh_by_event"], {"broadcast": 8, "readiness_hold": 2})
         self.assertEqual(sample["pool_template_conversion_failure_ratio"], 7.5)
         self.assertEqual(sample["pool_template_conversion_window_total"], 41)
+
+    def test_flatten_status_sample_infers_current_block_source(self) -> None:
+        payload = {
+            "sync_progress": {
+                "current_block": 42,
+                "highest_block": 50,
+                "nodes": {
+                    "node": {
+                        "current_block": 42,
+                        "current_block_source": "eth_syncing",
+                    }
+                },
+            },
+            "adaptive_concurrency": {"workers": {}},
+        }
+
+        sample = measurement.flatten_status_sample(payload, "fixture", 1.0)
+
+        self.assertEqual(sample["current_block"], 42)
+        self.assertEqual(sample["current_block_source"], "eth_syncing")
+
+    def test_flatten_status_sample_marks_native_chain_count_source(self) -> None:
+        payload = {
+            "sync_progress": {
+                "current_block": 121,
+                "highest_block": 121,
+                "chain_block_count": 121,
+                "native_is_current": True,
+                "source": "native-rpc",
+            },
+            "adaptive_concurrency": {"workers": {}},
+        }
+
+        sample = measurement.flatten_status_sample(payload, "fixture", 1.0)
+
+        self.assertEqual(sample["current_block"], 121)
+        self.assertEqual(sample["current_block_source"], "native-rpc")
 
     def test_summarize_samples_reports_block_rate_and_worker_ranges(self) -> None:
         samples = [
@@ -139,9 +184,13 @@ pool_template_conversion_stall_window_candidates{kind="total",pool_id="0"} 41
                 "pool_backend_p2p_best_peer_lead_blocks": 2,
                 "pool_block_submit_accepted_total": 10,
                 "pool_block_submit_rejected_total": 3,
+                "pool_block_submit_rejected_by_reason": {"tip-overdue": 2, "stale-job": 1},
                 "pool_blocks_found_total": 13,
                 "pool_shares_accepted_total": 100,
                 "pool_shares_rejected_total": 10,
+                "pool_share_reject_by_reason": {"invalidated_job": 7, "non_current_job": 3},
+                "pool_template_invalidation_by_cause": {"parent-changed": 4},
+                "pool_clean_refresh_by_event": {"broadcast": 8, "readiness_hold": 1},
                 "pool_template_conversion_failure_ratio": 7.5,
             },
             {
@@ -179,9 +228,13 @@ pool_template_conversion_stall_window_candidates{kind="total",pool_id="0"} 41
                 "pool_backend_p2p_best_peer_lead_blocks": 0,
                 "pool_block_submit_accepted_total": 18,
                 "pool_block_submit_rejected_total": 4,
+                "pool_block_submit_rejected_by_reason": {"tip-overdue": 3, "stale-job": 1},
                 "pool_blocks_found_total": 22,
                 "pool_shares_accepted_total": 140,
                 "pool_shares_rejected_total": 17,
+                "pool_share_reject_by_reason": {"invalidated_job": 11, "non_current_job": 6},
+                "pool_template_invalidation_by_cause": {"parent-changed": 9},
+                "pool_clean_refresh_by_event": {"broadcast": 13, "readiness_hold": 2},
                 "pool_template_conversion_failure_ratio": 9.5,
             },
         ]
@@ -208,11 +261,15 @@ pool_template_conversion_stall_window_candidates{kind="total",pool_id="0"} 41
         self.assertEqual(summary["pool_block_submit_accepted_delta"], 8)
         self.assertEqual(summary["pool_block_submit_rejected_delta"], 1)
         self.assertEqual(summary["pool_block_submit_rejected_per_accepted"], 0.125)
+        self.assertEqual(summary["pool_block_submit_rejected_by_reason_delta"], {"tip-overdue": 1})
         self.assertEqual(summary["pool_accepted_blocks_per_hour"], 2880.0)
         self.assertEqual(summary["pool_blocks_found_delta"], 9)
         self.assertEqual(summary["pool_shares_accepted_delta"], 40)
         self.assertEqual(summary["pool_shares_rejected_delta"], 7)
         self.assertEqual(summary["pool_share_reject_ratio"], 0.148936)
+        self.assertEqual(summary["pool_share_reject_by_reason_delta"], {"invalidated_job": 4, "non_current_job": 3})
+        self.assertEqual(summary["pool_template_invalidation_by_cause_delta"], {"parent-changed": 5})
+        self.assertEqual(summary["pool_clean_refresh_by_event_delta"], {"broadcast": 5, "readiness_hold": 1})
         self.assertEqual(summary["pool_ready_miners_min"], 1)
         self.assertEqual(summary["pool_fresh_consensus_peers_min"], 3)
         self.assertEqual(summary["pool_template_conversion_failure_ratio_max"], 9.5)
@@ -280,7 +337,32 @@ pool_template_conversion_stall_window_candidates{kind="total",pool_id="0"} 41
 
         self.assertIsNone(summary["block_delta"])
         self.assertFalse(summary["block_delta_valid"])
-        self.assertEqual(summary["block_delta_warning"], "current_block source changed or moved backwards")
+        self.assertEqual(summary["block_delta_warning"], "current_block source missing, changed, or moved backwards")
+        self.assertIsNone(summary["blocks_per_second"])
+
+    def test_summarize_samples_rejects_missing_block_sources(self) -> None:
+        samples = [
+            {
+                "sampled_at": "2026-05-26T00:00:00+00:00",
+                "sampled_epoch": 100,
+                "source": "fixture",
+                "current_block": 2000,
+                "adaptive_workers": {},
+            },
+            {
+                "sampled_at": "2026-05-26T00:00:10+00:00",
+                "sampled_epoch": 110,
+                "source": "fixture",
+                "current_block": 2010,
+                "adaptive_workers": {},
+            },
+        ]
+
+        summary = measurement.summarize_samples(samples)
+
+        self.assertIsNone(summary["block_delta"])
+        self.assertFalse(summary["block_delta_valid"])
+        self.assertEqual(summary["block_delta_warning"], "current_block source missing, changed, or moved backwards")
         self.assertIsNone(summary["blocks_per_second"])
 
 
