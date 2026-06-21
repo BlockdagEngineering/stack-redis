@@ -29,9 +29,9 @@ The dashboard also watches for pool share stalls. If miners are connected but th
 
 When the node is catching up, automation leaves the pool container running. The pool's node-health gate pauses `getBlockTemplate` refreshes while the node reports template generation is not ready, so miners are not disconnected just to reduce template pressure.
 
-The watchdog also has a fast-sync recovery path. If real syncing warnings persist for `BDAG_WATCHDOG_SYNCING_THRESHOLD` checks, default `5`, it runs a normal stack restart to force fresh peer/RPC connections and apply the current config. This restart is cooldown-limited by `BDAG_SYNCING_RESTART_COOLDOWN`, default `900` seconds, so it cannot loop continuously.
+The watchdog also has a fast-sync recovery path. If real syncing warnings persist for `BDAG_WATCHDOG_SYNCING_THRESHOLD` checks, default `5`, it runs a normal stack restart to force fresh peer/RPC connections and apply the current config. Native P2P peer loss is a hard mining block immediately, but the watchdog waits for `BDAG_WATCHDOG_NATIVE_P2P_PEER_LOSS_REPAIR_SECONDS`, default `300`, before restarting the node so a transient zero-peer sample cannot interrupt paid mining. Restarts are also cooldown-limited by `BDAG_SYNCING_RESTART_COOLDOWN`, default `900` seconds, so they cannot loop continuously.
 
-The persisted peer list in `.env` should contain only valid multiaddrs. Removing a bad peer from `.env` takes effect on the next controlled node restart; it does not interrupt currently running miners by itself.
+The persisted peer list in `.env` should contain only valid multiaddrs. Removing a bad peer from `.env` takes effect on the next controlled node restart; it does not interrupt currently running miners by itself. Chain-state self-heal requires active native P2P peer-lag evidence; EVM/public-reference lag alone is advisory and must not trigger destructive chain restore.
 
 The pool is configured to use the local node service directly as its DAG RPC endpoint on the next stack start. The dashboard compares the local chain view against external references where configured.
 

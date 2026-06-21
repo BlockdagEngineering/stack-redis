@@ -298,6 +298,13 @@ The dashboard reports this as a deliberate catch-up pause, not a pool failure,
 and tells operators to leave miners configured until I/O pressure drops, peer lag
 is back inside the safe window, and template health is ready.
 
+Native P2P freshness remains the mining hard gate. A zero-peer native P2P sample
+blocks new mining work immediately, but `BDAG_WATCHDOG_NATIVE_P2P_PEER_LOSS_REPAIR_SECONDS=300`
+prevents the watchdog from restarting the node until peer loss is sustained and
+fresh paid-block evidence has expired. Chain-state restore is stricter than
+catch-up display state: it requires native peer-lag evidence and ignores
+EVM/public-reference lag by itself.
+
 Dashboard block height is sourced from chain RPC `getBlockCount`; template
 height, logs, and main-order values are shown only as
 diagnostics. Build and release flows should run through

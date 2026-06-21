@@ -546,6 +546,64 @@ def catchup_lag_blocks(payload: dict[str, Any]) -> int:
     return max(values) if values else 0
 
 
+def native_peer_lag_blocks(payload: dict[str, Any]) -> int:
+    values: list[int] = []
+
+    def add(value: Any) -> None:
+        lag = safe_int(value, -1)
+        if lag >= 0:
+            values.append(lag)
+
+    sync = dict_value(payload.get("sync_progress"))
+    add(sync.get("peer_ahead_blocks"))
+    for info in dict_value(sync.get("nodes")).values():
+        if isinstance(info, dict):
+            add(info.get("peer_ahead_blocks"))
+    for info in dict_value(payload.get("nodes")).values():
+        if isinstance(info, dict):
+            add(info.get("peer_ahead_blocks"))
+
+    selected_health = dict_value(
+        dict_value(payload.get("pool_metrics")).get("selected_backend_source_health")
+    ) or dict_value(dict_value(payload.get("pool")).get("selected_backend_source_health"))
+    add(selected_health.get("node_p2p_best_peer_lead_blocks"))
+    return max(values) if values else 0
+
+
+def has_active_native_p2p_lag_evidence(payload: dict[str, Any]) -> bool:
+    def progress_evidence(progress: dict[str, Any]) -> bool:
+        status_text = str(progress.get("status") or "").strip().lower()
+        error_text = str(progress.get("error") or "").strip().lower()
+        if status_text == "p2p_down":
+            return False
+        if "no active native p2p peers" in error_text or "syncing but no active peers" in error_text:
+            return False
+        if safe_int(progress.get("peer_count"), -1) > 0 or safe_int(progress.get("p2p_connections"), -1) > 0:
+            return True
+        health = dict_value(progress.get("native_template_health"))
+        if safe_int(health.get("p2p_fresh_consensus_peer_count"), -1) > 0:
+            return True
+        if safe_int(health.get("p2p_consensus_peer_count"), -1) > 0:
+            return True
+        return health.get("p2p_mining_fresh") is True
+
+    sync = dict_value(payload.get("sync_progress"))
+    if progress_evidence(sync):
+        return True
+    for info in dict_value(sync.get("nodes")).values():
+        if isinstance(info, dict) and progress_evidence(info):
+            return True
+
+    selected_health = dict_value(
+        dict_value(payload.get("pool_metrics")).get("selected_backend_source_health")
+    ) or dict_value(dict_value(payload.get("pool")).get("selected_backend_source_health"))
+    if selected_health.get("node_p2p_mining_fresh") is True:
+        return True
+    if safe_int(selected_health.get("node_p2p_fresh_consensus_peer_count"), -1) > 0:
+        return True
+    return safe_int(selected_health.get("node_p2p_consensus_peer_count"), -1) > 0
+
+
 def catchup_io_pressure_reasons(payload: dict[str, Any]) -> list[str]:
     host_pressure = dict_value(payload.get("host_pressure"))
     reasons: list[str] = []
@@ -750,35 +808,45 @@ def update_stalled_import_watch(payload: dict[str, Any]) -> dict[str, Any]:
     sync = dict_value(payload.get("sync_progress"))
     status = str(sync.get("status") or payload.get("mode") or "").lower()
     height = sync_progress_height(payload)
-    lag = catchup_lag_blocks(payload)
+    lag = native_peer_lag_blocks(payload)
+    native_p2p_evidence = has_active_native_p2p_lag_evidence(payload)
     candidate = bool(
         CHAIN_STATE_STALLED_IMPORT_RESTORE_ENABLED
         and status in {"syncing", "catchup_pause"}
         and height >= 0
+        and native_p2p_evidence
         and lag >= CHAIN_STATE_STALLED_IMPORT_RESTORE_PEER_AHEAD_BLOCKS
     )
     previous = read_import_watch_state()
     previous_height = safe_int(previous.get("height"), -1)
-    if not candidate or previous_height != height:
+    previous_first_stalled_epoch = safe_float(previous.get("first_stalled_epoch"), 0.0)
+    if not candidate or previous_height != height or previous_first_stalled_epoch <= 0:
+        reason = "height changed or stall candidate inactive"
+        if not native_p2p_evidence:
+            reason = "stall candidate inactive: no active native P2P peer-lag evidence"
+        elif candidate and previous_first_stalled_epoch <= 0:
+            reason = "stall candidate started or invalid previous stall epoch reset"
         state = {
             "schema_version": 1,
             "updated_at": now_iso(),
             "epoch": now_epoch,
+            "candidate": candidate,
             "status": status,
             "height": height,
             "lag_blocks": lag,
+            "native_p2p_lag_evidence": native_p2p_evidence,
             "first_stalled_epoch": now_epoch if candidate else 0,
             "stalled_seconds": 0,
             "min_lag_blocks": lag if candidate else 0,
             "max_lag_blocks": lag if candidate else 0,
             "gap_growth_blocks": 0,
             "restore_required": False,
-            "reason": "height changed or stall candidate inactive",
+            "reason": reason,
         }
         write_json_file(CHAIN_STATE_IMPORT_WATCH_FILE, state, mode=0o600)
         return state
 
-    first_stalled_epoch = safe_float(previous.get("first_stalled_epoch"), now_epoch)
+    first_stalled_epoch = previous_first_stalled_epoch
     min_lag = min(safe_int(previous.get("min_lag_blocks"), lag), lag)
     max_lag = max(safe_int(previous.get("max_lag_blocks"), lag), lag)
     stalled_seconds = max(0, int(now_epoch - first_stalled_epoch))
@@ -795,9 +863,11 @@ def update_stalled_import_watch(payload: dict[str, Any]) -> dict[str, Any]:
         "schema_version": 1,
         "updated_at": now_iso(),
         "epoch": now_epoch,
+        "candidate": True,
         "status": status,
         "height": height,
         "lag_blocks": lag,
+        "native_p2p_lag_evidence": native_p2p_evidence,
         "first_stalled_epoch": first_stalled_epoch,
         "stalled_seconds": stalled_seconds,
         "min_lag_blocks": min_lag,

@@ -47,6 +47,7 @@ class StatusSamplerMiningImperativeTests(unittest.TestCase):
                 "CHAIN_STATE_STALLED_IMPORT_RESTORE_SECONDS",
                 "CHAIN_STATE_STALLED_IMPORT_RESTORE_PEER_AHEAD_BLOCKS",
                 "CHAIN_STATE_STALLED_IMPORT_RESTORE_GAP_GROWTH_BLOCKS",
+                "CHAIN_STATE_IMPORT_WATCH_FILE",
                 "EVM_REFERENCE_GAP_STALL_RESTORE_ENABLED",
                 "EVM_REFERENCE_GAP_STALL_RESTORE_SECONDS",
                 "EVM_REFERENCE_GAP_STALL_MIN_LAG_BLOCKS",
@@ -214,6 +215,36 @@ class StatusSamplerMiningImperativeTests(unittest.TestCase):
             "pool_metrics": {"active_connections": 0, "source_job_health": {}},
         }
 
+    def native_peer_lag_payload(self, *, height: int = 12_115_316, peer_lag: int = 1_200) -> dict:
+        return {
+            "overall": "syncing",
+            "sync_warnings": ["native peers are ahead"],
+            "containers": {status_sampler.POOL_CONTAINER: {"running": False}},
+            "sync_progress": {
+                "status": "syncing",
+                "chain_block_count": height,
+                "current_block": height,
+                "peer_ahead_blocks": peer_lag,
+                "remaining_blocks": peer_lag,
+                "peer_count": 2,
+                "p2p_connections": 2,
+                "nodes": {
+                    "node": {
+                        "status": "syncing",
+                        "current_block": height,
+                        "peer_ahead_blocks": peer_lag,
+                        "peer_count": 2,
+                        "p2p_connections": 2,
+                    }
+                },
+            },
+            "sync_health": {},
+            "nodes": {"node": {"latest_block": height, "peer_ahead_blocks": peer_lag}},
+            "miner_health": {"connected_count": 0, "managed_count": 0},
+            "pool": {"metrics": {"active_connections": 0}, "source_job_health": {}},
+            "pool_metrics": {"active_connections": 0, "source_job_health": {}},
+        }
+
     def test_evm_reference_gap_stall_requires_restore_when_gap_does_not_close(self) -> None:
         now = 1_779_200_000
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -265,6 +296,63 @@ class StatusSamplerMiningImperativeTests(unittest.TestCase):
         self.assertTrue(decision["evm_reference_gap"]["would_restore_required"])
         self.assertTrue(decision["evm_reference_gap"]["restore_suppressed_by_native_paid_work"])
         self.assertIn("native mining safety", decision["evm_reference_gap"]["reason"])
+
+    def test_stalled_import_watch_resets_invalid_zero_epoch(self) -> None:
+        now = 1_779_200_000
+        with tempfile.TemporaryDirectory() as tmpdir:
+            status_sampler.CHAIN_STATE_IMPORT_WATCH_FILE = pathlib.Path(tmpdir) / "import-watch.json"
+            status_sampler.CHAIN_STATE_IMPORT_WATCH_FILE.write_text(
+                json.dumps(
+                    {
+                        "candidate": True,
+                        "height": 12_115_316,
+                        "lag_blocks": 1_260,
+                        "first_stalled_epoch": 0,
+                        "min_lag_blocks": 1_100,
+                        "max_lag_blocks": 1_260,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with mock.patch.object(status_sampler.time, "time", return_value=now):
+                state = status_sampler.update_stalled_import_watch(
+                    self.native_peer_lag_payload(height=12_115_316, peer_lag=1_260)
+                )
+
+        self.assertTrue(state["candidate"])
+        self.assertTrue(state["native_p2p_lag_evidence"])
+        self.assertEqual(now, state["first_stalled_epoch"])
+        self.assertEqual(0, state["stalled_seconds"])
+        self.assertFalse(state["restore_required"])
+        self.assertIn("invalid previous stall epoch reset", state["reason"])
+
+    def test_stalled_import_watch_ignores_public_gap_without_native_peer_evidence(self) -> None:
+        now = 1_779_200_000
+        with tempfile.TemporaryDirectory() as tmpdir:
+            status_sampler.CHAIN_STATE_IMPORT_WATCH_FILE = pathlib.Path(tmpdir) / "import-watch.json"
+            status_sampler.CHAIN_STATE_IMPORT_WATCH_FILE.write_text(
+                json.dumps(
+                    {
+                        "candidate": True,
+                        "height": 11_691_000,
+                        "lag_blocks": 14_140,
+                        "first_stalled_epoch": now - 3600,
+                        "min_lag_blocks": 14_000,
+                        "max_lag_blocks": 14_140,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with mock.patch.object(status_sampler.time, "time", return_value=now):
+                state = status_sampler.update_stalled_import_watch(
+                    self.evm_gap_payload(lag=14_140, local=11_691_000)
+                )
+
+        self.assertFalse(state["candidate"])
+        self.assertFalse(state["native_p2p_lag_evidence"])
+        self.assertEqual(0, state["first_stalled_epoch"])
+        self.assertFalse(state["restore_required"])
+        self.assertIn("no active native P2P peer-lag evidence", state["reason"])
 
     def test_cached_evm_restore_flag_is_not_hard_when_native_paid_mining_is_safe(self) -> None:
         payload = self.evm_gap_payload(lag=14_140, local=11_691_000)

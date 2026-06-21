@@ -73,6 +73,9 @@ DEFAULT_SYNCING_RESTART_COOLDOWN = int(os.environ.get("BDAG_SYNCING_RESTART_COOL
 DEFAULT_ACTIVE_SYNC_IMPORT_GRACE_SECONDS = int(
     os.environ.get("BDAG_WATCHDOG_ACTIVE_SYNC_IMPORT_GRACE_SECONDS", "300")
 )
+DEFAULT_NATIVE_P2P_PEER_LOSS_REPAIR_SECONDS = int(
+    os.environ.get("BDAG_WATCHDOG_NATIVE_P2P_PEER_LOSS_REPAIR_SECONDS", "300")
+)
 DEFAULT_SHARE_STALL_THRESHOLD = int(os.environ.get("BDAG_WATCHDOG_SHARE_STALL_THRESHOLD", "2"))
 DEFAULT_SHARE_STALL_RESTART_COOLDOWN = int(
     os.environ.get("BDAG_WATCHDOG_SHARE_STALL_RESTART_COOLDOWN", os.environ.get("BDAG_SYNCING_RESTART_COOLDOWN", "900"))
@@ -485,6 +488,28 @@ def pool_has_recent_mining_work(status: dict[str, Any], freshness_seconds: int =
     block_age = int_or_none(pool_health.get("last_block_submit_age_seconds"))
     accepted_blocks = int_or_none(pool_health.get("block_submit_success_count")) or 0
     return bool(accepted_blocks > 0 and block_age is not None and block_age <= freshness_seconds)
+
+
+def update_native_p2p_peer_loss_tracking(state: dict[str, Any], reason: str, now: int) -> int:
+    if not reason:
+        for key in (
+            "native_p2p_peer_loss_since_epoch",
+            "native_p2p_peer_loss_since_at",
+            "native_p2p_peer_loss_reason",
+            "native_p2p_peer_loss_age_seconds",
+        ):
+            state.pop(key, None)
+        return 0
+
+    since = int(state.get("native_p2p_peer_loss_since_epoch") or now)
+    if since <= 0 or since > now:
+        since = now
+    state["native_p2p_peer_loss_since_epoch"] = since
+    state.setdefault("native_p2p_peer_loss_since_at", now_iso())
+    state["native_p2p_peer_loss_reason"] = reason
+    age = max(0, now - since)
+    state["native_p2p_peer_loss_age_seconds"] = age
+    return age
 
 
 def pool_has_unpaid_template_loss(status: dict[str, Any]) -> bool:
@@ -1964,6 +1989,8 @@ def check_once(
     )
     now = int(time.time())
     observe_sync_progress(status, state, now)
+    native_peer_loss_reason = native_p2p_peer_loss_reason(status)
+    native_peer_loss_age = update_native_p2p_peer_loss_tracking(state, native_peer_loss_reason, now)
     pool_started_age_seconds = container_started_age_seconds(status, POOL_CONTAINER, now)
     pool_in_startup_grace = bool(
         pool_started_age_seconds is not None
@@ -2139,7 +2166,6 @@ def check_once(
         write_state(state)
         return {"status": status, "watchdog_state": state}
 
-    native_peer_loss_reason = native_p2p_peer_loss_reason(status)
     sync_pause_reason = sync_progress_pool_pause_reason(status)
     if sync_pause_reason and container_running(status, POOL_CONTAINER) and not native_peer_loss_reason:
         state["consecutive_failures"] = 0
@@ -3083,6 +3109,11 @@ def check_once(
         if native_peer_loss_reason and native_peer_loss_reason not in sync_warnings:
             sync_warnings.append(native_peer_loss_reason)
         recent_mining_work = pool_has_recent_mining_work(status)
+        native_peer_loss_repair_ready = bool(
+            native_peer_loss_reason
+            and native_peer_loss_age >= DEFAULT_NATIVE_P2P_PEER_LOSS_REPAIR_SECONDS
+            and not recent_mining_work
+        )
         state["consecutive_failures"] = 0
         if recent_mining_work and not native_peer_loss_reason:
             state["consecutive_syncing"] = 0
@@ -3104,6 +3135,8 @@ def check_once(
             {
                 "consecutive_syncing": state["consecutive_syncing"],
                 "recent_mining_work": recent_mining_work,
+                "native_peer_loss_age_seconds": native_peer_loss_age if native_peer_loss_reason else 0,
+                "native_peer_loss_repair_seconds": DEFAULT_NATIVE_P2P_PEER_LOSS_REPAIR_SECONDS,
             },
         )
         if repair and recent_mining_work and not native_peer_loss_reason:
@@ -3117,7 +3150,29 @@ def check_once(
                     "freshness_seconds": 60,
                 },
             )
-        if repair and state["consecutive_syncing"] and should_restart_for_syncing(state, syncing_threshold, syncing_restart_cooldown):
+        elif repair and native_peer_loss_reason and not native_peer_loss_repair_ready:
+            log(
+                "native P2P repair suppressed until peer loss is sustained "
+                f"age={native_peer_loss_age}s threshold={DEFAULT_NATIVE_P2P_PEER_LOSS_REPAIR_SECONDS}s "
+                f"recent_mining_work={recent_mining_work}"
+            )
+            record_efficiency_event(
+                "repair_suppressed",
+                "warning",
+                "native P2P repair suppressed until peer loss is sustained",
+                {
+                    "native_peer_loss_reason": native_peer_loss_reason,
+                    "native_peer_loss_age_seconds": native_peer_loss_age,
+                    "native_peer_loss_repair_seconds": DEFAULT_NATIVE_P2P_PEER_LOSS_REPAIR_SECONDS,
+                    "recent_mining_work": recent_mining_work,
+                },
+            )
+        if (
+            repair
+            and state["consecutive_syncing"]
+            and (not native_peer_loss_reason or native_peer_loss_repair_ready)
+            and should_restart_for_syncing(state, syncing_threshold, syncing_restart_cooldown)
+        ):
             restart_node = template_nodes[0] if template_nodes else choose_lagging_node(status)
             if suppress_sync_restart_for_active_import(status, state, "; ".join(sync_warnings), restart_node):
                 ok = False
@@ -3166,6 +3221,7 @@ def loop(
         "watchdog started "
         f"interval={interval}s threshold={threshold} clean_restore_cooldown={clean_restore_cooldown}s "
         f"syncing_threshold={syncing_threshold} syncing_restart_cooldown={syncing_restart_cooldown}s "
+        f"native_p2p_peer_loss_repair={DEFAULT_NATIVE_P2P_PEER_LOSS_REPAIR_SECONDS}s "
         f"miner_down_restart_seconds={miner_down_restart_seconds}s miner_restart_cooldown={miner_restart_cooldown}s "
         f"miner_useful_work_stall_seconds={DEFAULT_MINER_USEFUL_WORK_STALL_SECONDS}s "
         f"miner_useful_work_confirm={DEFAULT_MINER_USEFUL_WORK_STALL_CONFIRM_SECONDS}s "
