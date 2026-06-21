@@ -558,6 +558,28 @@ class StatusSamplerMiningImperativeTests(unittest.TestCase):
 
         self.assertIn("repaired_tracked_miners", repair["actions"])
 
+    def test_no_logs_pool_metrics_miner_demand_is_not_a_tracking_gap(self) -> None:
+        status_sampler.MINING_IMPERATIVE_GUARD_UNITS = []
+        payload = self.stopped_pool_payload(sync_status="synced", remaining_blocks=0)
+        payload["containers"][status_sampler.POOL_CONTAINER]["running"] = True
+        payload["pool"]["metrics"]["active_connections"] = 4
+        payload["pool_metrics"]["active_connections"] = 4
+        payload["pool"]["source_job_health"] = {"authorized_miners": 4, "ready_miners": 4}
+        payload["miner_health"] = {
+            "failures": [],
+            "warnings": [],
+            "miners": [],
+            "connected_count_effective": 4,
+            "connected_count_source": "pool-metrics",
+        }
+        status_sampler.collect_pool_activity = lambda lines=0: (_ for _ in ()).throw(
+            AssertionError("pool-metrics fallback must not trigger tracked-miner repair")
+        )
+
+        repair = status_sampler.mining_imperative_repair(payload)
+
+        self.assertNotIn("repaired_tracked_miners", repair["actions"])
+
     def test_detects_miner_activity_visibility_gap_after_power_cycle(self) -> None:
         payload = self.stopped_pool_payload(sync_status="synced", remaining_blocks=0)
         payload["miner_health"] = {
@@ -690,7 +712,6 @@ class StatusSamplerMiningImperativeTests(unittest.TestCase):
 
     def test_node_mining_template_support_requires_canonical_proof(self) -> None:
         commands = []
-        incidents = []
         status_sampler.MINING_IMPERATIVE_GUARD_UNITS = []
         os.environ["MINING_ADDRESS"] = "0xA1Ee1005c4Ff181e93e717D2C624554b66AB7DFc"
         os.environ["BDAG_ENABLE_NODE_MINING"] = "0"
@@ -705,15 +726,30 @@ class StatusSamplerMiningImperativeTests(unittest.TestCase):
             AssertionError("config edit must not run without canonical proof")
         )
         status_sampler.run = lambda command, timeout=20: commands.append(command) or self.command_result(command)
-        status_sampler.append_incident = (
-            lambda event_type, severity, *_args, **_kwargs: incidents.append((event_type, severity))
-        )
 
         repair = status_sampler.mining_imperative_repair(payload)
 
         self.assertNotIn("enabled_node_mining_template_support", repair["actions"])
         self.assertFalse(any("--force-recreate" in command for command in commands))
-        self.assertIn(("mining_imperative_node_mining_gate_blocked", "warning"), incidents)
+
+    def test_recent_paid_work_defers_node_mining_template_repair(self) -> None:
+        status_sampler.MINING_IMPERATIVE_GUARD_UNITS = []
+        os.environ["MINING_ADDRESS"] = "0xA1Ee1005c4Ff181e93e717D2C624554b66AB7DFc"
+        os.environ["BDAG_ENABLE_NODE_MINING"] = "0"
+        os.environ["BDAG_NODE_MODULES"] = "Blockdag"
+        os.environ["BDAG_NODE_MINING_ARGS"] = ""
+        os.environ["NODE_ARGS_APPEND"] = ""
+        payload = self.stopped_pool_payload(sync_status="synced", remaining_blocks=0)
+        payload["containers"][status_sampler.POOL_CONTAINER]["running"] = True
+        payload["miner_health"] = {"tracked_count": 1, "connected_count": 1, "managed_count": 1}
+        payload["sync_health"] = {"pool_has_recent_paid_work": True}
+        status_sampler.set_runtime_env_value = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("fresh paid block submissions should defer node config repair")
+        )
+
+        repair = status_sampler.mining_imperative_repair(payload)
+
+        self.assertNotIn("enabled_node_mining_template_support", repair["actions"])
 
     def test_node_mining_template_repair_preserves_node_conf_miner_module(self) -> None:
         commands = []

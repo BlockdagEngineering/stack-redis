@@ -369,6 +369,94 @@ def float_or_none(value: Any) -> float | None:
         return None
 
 
+def list_or_empty(value: Any) -> list[Any]:
+    return list(value) if isinstance(value, list) else []
+
+
+def dict_or_empty(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def normalize_watchdog_status_payload(status: dict[str, Any]) -> dict[str, Any]:
+    """Make repair code fail-closed instead of crashing on compact status payloads."""
+    normalized = dict(status)
+    failures = list_or_empty(normalized.get("failures"))
+    stack_failures = list_or_empty(normalized.get("stack_failures"))
+    miner_failures = list_or_empty(normalized.get("miner_failures"))
+    if not failures and "failures" not in normalized and (stack_failures or miner_failures):
+        failures = [*stack_failures, *miner_failures]
+    if not stack_failures and "stack_failures" not in normalized:
+        stack_failures = list(failures)
+    normalized["failures"] = failures
+    normalized["stack_failures"] = stack_failures
+    normalized["miner_failures"] = miner_failures
+    normalized["warnings"] = list_or_empty(normalized.get("warnings"))
+    normalized["sync_warnings"] = list_or_empty(normalized.get("sync_warnings", normalized["warnings"]))
+    normalized["overall"] = str(normalized.get("overall") or normalized.get("status") or "unknown")
+    if not isinstance(normalized.get("pool_health"), dict) and isinstance(normalized.get("pool"), dict):
+        normalized["pool_health"] = normalized["pool"]
+    normalized["pool_health"] = dict_or_empty(normalized.get("pool_health"))
+    normalized["miner_health"] = dict_or_empty(normalized.get("miner_health"))
+    normalized["containers"] = dict_or_empty(normalized.get("containers"))
+    normalized["sync_health"] = dict_or_empty(normalized.get("sync_health"))
+    normalized["sync_progress"] = dict_or_empty(normalized.get("sync_progress"))
+    return normalized
+
+
+def native_p2p_peer_loss_reason(status: dict[str, Any]) -> str:
+    reasons: list[str] = []
+    min_fresh_peers = DEFAULT_MINER_USEFUL_WORK_MIN_HEALTHY_PEERS
+
+    def inspect_progress(progress: dict[str, Any], label: str) -> None:
+        status_text = str(progress.get("status") or "").strip().lower()
+        error_text = str(progress.get("error") or "").strip().lower()
+        if status_text == "p2p_down":
+            reasons.append(f"{label} native P2P status is p2p_down")
+        if "no active native p2p peers" in error_text or "syncing but no active peers" in error_text:
+            reasons.append(f"{label} reports no active native P2P peers")
+
+        peer_count = int_or_none(progress.get("peer_count"))
+        p2p_connections = int_or_none(progress.get("p2p_connections"))
+        explicit_zero_counts = [
+            name
+            for name, value in (("peer_count", peer_count), ("p2p_connections", p2p_connections))
+            if value == 0
+        ]
+        if explicit_zero_counts:
+            reasons.append(f"{label} has zero native P2P peer count ({', '.join(explicit_zero_counts)})")
+
+        health = dict_or_empty(progress.get("native_template_health"))
+        if not health:
+            return
+        if health.get("p2p_mining_fresh") is False:
+            reasons.append(f"{label} native template P2P freshness is false")
+        fresh_peers = int_or_none(health.get("p2p_fresh_consensus_peer_count"))
+        if fresh_peers is not None and fresh_peers < min_fresh_peers:
+            reasons.append(
+                f"{label} has {fresh_peers} fresh consensus peer(s), below required {min_fresh_peers}"
+            )
+
+    sync_progress = dict_or_empty(status.get("sync_progress"))
+    inspect_progress(sync_progress, "stack")
+    for node, progress in dict_or_empty(sync_progress.get("nodes")).items():
+        if isinstance(progress, dict):
+            inspect_progress(progress, str(node))
+
+    pool_health = dict_or_empty(status.get("pool_health", status.get("pool", {})))
+    if pool_health.get("source_selected_backend_p2p_fresh") is False:
+        reasons.append("selected backend native P2P freshness is false")
+    if pool_health.get("source_selected_backend_submit_ready") is False and pool_health.get("initial_download"):
+        reason = str(pool_health.get("source_selected_backend_unready_reason") or "").lower()
+        if "p2p" in reason or "peer" in reason:
+            reasons.append(f"selected backend is not submit-ready: {reason}")
+
+    deduped: list[str] = []
+    for reason in reasons:
+        if reason and reason not in deduped:
+            deduped.append(reason)
+    return "; ".join(deduped)
+
+
 def pool_initial_download_effective(status: dict[str, Any]) -> bool:
     pool_health = status.get("pool_health") if isinstance(status.get("pool_health"), dict) else {}
     if not pool_health.get("initial_download"):
@@ -1575,6 +1663,26 @@ def suppress_sync_restart_for_active_import(
         return False
     if target_node and target_node not in active_nodes:
         return False
+    peer_loss_reason = native_p2p_peer_loss_reason(status)
+    if peer_loss_reason:
+        state["last_sync_repair_suppression_bypassed_epoch"] = int(time.time())
+        state["last_sync_repair_suppression_bypassed_at"] = now_iso()
+        state["last_sync_repair_suppression_bypassed_reason"] = peer_loss_reason
+        log(
+            "sync restart suppression bypassed because native P2P is not healthy "
+            f"target={target_node or 'stack'} active_nodes={','.join(active_nodes)} reason={peer_loss_reason}"
+        )
+        record_efficiency_event(
+            "repair_suppression_bypassed",
+            "warning",
+            "active import did not suppress repair because native P2P is not healthy",
+            {
+                "active_nodes": active_nodes,
+                "target_node": target_node,
+                "reason": peer_loss_reason,
+            },
+        )
+        return False
 
     pool_health = status.get("pool_health", status.get("pool", {}))
     sync_health = status.get("sync_health", {}) if isinstance(status.get("sync_health"), dict) else {}
@@ -1833,7 +1941,7 @@ def check_once(
     repair: bool = True,
 ) -> dict[str, Any]:
     state = read_state()
-    status = collect_stack_status(include_logs=True)
+    status = normalize_watchdog_status_payload(collect_stack_status(include_logs=True))
     stack_failures = status.get("stack_failures", status["failures"])
     miner_failures = status.get("miner_failures", [])
     failures = stack_failures + miner_failures
@@ -2031,8 +2139,9 @@ def check_once(
         write_state(state)
         return {"status": status, "watchdog_state": state}
 
+    native_peer_loss_reason = native_p2p_peer_loss_reason(status)
     sync_pause_reason = sync_progress_pool_pause_reason(status)
-    if sync_pause_reason and container_running(status, POOL_CONTAINER):
+    if sync_pause_reason and container_running(status, POOL_CONTAINER) and not native_peer_loss_reason:
         state["consecutive_failures"] = 0
         state["consecutive_syncing"] = 0
         state["consecutive_share_stalls"] = 0
@@ -2969,16 +3078,18 @@ def check_once(
             state["last_share_repair_at"] = int(time.time())
             if ok:
                 state["consecutive_share_stalls"] = 0
-    elif status.get("sync_health", {}).get("needs_fast_sync_repair"):
-        sync_warnings = status.get("sync_warnings", status.get("warnings", []))
+    elif status.get("sync_health", {}).get("needs_fast_sync_repair") or native_peer_loss_reason:
+        sync_warnings = list_or_empty(status.get("sync_warnings", status.get("warnings", [])))
+        if native_peer_loss_reason and native_peer_loss_reason not in sync_warnings:
+            sync_warnings.append(native_peer_loss_reason)
         recent_mining_work = pool_has_recent_mining_work(status)
         state["consecutive_failures"] = 0
-        if recent_mining_work:
+        if recent_mining_work and not native_peer_loss_reason:
             state["consecutive_syncing"] = 0
         else:
             state["consecutive_syncing"] = int(state.get("consecutive_syncing", 0) or 0) + 1
         state["consecutive_share_stalls"] = 0
-        state["last_status"] = "syncing"
+        state["last_status"] = "p2p_down" if native_peer_loss_reason else "syncing"
         state["last_failures"] = []
         state["last_sync_warnings"] = sync_warnings
         log(
@@ -2995,7 +3106,7 @@ def check_once(
                 "recent_mining_work": recent_mining_work,
             },
         )
-        if repair and recent_mining_work:
+        if repair and recent_mining_work and not native_peer_loss_reason:
             log("sync repair suppressed because paid block submission is fresh")
             record_efficiency_event(
                 "repair_suppressed",

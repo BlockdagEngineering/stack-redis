@@ -1040,6 +1040,8 @@ def status_payload_has_tracking_gap(payload: dict[str, Any]) -> bool:
     miner_health = dict_value(payload.get("miner_health"))
     if safe_int(miner_health.get("tracked_count")) > 0:
         return False
+    if "tracked_count" not in miner_health and miner_health.get("connected_count_source") == "pool-metrics":
+        return False
     return status_payload_has_miner_demand(payload) or asic_lan_neighbor_present()
 
 
@@ -1072,6 +1074,23 @@ def miner_row_has_visible_share_evidence(row: dict[str, Any]) -> bool:
         return True
     if safe_int(row.get("last_shares_window")) > 0 or safe_int(row.get("last_share_work_window")) > 0:
         return recent_age_seconds(row.get("last_share_age_seconds"))
+    return False
+
+
+def pool_has_recent_paid_work(payload: dict[str, Any]) -> bool:
+    sync_health = dict_value(payload.get("sync_health"))
+    if sync_health.get("pool_has_recent_paid_work") is True:
+        return True
+    paid_work = dict_value(sync_health.get("pool_paid_work_state"))
+    if paid_work.get("accepted_block_recent") is True:
+        return True
+    pool = dict_value(payload.get("pool"))
+    pool_health = dict_value(payload.get("pool_health"))
+    for source in (pool, pool_health):
+        accepted = safe_int(source.get("block_submit_success_count"))
+        age = safe_float(source.get("last_block_submit_age_seconds"), default=10_000)
+        if accepted > 0 and age <= MINING_IMPERATIVE_MINER_ACTIVITY_STALE_SECONDS:
+            return True
     return False
 
 
@@ -1167,19 +1186,27 @@ def node_mining_template_support_should_repair(payload: dict[str, Any]) -> bool:
     address = configured_mining_address()
     if not valid_mining_address(address):
         return False
+    if not pool_start_gate.pool_start_decision(payload).allowed:
+        return False
+    args = config_value("BDAG_NODE_MINING_ARGS")
+    append_args = config_value("NODE_ARGS_APPEND")
+    unsafe_args_present = any(
+        flag in f"{args} {append_args}"
+        for flag in ("--allowminingwhennearlysynced", "--allowsubmitwhennotsynced")
+    )
+    if pool_has_recent_paid_work(payload) and not unsafe_args_present:
+        return False
     modules = {
         item.strip().lower()
         for item in config_value("BDAG_NODE_MODULES", NODE_MINING_MODULES).split(",")
         if item.strip()
     }
-    args = config_value("BDAG_NODE_MINING_ARGS")
     if not env_enabled_value(config_value("BDAG_ENABLE_NODE_MINING"), False):
         return True
     if modules != NODE_MINING_MODULE_SET:
         return True
     if not node_mining_args_are_safe_and_complete(args, address):
         return True
-    append_args = config_value("NODE_ARGS_APPEND")
     if append_args and not node_mining_args_are_safe_and_complete(append_args, address):
         return True
     for service in node_services_for_recreate():

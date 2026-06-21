@@ -104,6 +104,35 @@ class WatchdogSyncRestartTests(unittest.TestCase):
         self.assertNotIn("last_sync_repair_at", state)
         self.assertIn("last_sync_repair_suppressed_epoch", state)
 
+    def test_active_import_does_not_suppress_when_native_p2p_is_down(self) -> None:
+        now = 1_779_200_000
+        status = node_status(importing=True, last_import_age_seconds=40)
+        status["sync_progress"]["status"] = "p2p_down"
+        status["sync_progress"]["error"] = "syncing but no active peers available"
+        status["sync_progress"]["peer_count"] = 0
+        status["sync_progress"]["p2p_connections"] = 0
+        status["sync_progress"]["nodes"]["node"]["status"] = "p2p_down"
+        status["sync_progress"]["nodes"]["node"]["error"] = "no active native P2P peers"
+        status["sync_progress"]["nodes"]["node"]["peer_count"] = 0
+        status["sync_progress"]["nodes"]["node"]["p2p_connections"] = 0
+        state = {
+            "last_sync_height_changed_at_by_node": {"node": now - 700},
+        }
+
+        with mock.patch.object(watchdog, "NODES", ["node"]), mock.patch.object(
+            watchdog, "log", lambda _message: None
+        ), mock.patch.object(watchdog, "record_efficiency_event", lambda *_args, **_kwargs: None):
+            suppressed = watchdog.suppress_sync_restart_for_active_import(
+                status,
+                state,
+                "waiting for node sync",
+                "node",
+            )
+
+        self.assertFalse(suppressed)
+        self.assertIn("last_sync_repair_suppression_bypassed_epoch", state)
+        self.assertIn("native P2P", state["last_sync_repair_suppression_bypassed_reason"])
+
     def test_check_once_active_import_suppression_does_not_consume_repair_cooldown(self) -> None:
         now = 1_779_200_000
         status = {
@@ -154,6 +183,105 @@ class WatchdogSyncRestartTests(unittest.TestCase):
         self.assertEqual("syncing", result["watchdog_state"]["last_status"])
         self.assertNotIn("last_sync_repair_at", result["watchdog_state"])
         self.assertIn("last_sync_repair_suppressed_epoch", result["watchdog_state"])
+        self.assertTrue(written)
+
+    def test_check_once_normalizes_compact_status_payload_without_failures(self) -> None:
+        now = 1_779_200_000
+        status = {
+            "status": "ok",
+            "pool_health": {},
+            "miner_health": {"connected_count": 0, "connected_count_effective": 0, "miners": []},
+            "sync_progress": {"status": "synced"},
+        }
+        state: dict[str, object] = {}
+        written: list[dict[str, object]] = []
+
+        with mock.patch.object(watchdog.time, "time", return_value=now), mock.patch.object(
+            watchdog, "NODES", ["node"]
+        ), mock.patch.object(watchdog, "read_state", return_value=state), mock.patch.object(
+            watchdog, "write_state", side_effect=lambda payload: written.append(dict(payload))
+        ), mock.patch.object(
+            watchdog, "collect_stack_status", return_value=status
+        ), mock.patch.object(
+            watchdog, "lock_is_held", return_value=False
+        ), mock.patch.object(
+            watchdog, "record_earnings_snapshot", return_value={}
+        ), mock.patch.object(
+            watchdog, "status_payload_has_tracking_gap", return_value=False
+        ), mock.patch.object(
+            watchdog, "node_mining_template_support_should_repair", return_value=False
+        ), mock.patch.object(
+            watchdog, "fastsync_peer_quarantine_should_repair", return_value=False
+        ), mock.patch.object(
+            watchdog, "log", lambda _message: None
+        ):
+            result = watchdog.check_once(3, 1800, 5, 900, repair=True)
+
+        self.assertEqual("ok", result["watchdog_state"]["last_status"])
+        self.assertEqual([], result["watchdog_state"]["last_failures"])
+        self.assertTrue(written)
+
+    def test_check_once_restarts_node_when_active_import_has_no_native_peers(self) -> None:
+        now = 1_779_200_000
+        status = {
+            **node_status(importing=True, last_import_age_seconds=40),
+            "failures": [],
+            "stack_failures": [],
+            "miner_failures": [],
+            "warnings": ["pool is waiting for node sync to finish"],
+            "overall": "syncing",
+            "mining_address": "0x1111111111111111111111111111111111111111",
+            "pool_health": {"initial_download": True},
+            "miner_health": {"connected_count": 0, "connected_count_effective": 0, "miners": []},
+        }
+        status["sync_progress"]["status"] = "p2p_down"
+        status["sync_progress"]["error"] = "syncing but no active peers available"
+        status["sync_progress"]["peer_count"] = 0
+        status["sync_progress"]["p2p_connections"] = 0
+        status["sync_progress"]["nodes"]["node"]["status"] = "p2p_down"
+        status["sync_progress"]["nodes"]["node"]["error"] = "no active native P2P peers"
+        status["sync_progress"]["nodes"]["node"]["peer_count"] = 0
+        status["sync_progress"]["nodes"]["node"]["p2p_connections"] = 0
+        state = {
+            "consecutive_syncing": 4,
+            "last_sync_height_by_node": {"node": 1000},
+            "last_sync_height_changed_at_by_node": {"node": now - 700},
+        }
+        written: list[dict[str, object]] = []
+        restarts: list[tuple[str, str]] = []
+
+        with mock.patch.object(watchdog.time, "time", return_value=now), mock.patch.object(
+            watchdog, "NODES", ["node"]
+        ), mock.patch.object(watchdog, "read_state", return_value=state), mock.patch.object(
+            watchdog, "write_state", side_effect=lambda payload: written.append(dict(payload))
+        ), mock.patch.object(
+            watchdog, "collect_stack_status", return_value=status
+        ), mock.patch.object(
+            watchdog, "lock_is_held", return_value=False
+        ), mock.patch.object(
+            watchdog, "record_earnings_snapshot", return_value={}
+        ), mock.patch.object(
+            watchdog, "status_payload_has_tracking_gap", return_value=False
+        ), mock.patch.object(
+            watchdog, "node_mining_template_support_should_repair", return_value=False
+        ), mock.patch.object(
+            watchdog, "fastsync_peer_quarantine_should_repair", return_value=False
+        ), mock.patch.object(
+            watchdog, "record_efficiency_event", lambda *_args, **_kwargs: None
+        ), mock.patch.object(
+            watchdog, "log", lambda _message: None
+        ), mock.patch.object(
+            watchdog, "run_node_restart", side_effect=lambda node, reason: restarts.append((node, reason)) or True
+        ), mock.patch.object(
+            watchdog, "run_repair", side_effect=AssertionError("peer loss should use targeted node restart")
+        ):
+            result = watchdog.check_once(3, 1800, 5, 900, repair=True)
+
+        self.assertEqual("p2p_down", result["watchdog_state"]["last_status"])
+        self.assertEqual([("node", restarts[0][1])], restarts)
+        self.assertIn("native P2P", "; ".join(result["watchdog_state"]["last_sync_warnings"]))
+        self.assertEqual(0, result["watchdog_state"]["consecutive_syncing"])
+        self.assertEqual(now, result["watchdog_state"]["last_sync_repair_at"])
         self.assertTrue(written)
 
     def test_check_once_does_not_start_pool_when_catchup_pause_stopped_it(self) -> None:
