@@ -364,3 +364,35 @@ Mitigations now required by source:
   sourceable by install/support scripts.
 - The mining-appliance preflight warns when an install is configured for
   high-volume node logging.
+
+### Stale Repair Holds Can Block The Only Useful Sync Repair
+
+On 2026-06-21 the live node stopped advancing while peer tips kept moving. The
+pool correctly withheld jobs because native readiness reported node syncing and
+unsafe P2P freshness, but the automation control file was still in
+`repair_hold` from a previous incident. That hold allowed pool/ASIC recovery
+only, so node restart and chain-state self-heal attempts were repeatedly
+denied while the pool stayed idle.
+
+Recovery that worked:
+
+- Prove the node is stuck with two direct `eth_syncing` samples. The bad state
+  was `currentBlock` unchanged while `highestBlock` increased.
+- Clear the stale automation hold only after confirming there is no recent
+  paid work and the pool is already withholding jobs.
+- Restart the node without deleting or recreating the datadir. In this
+  incident the peer lead fell from roughly 6259 blocks to zero in minutes.
+- Recreate the pool after pinning the best observed ASIC timing so the pool
+  starts with `POOL_TEMPLATE_TTL_REFRESH_MS=100`,
+  `POOL_MAX_BLOCK_CANDIDATE_JOB_AGE_MS=1750`,
+  `POOL_RECENT_STALE_BLOCK_CANDIDATE_SUBMIT_GRACE_MS=250`, and multiple block
+  candidates enabled.
+
+Mitigations now required by source:
+
+- Stack defaults and Compose start from the 05:40-05:57 SAST best production
+  timing instead of the old broad cold-start range.
+- The timing controller min/max bounds are pinned to that proven timing so it
+  cannot silently drift away without an explicit config and test change.
+- Regression tests assert the timing defaults across `stack-defaults.env`,
+  `.env.example`, and Compose.
