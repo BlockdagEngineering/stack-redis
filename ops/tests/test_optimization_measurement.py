@@ -18,6 +18,9 @@ class OptimizationMeasurementTests(unittest.TestCase):
             "can_mine": False,
             "can_accept_shares": True,
             "can_submit_blocks": False,
+            "age_seconds": 2.0,
+            "fresh": True,
+            "status_sampler": {"hit": True, "age_seconds": 1.5},
             "sync_progress": {
                 "status": "syncing",
                 "current_block": 10,
@@ -59,6 +62,10 @@ class OptimizationMeasurementTests(unittest.TestCase):
         self.assertEqual(sample["chain_rpc_latency_ms_max"], 12.5)
         self.assertEqual(sample["adaptive_workers"]["global_rpc"], 6)
         self.assertEqual(sample["dashboard_latency_ms"], 3.1)
+        self.assertEqual(sample["status_age_seconds"], 2.0)
+        self.assertTrue(sample["status_fresh"])
+        self.assertTrue(sample["status_sampler_hit"])
+        self.assertEqual(sample["status_sampler_age_seconds"], 1.5)
 
     def test_pool_metrics_parser_extracts_mining_quality_fields(self) -> None:
         metrics = measurement.parse_prometheus_metrics(
@@ -117,6 +124,8 @@ pool_template_conversion_stall_window_candidates{kind="total",pool_id="0"} 41
                 "connected_miners": 0,
                 "managed_miners": 0,
                 "collection_ms": 10.0,
+                "status_age_seconds": 1.0,
+                "status_sampler_hit": True,
                 "chain_rpc_latency_ms_max": 5.0,
                 "iowait_percent": 1.0,
                 "adaptive_workers": {"global_rpc": 6},
@@ -155,6 +164,8 @@ pool_template_conversion_stall_window_candidates{kind="total",pool_id="0"} 41
                 "connected_miners": 0,
                 "managed_miners": 0,
                 "collection_ms": 20.0,
+                "status_age_seconds": 3.0,
+                "status_sampler_hit": False,
                 "chain_rpc_latency_ms_max": 7.0,
                 "iowait_percent": 2.0,
                 "adaptive_workers": {"global_rpc": 3},
@@ -205,6 +216,45 @@ pool_template_conversion_stall_window_candidates{kind="total",pool_id="0"} 41
         self.assertEqual(summary["pool_ready_miners_min"], 1)
         self.assertEqual(summary["pool_fresh_consensus_peers_min"], 3)
         self.assertEqual(summary["pool_template_conversion_failure_ratio_max"], 9.5)
+        self.assertEqual(summary["status_age_seconds_p95"], 3.0)
+        self.assertEqual(summary["status_age_seconds_max"], 3.0)
+        self.assertEqual(summary["status_sampler_hit_values"], ["false", "true"])
+
+    def test_collect_status_sample_limits_local_status_cache_age(self) -> None:
+        original_collect_status_cached = measurement.collect_status_cached
+        original_collect_pool_metrics_sample = measurement.collect_pool_metrics_sample
+        calls = {}
+
+        def fake_collect_status_cached(*, include_logs, max_age_seconds):
+            calls["include_logs"] = include_logs
+            calls["max_age_seconds"] = max_age_seconds
+            return {
+                "overall": "ok",
+                "mode": "mining",
+                "can_mine": True,
+                "can_accept_shares": True,
+                "can_submit_blocks": True,
+                "sync_progress": {"status": "synced"},
+                "adaptive_concurrency": {"workers": {}},
+            }
+
+        try:
+            measurement.collect_status_cached = fake_collect_status_cached
+            measurement.collect_pool_metrics_sample = lambda _url, _timeout: {}
+            sample = measurement.collect_status_sample(
+                status_url=None,
+                timeout=1.0,
+                pool_metrics_url=None,
+                local_status_max_age_seconds=2.5,
+            )
+        finally:
+            measurement.collect_status_cached = original_collect_status_cached
+            measurement.collect_pool_metrics_sample = original_collect_pool_metrics_sample
+
+        self.assertEqual(calls["include_logs"], False)
+        self.assertEqual(calls["max_age_seconds"], 2.5)
+        self.assertEqual(sample["source"], "local-collector")
+        self.assertTrue(sample["can_submit_blocks"])
 
     def test_summarize_samples_marks_mixed_block_sources_untrusted(self) -> None:
         samples = [

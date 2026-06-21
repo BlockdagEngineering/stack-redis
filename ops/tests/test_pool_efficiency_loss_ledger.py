@@ -51,11 +51,16 @@ class PoolEfficiencyLossLedgerTests(unittest.TestCase):
         source_health = {"node_mineable": False, "node_submit_ready": False, "node_p2p_mining_fresh": True}
         job_health = {"ok": False}
 
-        contradiction = pool_ops.selected_backend_readiness_contract("node", source_health, job_health, True)
-        hard_unready = pool_ops.selected_backend_readiness_contract("node", source_health, job_health, False)
+        contradiction = pool_ops.selected_backend_readiness_contract("node", source_health, job_health, True, True)
+        paid_but_not_safe = pool_ops.selected_backend_readiness_contract("node", source_health, job_health, True, False)
+        hard_unready = pool_ops.selected_backend_readiness_contract("node", source_health, job_health, False, False)
 
         self.assertTrue(contradiction["contradiction"])
         self.assertFalse(contradiction["hard_unready"])
+        self.assertTrue(contradiction["readiness_override_safe"])
+        self.assertTrue(paid_but_not_safe["contradiction"])
+        self.assertTrue(paid_but_not_safe["hard_unready"])
+        self.assertFalse(paid_but_not_safe["readiness_override_safe"])
         self.assertFalse(hard_unready["contradiction"])
         self.assertTrue(hard_unready["hard_unready"])
 

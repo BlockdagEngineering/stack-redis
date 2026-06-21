@@ -14,6 +14,7 @@ from typing import Any
 from pool_ops import RUNTIME_DIR, collect_status_cached, host_runtime_profile, now_iso, seconds_since_epoch
 
 DEFAULT_POOL_METRICS_URL = "http://127.0.0.1:9090/metrics"
+DEFAULT_LOCAL_STATUS_MAX_AGE_SECONDS = 5.0
 METRIC_RE = re.compile(r"^([a-zA-Z_:][a-zA-Z0-9_:]*)(?:\{([^}]*)\})?\s+([-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)$")
 LABEL_RE = re.compile(r'([a-zA-Z_][a-zA-Z0-9_]*)="((?:[^"\\]|\\.)*)"')
 
@@ -137,6 +138,7 @@ def collect_status_sample(
     status_url: str | None = None,
     timeout: float = 8.0,
     pool_metrics_url: str | None = DEFAULT_POOL_METRICS_URL,
+    local_status_max_age_seconds: float = DEFAULT_LOCAL_STATUS_MAX_AGE_SECONDS,
 ) -> dict[str, Any]:
     started = time.monotonic()
     dashboard_latency_ms = None
@@ -144,7 +146,7 @@ def collect_status_sample(
         status, dashboard_latency_ms = fetch_status_url(status_url, timeout)
         source = status_url
     else:
-        status = collect_status_cached(include_logs=False)
+        status = collect_status_cached(include_logs=False, max_age_seconds=local_status_max_age_seconds)
         source = "local-collector"
     collection_ms = round((time.monotonic() - started) * 1000, 3)
     sample = flatten_status_sample(status, source, collection_ms, dashboard_latency_ms)
@@ -162,6 +164,7 @@ def flatten_status_sample(
     host = status.get("host_pressure") if isinstance(status.get("host_pressure"), dict) else {}
     adaptive = status.get("adaptive_concurrency") if isinstance(status.get("adaptive_concurrency"), dict) else {}
     miner = status.get("miner_health") if isinstance(status.get("miner_health"), dict) else {}
+    sampler = status.get("status_sampler") if isinstance(status.get("status_sampler"), dict) else {}
     nodes = sync.get("nodes") if isinstance(sync.get("nodes"), dict) else {}
     chain_latencies = [
         value
@@ -179,6 +182,10 @@ def flatten_status_sample(
         "source": source,
         "collection_ms": collection_ms,
         "dashboard_latency_ms": dashboard_latency_ms,
+        "status_age_seconds": number(status.get("age_seconds")),
+        "status_fresh": status.get("fresh"),
+        "status_sampler_hit": sampler.get("hit"),
+        "status_sampler_age_seconds": number(sampler.get("age_seconds")),
         "overall": status.get("overall"),
         "mode": status.get("mode"),
         "can_mine": status.get("can_mine"),
@@ -325,6 +332,9 @@ def summarize_samples(samples: list[dict[str, Any]]) -> dict[str, Any]:
         "pool_template_conversion_failure_ratio_max": percentile(values("pool_template_conversion_failure_ratio"), 100),
         "collection_ms_p95": percentile(values("collection_ms"), 95),
         "dashboard_latency_ms_p95": percentile(values("dashboard_latency_ms"), 95),
+        "status_age_seconds_p95": percentile(values("status_age_seconds"), 95),
+        "status_age_seconds_max": percentile(values("status_age_seconds"), 100),
+        "status_sampler_hit_values": bool_values("status_sampler_hit"),
         "pool_metrics_latency_ms_p95": percentile(values("pool_metrics_latency_ms"), 95),
         "chain_rpc_latency_ms_p95": percentile(values("chain_rpc_latency_ms_max"), 95),
         "iowait_percent_max": percentile(values("iowait_percent"), 100),
@@ -379,6 +389,8 @@ def render_html_report(summary: dict[str, Any], samples: list[dict[str, Any]]) -
         ("Pool conversion failure max %", summary.get("pool_template_conversion_failure_ratio_max")),
         ("Collection p95 ms", summary.get("collection_ms_p95")),
         ("Dashboard p95 ms", summary.get("dashboard_latency_ms_p95")),
+        ("Status age p95 / max s", f"{summary.get('status_age_seconds_p95')} / {summary.get('status_age_seconds_max')}"),
+        ("Status sampler hit values", ", ".join(summary.get("status_sampler_hit_values") or [])),
         ("Pool metrics p95 ms", summary.get("pool_metrics_latency_ms_p95")),
         ("Chain RPC p95 ms", summary.get("chain_rpc_latency_ms_p95")),
         ("I/O wait max %", summary.get("iowait_percent_max")),
@@ -403,6 +415,7 @@ def render_html_report(summary: dict[str, Any], samples: list[dict[str, Any]]) -
         f"<td>{html_escape(sample.get('can_submit_blocks'))}</td>"
         f"<td>{html_escape(sample.get('native_is_current'))}</td>"
         f"<td>{html_escape(sample.get('mining_advisory_sync'))}</td>"
+        f"<td>{html_escape(sample.get('status_age_seconds'))}</td>"
         f"<td>{html_escape(sample.get('current_block'))}</td>"
         f"<td>{html_escape(sample.get('current_block_source'))}</td>"
         f"<td>{html_escape(sample.get('remaining_blocks'))}</td>"
@@ -433,7 +446,7 @@ def render_html_report(summary: dict[str, Any], samples: list[dict[str, Any]]) -
   <h2>Adaptive Worker Ranges</h2>
   <table><tr><th>Kind</th><th>Min</th><th>Max</th></tr>{worker_rows}</table>
   <h2>Recent Samples</h2>
-  <table><tr><th>Time</th><th>Overall</th><th>Mode</th><th>Sync</th><th>Can Submit</th><th>Native Current</th><th>Advisory Sync</th><th>Block</th><th>Block Source</th><th>Remaining</th><th>RPC ms</th><th>IO wait %</th><th>Accepted Blocks</th><th>Ready Miners</th><th>Submit Ready</th><th>P2P Fresh</th></tr>{sample_rows}</table>
+  <table><tr><th>Time</th><th>Overall</th><th>Mode</th><th>Sync</th><th>Can Submit</th><th>Native Current</th><th>Advisory Sync</th><th>Status Age s</th><th>Block</th><th>Block Source</th><th>Remaining</th><th>RPC ms</th><th>IO wait %</th><th>Accepted Blocks</th><th>Ready Miners</th><th>Submit Ready</th><th>P2P Fresh</th></tr>{sample_rows}</table>
 </body>
 </html>
 """
@@ -448,7 +461,12 @@ def run_measurement(args: argparse.Namespace) -> dict[str, Any]:
     samples: list[dict[str, Any]] = []
     deadline = time.monotonic() + max(0.0, args.duration_seconds)
     while True:
-        sample = collect_status_sample(args.status_url, timeout=args.timeout_seconds, pool_metrics_url=args.pool_metrics_url)
+        sample = collect_status_sample(
+            args.status_url,
+            timeout=args.timeout_seconds,
+            pool_metrics_url=args.pool_metrics_url,
+            local_status_max_age_seconds=args.local_status_max_age_seconds,
+        )
         samples.append(sample)
         with jsonl_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(sample, sort_keys=True) + "\n")
@@ -476,6 +494,12 @@ def main() -> int:
     parser.add_argument("--interval-seconds", type=float, default=10.0)
     parser.add_argument("--timeout-seconds", type=float, default=8.0)
     parser.add_argument("--status-url", help="optional dashboard /api/status URL to measure HTTP latency")
+    parser.add_argument(
+        "--local-status-max-age-seconds",
+        type=float,
+        default=DEFAULT_LOCAL_STATUS_MAX_AGE_SECONDS,
+        help="maximum cached local status age when --status-url is not used",
+    )
     parser.add_argument("--pool-metrics-url", default=DEFAULT_POOL_METRICS_URL, help="optional pool Prometheus /metrics URL")
     parser.add_argument("--no-pool-metrics", action="store_true", help="skip pool Prometheus metrics collection")
     parser.add_argument("--label", default="baseline")
