@@ -309,3 +309,20 @@ Mitigations now required by source:
   catch-up over mining-node recovery.
 - Repeated insufficient-balance warnings are throttled and summarized while
   real payout send failures and database update failures remain immediate.
+
+### Stratum Retry Logs Can Steal Catch-Up I/O
+
+When the backend is syncing and templates are intentionally unavailable, X100
+ASICs repeatedly reconnect and retry normal subscribe/authorize flows. Logging
+every accepted socket, request, authorization, and short EOF can create heavy
+Docker log churn without making the node catch up faster.
+
+Mitigations now required by source:
+
+- The pool throttles routine Stratum connection logs by event type, ASIC lane,
+  and detail with `POOL_STRATUM_CONNECTION_LOG_INTERVAL_SECONDS=60` by default.
+- The throttle is logging-only. Stratum behavior, accepted shares, block
+  submissions, invalid JSON, unsupported methods, authorization failures, and
+  socket read errors keep their existing behavior.
+- Set `POOL_STRATUM_CONNECTION_LOG_INTERVAL_SECONDS=0` only during focused
+  Stratum debugging when every retry line is worth the extra log I/O.
