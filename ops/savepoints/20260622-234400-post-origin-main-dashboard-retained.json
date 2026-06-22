@@ -1,0 +1,71 @@
+{
+  "savepoint_id": "20260622-234400-post-origin-main-dashboard-retained",
+  "created_at_sast": "2026-06-22T23:44:00+02:00",
+  "retention": "Retain until Jeremy explicitly approves removal.",
+  "purpose": "Post dashboard-only deploy checkpoint after switching redis-dash to origin/main and recreating only the dashboard container.",
+  "scope": "dashboard only; node and pool were not restarted",
+  "source_after": {
+    "redis_dash": {
+      "path": "/home/jeremy/blockdag-source/redis-dash",
+      "branch": "main",
+      "head": "8e82f0bc75907c0d8db9c9adbba4cb99c4db771b",
+      "remote": "origin/main",
+      "notable_commits": [
+        "774b268 Stabilize Chain DAG producer attribution",
+        "6b300e1 Stream native DAG updates through Redis",
+        "8e82f0b Ignore stale EVM head fallbacks"
+      ]
+    },
+    "stack_redis": {
+      "path": "/home/jeremy/blockdag-source/stack-redis",
+      "branch": "codex/native-safe-mining-20260620-stack",
+      "head_before_savepoint_commit": "3d09f0a4027fd90a488ea74a606b23375a23b47b"
+    }
+  },
+  "build": {
+    "command": "docker compose build --no-cache --pull dashboard",
+    "result": "passed",
+    "dashboard_image": "sha256:bd8652fe9c1b57ac38117b503b8c64e838d30bf00a1e8f4ac73e269b2748a27d",
+    "candidate_tag": "stack-dashboard:origin-main-20260622-234125",
+    "rollback_tag": "stack-dashboard:pre-origin-main-dashboard-20260622-234007"
+  },
+  "deploy": {
+    "command": "docker compose up -d --no-deps --no-build --force-recreate dashboard",
+    "result": "dashboard recreated and healthy",
+    "live_dashboard_image": "sha256:bd8652fe9c1b57ac38117b503b8c64e838d30bf00a1e8f4ac73e269b2748a27d",
+    "dashboard_health": "healthy"
+  },
+  "validation": {
+    "redis_dash_tests": "go test ./... -count=1 passed",
+    "stack_savepoint_tests": "python3 -m unittest ops.tests.test_savepoint_manifest passed",
+    "p2p_guard": "clean with ops/savepoints and ops/runtime excluded",
+    "rendered_home": "left sidebar BDAG Sentinel layout served with ASIC Fleet, Stratum Runtime, Pool Management, Chain DAG, Earnings, Global, and Logs",
+    "chain_dag_tab": "served Chain DAG with source native-rpc-live and DAG JSON payload",
+    "stratum_runtime_tab": "served Stratum Runtime",
+    "pool_management_tab": "served Pool Management",
+    "global_tab": "producer-trend-toolbar served with Blocks/BDAG/USD controls and no point-marker grep hit for ctx.arc(p.x)",
+    "playwright_screenshot": "/tmp/redis-dash-origin-main-20260622-2342.png"
+  },
+  "mining_after": {
+    "pool_active_connections": 3,
+    "pool_ready_miners": 3,
+    "pool_job_health_ok": 1,
+    "template_coinbase_valid": 1,
+    "fresh_consensus_peers": 6,
+    "repeated_direct_pool_samples": "8 samples over about 40 seconds showed mineable=1 and submit_ready=1 after one earlier transient 0/0 sample",
+    "extended_observation": {
+      "first_followup": "A later direct metrics pass observed a recovered parent/template transition pattern: short zero-ready or submit-not-ready windows around stale-current-job/node-syncing, while accepted blocks still advanced from 371 to 383.",
+      "second_followup": "The next full minute, 23:48:55-23:49:50 SAST, stayed stable for 12/12 samples: ready_miners=3, mineable=1, submit_ready=1, and accepted blocks advanced from 422 to 439.",
+      "decision": "Do not roll back the dashboard solely for the recovered transition. Keep monitoring because the dashboard can now expose Chain DAG/native live views and should not mask direct pool metrics during future transitions."
+    },
+    "accepted_blocks_counter": {
+      "before_repeated_sample": 292,
+      "after_repeated_sample": 439
+    },
+    "note": "The stack continued mining after the dashboard-only deploy, but only 3 ASIC lanes were active before and after this change. This savepoint does not claim four-lane recovery."
+  },
+  "rollback_commands": [
+    "cd /home/jeremy/blockdag-source/stack-redis && docker tag stack-dashboard:pre-origin-main-dashboard-20260622-234007 stack-dashboard:latest",
+    "cd /home/jeremy/blockdag-source/stack-redis && docker compose up -d --no-deps --no-build --force-recreate dashboard"
+  ]
+}

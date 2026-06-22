@@ -1,0 +1,63 @@
+{
+  "savepoint_id": "20260622-234007-pre-origin-main-dashboard-retained",
+  "created_at_sast": "2026-06-22T23:40:07+02:00",
+  "retention": "Retain until Jeremy explicitly approves removal.",
+  "purpose": "Pre dashboard-only checkout/rebuild/redeploy checkpoint before switching redis-dash from codex/native-safe-mining-20260620-dashboard to newer origin/main.",
+  "scope": "dashboard only; node and pool must not be restarted for this change",
+  "source_before": {
+    "stack_redis": {
+      "path": "/home/jeremy/blockdag-source/stack-redis",
+      "branch": "codex/native-safe-mining-20260620-stack",
+      "head": "3d09f0a4027fd90a488ea74a606b23375a23b47b",
+      "status": "ahead 16, behind 14"
+    },
+    "redis_dash": {
+      "path": "/home/jeremy/blockdag-source/redis-dash",
+      "branch": "codex/native-safe-mining-20260620-dashboard",
+      "head": "915d5c24ebc0eb691e7149103a4ee4b33b86ac56",
+      "status": "ahead 4, behind 4 versus origin/codex/native-safe-mining-20260620-dashboard",
+      "target_checkout": "origin/main",
+      "target_head": "8e82f0bc75907c0d8db9c9adbba4cb99c4db771b"
+    }
+  },
+  "live_before": {
+    "dashboard_image": "sha256:f17bd2bb5990a586c26faf6b669b887b4d85da6aa036b0bf06bddac4f104ed17",
+    "dashboard_rollback_tag": "stack-dashboard:pre-origin-main-dashboard-20260622-234007",
+    "dashboard_status": "running healthy",
+    "node_status": "running",
+    "pool_status": "running",
+    "status_sampler_status": "running"
+  },
+  "mining_before": {
+    "pool_active_connections": 3,
+    "pool_authorized_miners": 3,
+    "pool_ready_miners": 3,
+    "pool_job_health_ok": 1,
+    "node_mineable": 1,
+    "node_submit_ready": 1,
+    "template_coinbase_valid": 1,
+    "fresh_consensus_peers": 5,
+    "accepted_blocks_counter": 222,
+    "note": "Pool/node were healthy, but only 3 ASIC lanes were active before this dashboard-only change. Do not use dashboard redeploy as a reason to restart pool or node."
+  },
+  "safety_checks": {
+    "p2p_guard": "clean with ops/savepoints and ops/runtime excluded",
+    "safe_node_invariant": "Blockdag,miner plus configured mining address; no separate p2p module"
+  },
+  "planned_commands": [
+    "cd /home/jeremy/blockdag-source/redis-dash && git checkout main && git merge --ff-only origin/main",
+    "cd /home/jeremy/blockdag-source/redis-dash && go test ./... -count=1",
+    "cd /home/jeremy/blockdag-source/stack-redis && docker compose build --no-cache --pull dashboard",
+    "cd /home/jeremy/blockdag-source/stack-redis && docker compose up -d --no-deps --force-recreate dashboard"
+  ],
+  "rollback_commands": [
+    "cd /home/jeremy/blockdag-source/stack-redis && docker tag stack-dashboard:pre-origin-main-dashboard-20260622-234007 stack-dashboard:latest",
+    "cd /home/jeremy/blockdag-source/stack-redis && docker compose up -d --no-deps --no-build --force-recreate dashboard"
+  ],
+  "stop_conditions": [
+    "dashboard fails health check after redeploy",
+    "dashboard API is unavailable after restart",
+    "pool/node health changes in a way correlated with dashboard restart",
+    "p2p module appears in active source/config"
+  ]
+}
