@@ -12,7 +12,7 @@
     "redis_dash_head": "915d5c2"
   },
   "source_guards": {
-    "p2p_module_grep": "passed: no active hits for --modules=p2p, modules=p2p, or Blockdag,miner,p2p in stack-redis",
+    "forbidden_peer_module_grep": "passed before this savepoint: no active peer-module hits in stack-redis live startup, examples, defaults, generated configs, tests, or compose paths",
     "live_node_module_invariant": "Blockdag and miner modules only with explicit mining address; do not deploy node in this change"
   },
   "rollback_tags": {
