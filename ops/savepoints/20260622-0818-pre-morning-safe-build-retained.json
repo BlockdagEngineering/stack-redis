@@ -38,6 +38,17 @@
     "backend_p2p_mining_fresh": 1,
     "accepted_block_submit_counter": 1069
   },
+  "morning_safe_build_result": {
+    "built_at": "2026-06-22T08:20:00+02:00",
+    "deployed": false,
+    "pool_candidate_tag": "stack-pool:morning-safe-no-a890-20260622-0818",
+    "pool_candidate_image": "sha256:cd74f1d9d724a30a1ef0f227218195e7ac81fde032f2f0f47aca1ab2cb66ea2d",
+    "dashboard_candidate_tag": "stack-dashboard:morning-safe-no-a890-20260622-0818",
+    "dashboard_candidate_image": "sha256:8bbfe43540b1781fe0a0530917dabb2b65bbc4d9c99698f84c357b35ba44f8c8",
+    "latest_tags_restored_to_live_images": true,
+    "binary_exclusion_check": "The built pool image contains no awaiting_current_job_broadcast or pool_job_health_current_job_awaiting_broadcast_miners strings.",
+    "live_state_after_build": "No containers were recreated or restarted. Direct pool health stayed ok/ok with 4 active/authorized/ready ASIC lanes."
+  },
   "rollback_commands": [
     "docker tag stack-pool:20260622-0735-pre-rebuild-redeploy stack-pool:latest && docker compose up -d --no-deps --no-build pool",
     "docker tag stack-dashboard:20260622-0735-pre-rebuild-redeploy stack-dashboard:latest && docker compose up -d --no-deps --no-build dashboard",
