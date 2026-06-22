@@ -1,0 +1,51 @@
+{
+  "savepoint_id": "20260622-0818-pre-morning-safe-build-retained",
+  "created_at": "2026-06-22T08:18:00+02:00",
+  "retained": true,
+  "purpose": "Pre-build savepoint before producing a morning candidate that excludes the failed pool broadcast-transition change.",
+  "isolation_result": {
+    "failed_candidate_pool_image": "sha256:00f2570674171002557f5980332431263062534c03641ed8f728f9553cf3c9f5",
+    "known_good_pool_image": "sha256:c102be94afedbf98a51ce9362809198725b290979682e902096f0619a7e74c50",
+    "known_good_pool_source": "937dff6 Preserve safe ASIC jobs during transient node sync",
+    "failed_candidate_pool_source": "a890d5c Distinguish pool broadcast transition health",
+    "isolated_problem": "a890d5c was the only pool source delta between the known-good running image and the failed pool candidate. It is excluded from the morning build by pool revert commit 79ad00e.",
+    "release_decision": "Do not include a890d5c in the morning pool build. Keep the dashboard/display side optional, but do not ship the pool awaiting-current-job-broadcast health change until the restart/zero-ready path is redesigned and proven."
+  },
+  "source_refs": {
+    "stack_redis_branch": "codex/native-safe-mining-20260620-stack",
+    "stack_redis_head": "b1818dd",
+    "pool_branch": "codex/native-safe-mining-20260620-pool",
+    "pool_head": "79ad00e",
+    "pool_head_note": "Reverts a890d5c; effective pool code matches the known-good 937dff6 behavior for the isolated files.",
+    "redis_dash_branch": "codex/native-safe-mining-20260620-dashboard",
+    "redis_dash_head": "915d5c2"
+  },
+  "live_image_ids_before_build": {
+    "pool": "sha256:c102be94afedbf98a51ce9362809198725b290979682e902096f0619a7e74c50",
+    "dashboard": "sha256:21e9bf98ae9a60e44c379cde8b29a2ddf40fc061dc987aebd3d6db741a18529b",
+    "node": "sha256:c1b1c24457dc052f0d4352e16cbfbf99144633d5bc3f5f7cf17fb57475933845",
+    "status_sampler": "sha256:6e45c75e084826a9ec44f0bd101b124610b450f31908396b9972d99685cd7739"
+  },
+  "live_health_before_build": {
+    "pool_job_state": "ok/ok",
+    "active_connections": 4,
+    "authorized_connections": 4,
+    "ready_connections": 4,
+    "pool_job_health_ok": 1,
+    "pool_job_health_ready_miners": 4,
+    "backend_mineable": 1,
+    "backend_submit_ready": 1,
+    "backend_p2p_mining_fresh": 1,
+    "accepted_block_submit_counter": 1069
+  },
+  "rollback_commands": [
+    "docker tag stack-pool:20260622-0735-pre-rebuild-redeploy stack-pool:latest && docker compose up -d --no-deps --no-build pool",
+    "docker tag stack-dashboard:20260622-0735-pre-rebuild-redeploy stack-dashboard:latest && docker compose up -d --no-deps --no-build dashboard",
+    "Avoid node rollback for this build; if unavoidable, stop pool first, restore node deliberately, verify native health/fresh peers, then restart pool."
+  ],
+  "pre_build_validation": [
+    "pool go test ./... -count=1 passed after revert",
+    "stack p2p module guard passed",
+    "direct pool API on 127.0.0.1:9090 showed four ready ASIC lanes before build"
+  ]
+}
