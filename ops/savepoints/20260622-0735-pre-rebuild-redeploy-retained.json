@@ -1,0 +1,82 @@
+{
+  "savepoint_id": "20260622-0735-pre-rebuild-redeploy-retained",
+  "created_at": "2026-06-22T07:35:00+02:00",
+  "retained": true,
+  "purpose": "Rollback target before rebuilding and redeploying current pool and redis-dash source changes.",
+  "repos": {
+    "stack_redis_branch": "codex/native-safe-mining-20260620-stack",
+    "stack_redis_head": "efb6e26",
+    "pool_branch": "codex/native-safe-mining-20260620-pool",
+    "pool_head": "a890d5c",
+    "redis_dash_branch": "codex/native-safe-mining-20260620-dashboard",
+    "redis_dash_head": "915d5c2"
+  },
+  "source_guards": {
+    "p2p_module_grep": "passed: no active hits for --modules=p2p, modules=p2p, or Blockdag,miner,p2p in stack-redis",
+    "live_node_module_invariant": "Blockdag and miner modules only with explicit mining address; do not deploy node in this change"
+  },
+  "rollback_tags": {
+    "pool": "stack-pool:20260622-0735-pre-rebuild-redeploy",
+    "dashboard": "stack-dashboard:20260622-0735-pre-rebuild-redeploy",
+    "node": "stack-node:20260622-0735-pre-rebuild-redeploy",
+    "status_sampler": "stack-status-sampler:20260622-0735-pre-rebuild-redeploy"
+  },
+  "live_image_ids": {
+    "pool": "sha256:c102be94afedbf98a51ce9362809198725b290979682e902096f0619a7e74c50",
+    "dashboard_running": "sha256:21e9bf98ae9a60e44c379cde8b29a2ddf40fc061dc987aebd3d6db741a18529b",
+    "dashboard_latest_before_deploy": "sha256:272a4534b1e9372488805e7ec8ad79db44effaf285062b89c773aa120488d8a3",
+    "node": "sha256:c1b1c24457dc052f0d4352e16cbfbf99144633d5bc3f5f7cf17fb57475933845",
+    "status_sampler": "sha256:6e45c75e084826a9ec44f0bd101b124610b450f31908396b9972d99685cd7739"
+  },
+  "live_baseline": {
+    "dashboard_api": {
+      "overall": "ok",
+      "mode": "mining",
+      "can_accept_shares": true,
+      "can_submit_blocks": true,
+      "source": "redis-live",
+      "sync_status": "synced",
+      "native_is_current": true,
+      "p2p_connections": 5,
+      "p2p_network_gap": 0,
+      "ready_miners": 4,
+      "accepted_block_submissions": 10359,
+      "accepted_block_submissions_delta": 2,
+      "accepted_block_recent": true
+    },
+    "pool_job_state": {
+      "status": "ok",
+      "reason_code": "ok",
+      "active_connections": 4,
+      "authorized_connections": 4,
+      "ready_connections": 4,
+      "stale_current_job_connections": 0,
+      "invalid_current_job_connections": 0,
+      "expired_current_job_connections": 0,
+      "current_template_seq": 32568,
+      "last_broadcast_age_ms": 1032,
+      "router_node_reason": "ok"
+    },
+    "host_pressure": {
+      "node_memory": "4.352GiB / 15.31GiB",
+      "pool_memory": "37.58MiB / 15.31GiB",
+      "dashboard_memory": "57.97MiB / 15.31GiB"
+    }
+  },
+  "rollback_commands": [
+    "cd /home/jeremy/blockdag-source/stack-redis",
+    "docker image tag stack-dashboard:20260622-0735-pre-rebuild-redeploy stack-dashboard:latest && docker compose up -d --no-deps --no-build dashboard",
+    "docker compose stop pool && docker image tag stack-pool:20260622-0735-pre-rebuild-redeploy stack-pool:latest && docker compose up -d --no-deps --no-build pool",
+    "Node rollback should be avoided for this deploy; if required, stop pool first, tag stack-node:20260622-0735-pre-rebuild-redeploy as stack-node:latest, restore node deliberately, verify native health/fresh peers, then restart pool."
+  ],
+  "unsafe_signals_for_revert": [
+    "p2p module appears live",
+    "node command/env diverges from Blockdag/miner-only invariant",
+    "node enters restart loop",
+    "dashboard health fails after dashboard-only deploy",
+    "pool ready miners drop and do not recover after sufficient observation",
+    "accepted submissions stop while ASICs have work",
+    "zero-coinbase or unsafe template reaches ASIC jobs",
+    "dashboard says ok while template/mining is unsafe"
+  ]
+}
