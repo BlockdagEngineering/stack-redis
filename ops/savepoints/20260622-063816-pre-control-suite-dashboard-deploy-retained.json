@@ -1,0 +1,52 @@
+{
+  "name": "pre-control-suite-dashboard-deploy-retained",
+  "created_at_local": "2026-06-22T06:38:16+02:00",
+  "created_at_utc": "2026-06-22T04:38:16Z",
+  "retained": true,
+  "reason": "Rollback point before deploying redis-dash read-only ASIC, Stratum Runtime, and Chain DAG dashboard telemetry.",
+  "repos": {
+    "stack_redis": {
+      "path": "/home/jeremy/blockdag-source/stack-redis",
+      "head": "3a0f89a",
+      "branch": "codex/native-safe-mining-20260620-stack"
+    },
+    "redis_dash": {
+      "path": "/home/jeremy/blockdag-source/redis-dash",
+      "head": "0f983bc",
+      "branch": "codex/native-safe-mining-20260620-dashboard"
+    }
+  },
+  "live_dashboard_before_deploy": {
+    "image": "stack-dashboard",
+    "image_id": "sha256:21e9bf98ae9a60e44c379cde8b29a2ddf40fc061dc987aebd3d6db741a18529b",
+    "rollback_tag": "stack-dashboard:pre-control-suite-deploy-20260622-063816",
+    "status": "Up 5 hours (healthy)",
+    "published": "127.0.0.1:8088->8088/tcp"
+  },
+  "mining_gate_before_deploy": {
+    "dashboard_samples": 5,
+    "mode": "mining",
+    "overall": "ok",
+    "can_accept_shares": true,
+    "can_submit_blocks": true,
+    "ready_lanes": 4,
+    "sync_status": "synced",
+    "fresh_peer_count": 16,
+    "direct_pool_job_state": "ok",
+    "direct_pool_ready_connections": 4
+  },
+  "p2p_guard": {
+    "command": "git grep -n -- '--modules=p2p\\|modules=p2p\\|Blockdag,miner,p2p'",
+    "result": "no hits"
+  },
+  "rollback_commands": [
+    "cd /home/jeremy/blockdag-source/stack-redis",
+    "docker image tag stack-dashboard:pre-control-suite-deploy-20260622-063816 stack-dashboard:latest",
+    "docker compose up -d --no-deps dashboard"
+  ],
+  "notes": [
+    "Only dashboard service is eligible for redeploy from this savepoint.",
+    "Do not restart node or pool for this dashboard telemetry change.",
+    "If dashboard health or live mining gates fail after deploy, rollback dashboard image first and reassess from this retained point."
+  ]
+}
