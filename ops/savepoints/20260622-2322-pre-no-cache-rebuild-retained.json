@@ -1,0 +1,113 @@
+{
+  "document_type": "stack_redis_savepoint",
+  "name": "20260622-2322-pre-no-cache-rebuild-retained",
+  "created_at": "2026-06-22T23:22:15+02:00",
+  "retention": "retain until Jeremy explicitly approves removal",
+  "purpose": "Pre full no-cache rebuild checkpoint for stack-redis from the current local stack-redis, blockdag-corechain, pool, and redis-dash checkouts.",
+  "requested_build_sources": {
+    "stack-redis": {
+      "path": "/home/jeremy/blockdag-source/stack-redis",
+      "branch": "codex/native-safe-mining-20260620-stack",
+      "head": "679688bea1a3a02db9ba95773c1c8c7cc96abeb9"
+    },
+    "blockdag-corechain": {
+      "path": "/home/jeremy/blockdag-source/blockdag-corechain",
+      "branch": "codex/native-safe-mining-20260620-corechain",
+      "head": "7426d7fa1b39a29b57b5e81f24dc2baaede0c54c"
+    },
+    "pool": {
+      "path": "/home/jeremy/blockdag-source/pool",
+      "branch": "codex/native-safe-mining-20260620-pool",
+      "head": "79ad00ee2fc5ee9391cef6ff3353e7304c27e54d"
+    },
+    "redis-dash": {
+      "path": "/home/jeremy/blockdag-source/redis-dash",
+      "branch": "codex/native-safe-mining-20260620-dashboard",
+      "head": "915d5c24ebc0eb691e7149103a4ee4b33b86ac56"
+    }
+  },
+  "build_plan": {
+    "dockerfile": "dockerfile-dev",
+    "no_cache": true,
+    "pull_base_images": true,
+    "services": [
+      "node",
+      "pool",
+      "dashboard",
+      "status-sampler",
+      "watchdog",
+      "sentinel"
+    ],
+    "note": "watchdog and sentinel are built for completeness but only currently running services are redeployed unless explicitly needed."
+  },
+  "live_images_before_rebuild": {
+    "node": "sha256:c1b1c24457dc052f0d4352e16cbfbf99144633d5bc3f5f7cf17fb57475933845",
+    "pool": "sha256:db2b71e180623acb1f9b75c6ccc92c68e61310876d658f814fa9dfab7070effb",
+    "dashboard": "sha256:146547f7130743efc0b237116af4c514303134e131bde1d7a464625bef31dc23",
+    "status-sampler": "sha256:7734115a60d761cae65408b92205a9d6ffd23a73d9a8db85e604470419a92828"
+  },
+  "live_commands_before_rebuild": {
+    "node": "[\"/usr/local/bin/docker-entrypoint-nodeworker.sh\",\"/usr/local/bin/nodeworker\",\"--node-binary=/usr/local/bin/blockdag-node\",\"--node-args=--configfile /etc/bdagStack/node.conf\",\"--rpc-url=ws://127.0.0.1:18546\",\"--dag-rpc-url=http://127.0.0.1:38131\",\"--persist-root=/var/lib/bdagStack/nodeworker\",\"--health-min-peers=2\",\"--rollout-window=30m\"]",
+    "pool": "[\"/usr/local/bin/mining-pool\"]",
+    "dashboard": "[\"/usr/local/bin/dashboard\"]",
+    "status-sampler": "[\"/bin/sh\",\"-c\",\"exec python3 ops/status_sampler.py --loop --no-logs\"]"
+  },
+  "config_hashes_before_rebuild": {
+    ".env": "df391ba0a263dfb6bb2147a758f5abd52c54b3a9c4f6134260415bb76c7c134c",
+    "node.conf": "d403a9f2b9b9bc1ebd625d3a9b79cdafd8a693b8546455d3b44fce3a4f69af62",
+    "docker-compose.yml": "0a789362c087010c4c23bb8f639af5350a00c1e929b82d434f76c7c66810b1a1",
+    "docker-compose.override.yml": "2597fc0b686e0597d4c23c6979ecb20942777e27fada2e29aee40d8aca3058f8"
+  },
+  "live_health_before_rebuild": {
+    "docker": {
+      "dashboard": "Up healthy",
+      "node": "Up 23 hours",
+      "pool": "Up",
+      "postgres": "Up healthy",
+      "status-sampler": "Up"
+    },
+    "dashboard": {
+      "state": "Mining",
+      "live_overall": "ok",
+      "miner_inventory": 4,
+      "ready_miner_jobs": 4,
+      "submit_ready": "yes",
+      "getting_fresh_work": "yes",
+      "recent_accepted_block": "yes"
+    },
+    "pool_metrics": {
+      "active_connections": 4,
+      "authorized_miners": 4,
+      "ready_miners": 4,
+      "miners_without_current_job": 0,
+      "job_health_ok": 1,
+      "consensus_peers": 12,
+      "fresh_consensus_peers": 11,
+      "template_coinbase_valid": 1,
+      "accepted_blocks_since_pool_start": 242,
+      "accepted_shares_since_pool_start": 814,
+      "backend_mineable_transient_sample": 0,
+      "backend_submit_ready_transient_sample": 0,
+      "note": "Dashboard and block flow were healthy at capture time; resample native mineable/submit-ready before any node restart."
+    },
+    "asic_map": {
+      "192.168.1.101": "2a:71:c7:f5:1f:1e",
+      "192.168.1.105": "28:e2:97:1e:c0:b5",
+      "192.168.1.106": "28:e2:97:4d:44:3a",
+      "192.168.1.14": "28:e2:97:3e:39:63"
+    }
+  },
+  "safety": {
+    "active_p2p_guard": "clean when excluding historical savepoint/runtime records",
+    "live_node_invariant": "--modules=Blockdag --modules=miner --miner --miningaddr=<pool payout address>",
+    "node_restart_rule": "Stop pool first, recreate node deliberately, verify fresh peers/template/submit readiness, then recreate pool."
+  },
+  "rollback_commands": [
+    "docker tag sha256:c1b1c24457dc052f0d4352e16cbfbf99144633d5bc3f5f7cf17fb57475933845 stack-node:latest",
+    "docker tag sha256:db2b71e180623acb1f9b75c6ccc92c68e61310876d658f814fa9dfab7070effb stack-pool:latest",
+    "docker tag sha256:146547f7130743efc0b237116af4c514303134e131bde1d7a464625bef31dc23 stack-dashboard:latest",
+    "docker tag sha256:7734115a60d761cae65408b92205a9d6ffd23a73d9a8db85e604470419a92828 stack-status-sampler:latest",
+    "docker compose up -d --no-build --no-deps --force-recreate status-sampler dashboard pool",
+    "If node was restarted, stop pool, restore stack-node:latest from the saved node image, recreate node, verify node health, then recreate pool."
+  ]
+}

@@ -1,0 +1,112 @@
+{
+  "document_type": "stack_redis_savepoint",
+  "name": "20260622-2332-post-no-cache-rebuild-mining-retained",
+  "created_at": "2026-06-22T23:32:00+02:00",
+  "retention": "retain until Jeremy explicitly approves removal",
+  "purpose": "Post full no-cache rebuild checkpoint. Live stack is rebuilt from the current local stack-redis, blockdag-corechain, pool, and redis-dash checkouts and redeployed.",
+  "source_heads": {
+    "stack-redis": {
+      "branch": "codex/native-safe-mining-20260620-stack",
+      "head": "679688bea1a3a02db9ba95773c1c8c7cc96abeb9"
+    },
+    "blockdag-corechain": {
+      "branch": "codex/native-safe-mining-20260620-corechain",
+      "head": "7426d7fa1b39a29b57b5e81f24dc2baaede0c54c"
+    },
+    "pool": {
+      "branch": "codex/native-safe-mining-20260620-pool",
+      "head": "79ad00ee2fc5ee9391cef6ff3353e7304c27e54d"
+    },
+    "redis-dash": {
+      "branch": "codex/native-safe-mining-20260620-dashboard",
+      "head": "915d5c24ebc0eb691e7149103a4ee4b33b86ac56"
+    }
+  },
+  "build_command": "docker compose build --no-cache --pull node pool dashboard status-sampler watchdog sentinel",
+  "built_images": {
+    "stack-node:20260622-2328-nocache": "sha256:8509e30ad24d5241e35b57accd4996afd7e8f5bb1d0aa46e6c93202f65e156b1",
+    "stack-pool:20260622-2328-nocache": "sha256:256a94ba6e487cc9bcea85649b717a8a26f4fe668faaf68fbacb0d1da4ad7b05",
+    "stack-dashboard:20260622-2328-nocache": "sha256:f17bd2bb5990a586c26faf6b669b887b4d85da6aa036b0bf06bddac4f104ed17",
+    "stack-status-sampler:20260622-2328-nocache": "sha256:819fbe594a499e24ed71efdad4e938e73896d5e3ce5c28c2793742df933211dc",
+    "stack-watchdog:20260622-2328-nocache": "sha256:8bdc9b01b7abb8065aad4bc423780960f26386d294db156c96aa5e792e0f9efa",
+    "stack-sentinel:20260622-2328-nocache": "sha256:45860fcb49821cf39b03038a24fe0e7f7bc3c00ec940c79fb03b0b89d77c8a9e"
+  },
+  "live_images_after_redeploy": {
+    "node": "sha256:8509e30ad24d5241e35b57accd4996afd7e8f5bb1d0aa46e6c93202f65e156b1",
+    "pool": "sha256:256a94ba6e487cc9bcea85649b717a8a26f4fe668faaf68fbacb0d1da4ad7b05",
+    "dashboard": "sha256:f17bd2bb5990a586c26faf6b669b887b4d85da6aa036b0bf06bddac4f104ed17",
+    "status-sampler": "sha256:819fbe594a499e24ed71efdad4e938e73896d5e3ce5c28c2793742df933211dc"
+  },
+  "live_start_times_utc": {
+    "node": "2026-06-22T21:28:53.698751796Z",
+    "pool": "2026-06-22T21:29:31.642964104Z",
+    "dashboard": "2026-06-22T21:28:44.909322444Z",
+    "status-sampler": "2026-06-22T21:28:44.910789684Z"
+  },
+  "config_hashes_after_redeploy": {
+    ".env": "df391ba0a263dfb6bb2147a758f5abd52c54b3a9c4f6134260415bb76c7c134c",
+    "node.conf": "d403a9f2b9b9bc1ebd625d3a9b79cdafd8a693b8546455d3b44fce3a4f69af62",
+    "docker-compose.yml": "0a789362c087010c4c23bb8f639af5350a00c1e929b82d434f76c7c66810b1a1",
+    "docker-compose.override.yml": "2597fc0b686e0597d4c23c6979ecb20942777e27fada2e29aee40d8aca3058f8"
+  },
+  "validation_before_build": {
+    "active_p2p_guard": "clean excluding historical savepoint/runtime records",
+    "pool": "go test ./... -count=1 passed",
+    "redis-dash": "go test ./... -count=1 passed",
+    "blockdag-corechain": "go test ./... -count=1 passed",
+    "stack-redis": "python3 -m unittest discover -s ops/tests passed, 540 tests"
+  },
+  "deploy_sequence": [
+    "Recreated dashboard and status-sampler from no-cache images.",
+    "Stopped pool before node replacement.",
+    "Recreated node from no-cache image.",
+    "Verified node readiness endpoint returned ready and liveness returned ok.",
+    "Recreated pool from no-cache image.",
+    "Observed mining recovery over a longer post-restart sample."
+  ],
+  "live_health_after_redeploy": {
+    "docker": {
+      "dashboard": "Up healthy",
+      "node": "Up",
+      "pool": "Up",
+      "status-sampler": "Up"
+    },
+    "pool_metrics": {
+      "active_connections": 4,
+      "authorized_miners": 4,
+      "ready_miners": 4,
+      "job_health_ok": 1,
+      "mineable": 1,
+      "submit_ready": 1,
+      "template_coinbase_valid": 1,
+      "consensus_peers": 4,
+      "fresh_consensus_peers": 4,
+      "accepted_blocks_after_pool_restart": 50,
+      "accepted_shares_after_pool_restart": 253
+    },
+    "dashboard": {
+      "state": "Mining",
+      "live_overall": "ok",
+      "miner_inventory": 4,
+      "ready_miner_jobs": 4,
+      "submit_ready": "yes",
+      "getting_fresh_work": "yes",
+      "recent_accepted_block": "yes"
+    },
+    "startup_transients": [
+      "During node/pool warmup the pool logged transient node-syncing template fetch errors.",
+      "One payout pass was deferred because backend was not yet mining-safe with reason node-health-zero-template-coinbase.",
+      "The transients did not persist; final sample showed coinbase valid, mineable, submit-ready, and accepted block flow."
+    ]
+  },
+  "rollback_commands": [
+    "docker tag sha256:c1b1c24457dc052f0d4352e16cbfbf99144633d5bc3f5f7cf17fb57475933845 stack-node:latest",
+    "docker tag sha256:db2b71e180623acb1f9b75c6ccc92c68e61310876d658f814faaf68fbacb0d1da4ad7b05 stack-pool:latest",
+    "docker tag sha256:146547f7130743efc0b237116af4c514303134e131bde1d7a464625bef31dc23 stack-dashboard:latest",
+    "docker tag sha256:7734115a60d761cae65408b92205a9d6ffd23a73d9a8db85e604470419a92828 stack-status-sampler:latest",
+    "docker compose stop pool",
+    "docker compose up -d --no-build --no-deps --force-recreate node",
+    "Wait for http://127.0.0.1:6061/readyz to return ready.",
+    "docker compose up -d --no-build --no-deps --force-recreate dashboard status-sampler pool"
+  ]
+}
