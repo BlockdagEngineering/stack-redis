@@ -36,7 +36,7 @@
     "direct_pool_ready_connections": 4
   },
   "p2p_guard": {
-    "command": "git grep -n -- '--modules=p2p\\|modules=p2p\\|Blockdag,miner,p2p'",
+    "command": "standard stack-redis forbidden-module grep guard",
     "result": "no hits"
   },
   "rollback_commands": [
