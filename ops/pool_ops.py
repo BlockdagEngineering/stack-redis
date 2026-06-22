@@ -253,11 +253,14 @@ SHARED_STATUS_CACHE_FILE = RUNTIME_DIR / "shared-status-cache.json"
 STATUS_SAMPLER_FILE = RUNTIME_DIR / "status-sampler.json"
 SYNC_PROGRESS_HEALTH_STATE_FILE = RUNTIME_DIR / "sync-progress-health-state.json"
 EVM_REFERENCE_GAP_WATCH_FILE = RUNTIME_DIR / "evm-reference-gap-watch.json"
+POOL_PAID_WORK_STATE_FILE = RUNTIME_DIR / "pool-paid-work-state.json"
+TEMPLATE_SAFETY_STATE_FILE = RUNTIME_DIR / "template-safety-state.json"
 STATUS_PAYLOAD_STALE_AFTER_SECONDS = env_float(
     "BDAG_STATUS_PAYLOAD_STALE_AFTER_SECONDS",
     120.0,
     minimum=5.0,
 )
+POOL_PAID_WORK_RECENT_SECONDS = env_float("BDAG_POOL_PAID_WORK_RECENT_SECONDS", 60.0, minimum=5.0)
 CATCHUP_PAUSE_ENABLED = env_bool("BDAG_CATCHUP_PAUSE_ENABLED", True)
 CATCHUP_PAUSE_THRESHOLD_BLOCKS = env_int("BDAG_CATCHUP_PAUSE_THRESHOLD_BLOCKS", 300, minimum=1)
 CATCHUP_NODE_CACHE_MB = env_int("BDAG_CATCHUP_NODE_CACHE_MB", 6144, minimum=0)
@@ -266,6 +269,16 @@ CATCHUP_IO_PRESSURE_MIN_LAG_BLOCKS = env_int("BDAG_CATCHUP_IO_PRESSURE_MIN_LAG_B
 CATCHUP_IOWAIT_WARN_PERCENT = env_float("BDAG_CATCHUP_IOWAIT_WARN_PERCENT", 15.0, minimum=0.0)
 CATCHUP_IO_SOME_AVG10_WARN = env_float("BDAG_CATCHUP_IO_SOME_AVG10_WARN", 20.0, minimum=0.0)
 CATCHUP_IO_FULL_AVG10_WARN = env_float("BDAG_CATCHUP_IO_FULL_AVG10_WARN", 10.0, minimum=0.0)
+CATCHUP_NATIVE_P2P_MIN_FRESH_CONSENSUS_PEERS = env_int(
+    "BDAG_CATCHUP_NATIVE_P2P_MIN_FRESH_CONSENSUS_PEERS",
+    2,
+    minimum=1,
+)
+CATCHUP_NATIVE_P2P_MAX_PEER_LEAD_BLOCKS = env_int(
+    "BDAG_CATCHUP_NATIVE_P2P_MAX_PEER_LEAD_BLOCKS",
+    pool_start_gate.MAX_NATIVE_PEER_LEAD_BLOCKS,
+    minimum=0,
+)
 SYNC_PROGRESS_ACTIVE_LOOKBACK_SECONDS = int(os.environ.get("BDAG_SYNC_PROGRESS_ACTIVE_LOOKBACK_SECONDS", "2700"))
 DEFAULT_POOL_ENV_FILE = PROJECT_ROOT / ".env"
 POOL_ENV_FILE = path_from_env("BDAG_POOL_ENV_FILE", DEFAULT_POOL_ENV_FILE, PROJECT_ROOT)
@@ -574,10 +587,14 @@ def is_no_miner_sync_noise(item: Any) -> bool:
 
 def is_recent_mining_sync_noise(item: Any) -> bool:
     text = str(item)
+    lowered = text.lower()
     return (
         "live mining template probes" in text
         or "pool recently saw RPC connection refused" in text
         or text.startswith("pool is waiting for node sync to finish")
+        or "reports node busy syncing" in lowered
+        or "selected pool backend is still catching up by" in lowered
+        or "is still catching up by" in lowered
     )
 
 
@@ -761,6 +778,164 @@ def effective_connected_miner_count(
     )
 
 
+def pool_metrics_accepted_block_submissions(pool_metrics: Mapping[str, Any]) -> float:
+    block_outcomes = pool_metrics.get("block_submit_outcomes") if isinstance(pool_metrics, Mapping) else {}
+    if not isinstance(block_outcomes, Mapping):
+        return 0.0
+    return sum(
+        _float_metric(value)
+        for key, value in block_outcomes.items()
+        if str(key).startswith("accepted:")
+    )
+
+
+def update_pool_paid_work_state(
+    metrics_accepted_block_submissions: float,
+    now_epoch: float | None = None,
+    metrics_available: bool = True,
+) -> dict[str, Any]:
+    now_value = time.time() if now_epoch is None else float(now_epoch)
+    accepted_total = max(0.0, float(metrics_accepted_block_submissions or 0.0))
+    previous = read_json_file(POOL_PAID_WORK_STATE_FILE, {})
+    if not isinstance(previous, Mapping):
+        previous = {}
+    previous_total = safe_float(previous.get("accepted_block_submissions"), None)
+    last_accepted_at = safe_float(previous.get("last_accepted_at_epoch"), None)
+    if not metrics_available:
+        accepted_total = max(accepted_total, previous_total or 0.0)
+    elif accepted_total > 0 and (
+        previous_total is None
+        or accepted_total > previous_total
+        or (previous_total > 0 and accepted_total < previous_total)
+    ):
+        last_accepted_at = now_value
+    elif accepted_total <= 0:
+        last_accepted_at = None
+
+    age_seconds = None if last_accepted_at is None else max(0.0, now_value - last_accepted_at)
+    recent = bool(age_seconds is not None and age_seconds <= POOL_PAID_WORK_RECENT_SECONDS)
+    delta = (
+        accepted_total
+        if previous_total is None
+        else max(0.0, accepted_total - max(0.0, previous_total))
+    )
+    payload = {
+        "generated_at": now_iso(),
+        "generated_epoch_seconds": now_value,
+        "accepted_block_submissions": _prometheus_json_number(accepted_total),
+        "accepted_block_submission_delta": _prometheus_json_number(delta),
+        "last_accepted_at_epoch": last_accepted_at,
+        "last_accepted_age_seconds": None if age_seconds is None else round(age_seconds, 3),
+        "accepted_block_recent": recent,
+        "recent_window_seconds": POOL_PAID_WORK_RECENT_SECONDS,
+        "metrics_available": bool(metrics_available),
+    }
+    try:
+        write_json_file(POOL_PAID_WORK_STATE_FILE, payload, mode=0o600)
+    except OSError:
+        pass
+    return payload
+
+
+def selected_backend_mining_safe(selected_source_health: Mapping[str, Any] | None) -> bool:
+    if not isinstance(selected_source_health, Mapping) or not selected_source_health:
+        return False
+    if selected_source_health.get("healthy") is False:
+        return False
+    if selected_source_health.get("node_template_coinbase_valid") is False:
+        return False
+    if selected_source_health.get("node_mineable") is not True:
+        return False
+    if selected_source_health.get("node_submit_ready") is not True:
+        return False
+    if selected_source_health.get("node_p2p_mining_fresh") is not True:
+        return False
+    if not selected_backend_peer_floor_safe(selected_source_health):
+        return False
+    if not selected_backend_peer_lead_safe(selected_source_health):
+        return False
+    return True
+
+
+def optional_bool(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value > 0
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "y", "ok"}:
+            return True
+        if normalized in {"0", "false", "no", "n", "bad"}:
+            return False
+    return None
+
+
+def selected_backend_peer_floor_safe(selected_source_health: Mapping[str, Any]) -> bool:
+    fresh_peers = safe_int(selected_source_health.get("node_p2p_fresh_consensus_peer_count"), -1)
+    if fresh_peers >= 0:
+        return fresh_peers >= CATCHUP_NATIVE_P2P_MIN_FRESH_CONSENSUS_PEERS
+    consensus_peers = safe_int(selected_source_health.get("node_p2p_consensus_peer_count"), -1)
+    if consensus_peers >= 0:
+        return consensus_peers >= CATCHUP_NATIVE_P2P_MIN_FRESH_CONSENSUS_PEERS
+    return False
+
+
+def selected_backend_peer_lead_safe(selected_source_health: Mapping[str, Any]) -> bool:
+    peer_lead = safe_float(selected_source_health.get("node_p2p_best_peer_lead_blocks"), None)
+    return bool(peer_lead is not None and peer_lead <= CATCHUP_NATIVE_P2P_MAX_PEER_LEAD_BLOCKS)
+
+
+def selected_backend_native_p2p_current_safe(selected_source_health: Mapping[str, Any] | None) -> bool:
+    if not isinstance(selected_source_health, Mapping) or not selected_source_health:
+        return False
+    if selected_source_health.get("healthy") is False:
+        return False
+    if selected_source_health.get("node_template_coinbase_valid") is False:
+        return False
+    if selected_source_health.get("node_p2p_mining_fresh") is not True:
+        return False
+    if not selected_backend_peer_floor_safe(selected_source_health):
+        return False
+    if not selected_backend_peer_lead_safe(selected_source_health):
+        return False
+    return True
+
+
+def selected_backend_recent_paid_work_safe(
+    selected_source_health: Mapping[str, Any] | None,
+    pool_metrics: Mapping[str, Any] | None,
+    source_job_health: Mapping[str, Any] | None,
+    has_recent_paid_work_evidence: bool,
+    connected_miners: int,
+) -> bool:
+    if not has_recent_paid_work_evidence:
+        return False
+    if not isinstance(selected_source_health, Mapping) or not selected_source_health:
+        return False
+    if selected_source_health.get("healthy") is False:
+        return False
+    if selected_source_health.get("node_template_coinbase_valid") is False:
+        return False
+    if selected_source_health.get("node_p2p_mining_fresh") is not True:
+        return False
+    if selected_source_health.get("node_last_template_build_error_blocking") is True:
+        return False
+    if not selected_backend_peer_floor_safe(selected_source_health):
+        return False
+    if not selected_backend_peer_lead_safe(selected_source_health):
+        return False
+    metrics = pool_metrics if isinstance(pool_metrics, Mapping) else {}
+    job_health = source_job_health if isinstance(source_job_health, Mapping) else {}
+    mining_connections = max(
+        safe_int(connected_miners, 0),
+        safe_int(metrics.get("active_connections"), 0),
+        safe_int(job_health.get("authorized_miners"), 0),
+        safe_int(job_health.get("ready_miners"), 0),
+    )
+    return mining_connections > 0
+
+
 def miner_failures_block_stack(
     miner_failures: list[str],
     connected_miners: int,
@@ -782,6 +957,7 @@ def miner_failures_block_stack(
 def selected_backend_unready_reasons(selected_source_health: Mapping[str, Any]) -> list[str]:
     reasons: list[str] = []
     for key, label in (
+        ("node_template_coinbase_valid", "template_coinbase_valid=false"),
         ("node_mineable", "mineable=false"),
         ("node_submit_ready", "submit_ready=false"),
         ("node_p2p_mining_fresh", "p2p_mining_fresh=false"),
@@ -1216,8 +1392,11 @@ def docker_compose_command(*args: str) -> list[str]:
     command.extend([
         "-f",
         str(PROJECT_ROOT / "docker-compose.yml"),
-        *args,
     ])
+    override = PROJECT_ROOT / "docker-compose.override.yml"
+    if override.exists():
+        command.extend(["-f", str(override)])
+    command.extend(args)
     return command
 
 
@@ -2511,13 +2690,17 @@ def get_miner_cgminer_devs(ip: str, timeout: float = MINER_HTTP_TIMEOUT) -> dict
 
 def discover_miner(ip: str, timeout: float = MINER_SCAN_TIMEOUT) -> dict[str, Any] | None:
     started = time.time()
+    pools: list[dict[str, Any]] = []
+    pool_api_error = ""
     try:
         pools = get_miner_pools(ip, timeout=timeout)
-    except MinerAPIError:
-        return None
+    except MinerAPIError as exc:
+        pool_api_error = str(exc)
 
     status = get_miner_status(ip, timeout=timeout)
     settings = get_miner_settings(ip, timeout=timeout)
+    if not pools and not status and not settings:
+        return None
     identity_payload = {**settings, **status}
     active_pool = next((pool for pool in pools if pool.get("active")), pools[0] if pools else {})
     mac = miner_mac_from_payload(identity_payload, ip)
@@ -2532,6 +2715,7 @@ def discover_miner(ip: str, timeout: float = MINER_SCAN_TIMEOUT) -> dict[str, An
         "mcbversion": status.get("mcbversion", ""),
         "pool_count": len(pools),
         "active": bool(active_pool.get("active")),
+        "pool_api_error": pool_api_error,
         "current_pool": active_pool,
         "pools": pools,
         "response_ms": round((time.time() - started) * 1000),
@@ -3585,6 +3769,103 @@ def _prometheus_counter_json(counter: Counter[str] | dict[str, Any]) -> dict[str
     return {str(key): _prometheus_json_number(_float_metric(value)) for key, value in sorted(rows)}
 
 
+def counter_total_matching(counter: Mapping[str, Any], predicate) -> float:
+    total = 0.0
+    for key, value in counter.items():
+        if predicate(str(key)):
+            total += _float_metric(value)
+    return total
+
+
+def zero_coinbase_reject_total(rejects: Mapping[str, Any]) -> float:
+    return counter_total_matching(rejects, lambda key: "zero-template-address" in key)
+
+
+def update_zero_coinbase_reject_rate(total: float, metrics_available: bool) -> dict[str, Any]:
+    now_value = seconds_since_epoch()
+    previous = read_json_file(TEMPLATE_SAFETY_STATE_FILE, {})
+    if not isinstance(previous, Mapping):
+        previous = {}
+    previous_total = safe_float(previous.get("zero_coinbase_reject_total"), None)
+    previous_epoch = safe_float(previous.get("generated_epoch_seconds"), None)
+    elapsed = max(0.0, now_value - previous_epoch) if previous_epoch is not None else None
+    delta = None
+    rate = None
+    if previous_total is not None and elapsed and elapsed > 0:
+        delta = max(0.0, total - previous_total) if total >= previous_total else total
+        rate = delta / elapsed
+
+    payload = {
+        "generated_at": now_iso(),
+        "generated_epoch_seconds": now_value,
+        "zero_coinbase_reject_total": _prometheus_json_number(total),
+        "zero_coinbase_reject_delta": _prometheus_json_number(delta) if delta is not None else None,
+        "zero_coinbase_reject_rate_per_second": round(rate, 6) if rate is not None else None,
+        "sample_elapsed_seconds": round(elapsed, 3) if elapsed is not None else None,
+    }
+    if metrics_available:
+        try:
+            write_json_file(TEMPLATE_SAFETY_STATE_FILE, payload, mode=0o600)
+        except OSError:
+            pass
+    return payload
+
+
+def local_stale_block_submit_stats(block_submit_outcomes: Mapping[str, Any]) -> dict[str, Any]:
+    accepted = counter_total_matching(block_submit_outcomes, lambda key: key.startswith("accepted:"))
+    local_stale = counter_total_matching(
+        block_submit_outcomes,
+        lambda key: (
+            key.startswith("rejected-local:stale-job")
+            or key.startswith("rejected-local:stale-parent")
+            or key.startswith("rejected-local:parent-not-current")
+            or key.startswith("rejected-local:parent_not_current")
+        ),
+    )
+    denominator = accepted + local_stale
+    return {
+        "accepted": _prometheus_json_number(accepted),
+        "local_stale": _prometheus_json_number(local_stale),
+        "local_stale_ratio": round(local_stale / denominator, 6) if denominator > 0 else None,
+    }
+
+
+def automation_restart_marker(latest_action: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(latest_action, dict):
+        return {"recent": False}
+    mode = str(latest_action.get("mode") or "")
+    name = str(latest_action.get("name") or "")
+    restart = mode in {"restart", "restart-node"} or name.startswith("restart-")
+    return {
+        "recent": restart,
+        "name": name,
+        "mode": mode,
+        "status": latest_action.get("status") or "",
+        "node": latest_action.get("node") or "",
+        "reason": latest_action.get("reason") or "",
+        "started_at": latest_action.get("started_at") or "",
+        "finished_at": latest_action.get("finished_at") or "",
+    }
+
+
+def template_coinbase_address_valid(address: str) -> bool | None:
+    normalized = str(address or "").strip().lower()
+    if not normalized:
+        return None
+    return bool(valid_eth_address(normalized) and normalized != ZERO_ETH_ADDRESS)
+
+
+def template_coinbase_valid_signal(value: Any, address: str = "", reason_code: str = "") -> bool | None:
+    parsed = optional_bool(value)
+    if parsed is not False:
+        return parsed
+    normalized_address = str(address or "").strip().lower()
+    normalized_reason = str(reason_code or "").strip().lower().replace("_", "-")
+    if normalized_address or normalized_reason == "zero-template-coinbase":
+        return False
+    return None
+
+
 def _ratio_percent(numerator: float, denominator: float) -> float | None:
     if denominator <= 0:
         return None
@@ -3732,6 +4013,7 @@ def selected_backend_readiness_contract(
     selected_source_health: dict[str, Any],
     source_job_health: dict[str, Any],
     pool_has_recent_paid_work: bool,
+    readiness_override_safe: bool,
 ) -> dict[str, Any]:
     source = selected_source_health if isinstance(selected_source_health, dict) else {}
     job_health = source_job_health if isinstance(source_job_health, dict) else {}
@@ -3750,18 +4032,22 @@ def selected_backend_readiness_contract(
     ) or checks.get("node_last_template_build_error_blocking_clear") is False
     job_unready = job_ok is False
     contradiction = bool(pool_has_recent_paid_work and (node_unready or job_unready))
-    hard_unready = bool((node_unready or job_unready) and not pool_has_recent_paid_work)
+    hard_unready = bool((node_unready or job_unready) and not readiness_override_safe)
     return {
         "version": 1,
         "selected_backend": selected_backend,
         "pool_has_recent_mining": pool_has_recent_paid_work,
         "pool_has_recent_paid_work": pool_has_recent_paid_work,
+        "readiness_override_safe": readiness_override_safe,
         "job_health_ok": job_ok,
         "checks": checks,
         "contradiction": contradiction,
         "hard_unready": hard_unready,
-        "advisory_degraded": bool(contradiction),
-        "truth_basis": "only recent accepted block submission may override readiness; accepted shares alone are not paid mining",
+        "advisory_degraded": bool((node_unready or job_unready) and readiness_override_safe),
+        "truth_basis": (
+            "recent accepted block submission may override mineable/submit readiness only when native "
+            "P2P freshness and peer-lead safety are intact; accepted shares alone are not paid mining"
+        ),
     }
 
 
@@ -3773,6 +4059,43 @@ def selected_backend_source_degradation(selected_source_degraded: bool, pool_has
         "hard": bool(degraded and not recent_paid),
         "advisory": bool(degraded and recent_paid),
     }
+
+
+def mark_sync_progress_mining_advisory(sync_progress: Mapping[str, Any], reason: str) -> dict[str, Any]:
+    payload = dict(sync_progress)
+    current = payload.get("current_block")
+    payload["status"] = "synced"
+    payload["percent"] = 100.0
+    payload["highest_block"] = current if current is not None else payload.get("highest_block")
+    payload["remaining_blocks"] = 0
+    payload["error"] = ""
+    payload["chain_syncing"] = False
+    payload["evm_chain_syncing"] = True
+    payload["mining_advisory_sync"] = True
+    payload["native_is_current"] = True
+    payload["evm_sync_advisory"] = reason
+    nodes = payload.get("nodes")
+    if isinstance(nodes, Mapping):
+        updated_nodes: dict[str, Any] = {}
+        for name, node_progress in nodes.items():
+            if isinstance(node_progress, Mapping):
+                node_payload = dict(node_progress)
+                node_current = node_payload.get("current_block")
+                node_payload["status"] = "synced"
+                node_payload["percent"] = 100.0
+                node_payload["highest_block"] = node_current if node_current is not None else node_payload.get("highest_block")
+                node_payload["remaining_blocks"] = 0
+                node_payload["error"] = ""
+                node_payload["chain_syncing"] = False
+                node_payload["evm_chain_syncing"] = True
+                node_payload["mining_advisory_sync"] = True
+                node_payload["native_is_current"] = True
+                node_payload["evm_sync_advisory"] = reason
+                updated_nodes[str(name)] = node_payload
+            else:
+                updated_nodes[str(name)] = node_progress
+        payload["nodes"] = updated_nodes
+    return payload
 
 
 def collect_pool_prometheus_metrics(containers: dict[str, dict[str, Any]]) -> dict[str, Any]:
@@ -3798,6 +4121,7 @@ def collect_pool_prometheus_metrics(containers: dict[str, dict[str, Any]]) -> di
         "source_backend_health": {},
         "selected_backend_source_health": {},
         "template_conversion_stall": {},
+        "template_coinbase_rejects": {},
     }
     if POOL_METRICS_PORT <= 0:
         payload["error"] = "pool metrics port disabled"
@@ -3814,6 +4138,7 @@ def collect_pool_prometheus_metrics(containers: dict[str, dict[str, Any]]) -> di
     share_processing_count = 0.0
     share_processing_sum = 0.0
     submit_recoveries: Counter[str] = Counter()
+    template_coinbase_rejects: Counter[str] = Counter()
     selected_backend = ""
     active_connections: float | None = None
     source_job_health: dict[str, Any] = {}
@@ -3875,7 +4200,7 @@ def collect_pool_prometheus_metrics(containers: dict[str, dict[str, Any]]) -> di
                 "pool_rpc_backend_template_age_seconds",
                 "pool_rpc_backend_ws_connected",
             }:
-                backend = labels.get("backend")
+                backend = labels.get("backend") or labels.get("node")
                 if not backend:
                     continue
                 row = source_backend_health.setdefault(backend, {})
@@ -3892,7 +4217,7 @@ def collect_pool_prometheus_metrics(containers: dict[str, dict[str, Any]]) -> di
                 elif metric_name == "pool_rpc_backend_ws_connected":
                     row["ws_connected"] = value > 0
             elif metric_name.startswith("pool_rpc_backend_node_health_"):
-                backend = labels.get("backend")
+                backend = labels.get("backend") or labels.get("node")
                 if not backend:
                     continue
                 row = source_backend_health.setdefault(backend, {})
@@ -3900,6 +4225,7 @@ def collect_pool_prometheus_metrics(containers: dict[str, dict[str, Any]]) -> di
                 if key in {
                     "mineable",
                     "submit_ready",
+                    "template_coinbase_valid",
                     "p2p_mining_fresh",
                     "p2p_sync_peer_fresh",
                     "p2p_sync_peer_present",
@@ -3941,6 +4267,8 @@ def collect_pool_prometheus_metrics(containers: dict[str, dict[str, Any]]) -> di
                 share_processing_sum += value
             elif metric_name == "pool_submit_stall_recoveries_total":
                 submit_recoveries[_metric_counter_key(labels, "action", "reason")] += value
+            elif metric_name == "pool_template_coinbase_rejects_total":
+                template_coinbase_rejects[_metric_counter_key(labels, "source", "reason")] += value
         payload["containers"][name] = row
         if source_backend_health and not template_backend_source:
             template_backend_source = endpoint
@@ -3962,6 +4290,7 @@ def collect_pool_prometheus_metrics(containers: dict[str, dict[str, Any]]) -> di
     }
     payload["submit_stall_recoveries"] = dict(submit_recoveries)
     payload["submit_stall_recoveries_total"] = float(sum(submit_recoveries.values()))
+    payload["template_coinbase_rejects"] = dict(template_coinbase_rejects)
     payload["source_job_health"] = source_job_health
     payload["source_backend_health"] = source_backend_health
     payload["template_conversion_stall"] = template_conversion_stall
@@ -3971,6 +4300,7 @@ def collect_pool_prometheus_metrics(containers: dict[str, dict[str, Any]]) -> di
             "backends": source_backend_health,
             "job_health": source_job_health,
             "template_conversion_stall": template_conversion_stall,
+            "template_coinbase_rejects": dict(template_coinbase_rejects),
             "selected_backend": selected_backend,
             "backend_count": len(source_backend_health),
             "healthy_backend_count": sum(1 for row in source_backend_health.values() if row.get("healthy") is True),
@@ -5169,9 +5499,12 @@ def max_catchup_lag_blocks(
     sync_progress: Mapping[str, Any],
     node_details: Mapping[str, Any],
     selected_source_health: Mapping[str, Any] | None = None,
+    *,
+    ignore_remaining_blocks: bool = False,
 ) -> int:
     values: list[int] = []
-    for key in ("remaining_blocks", "peer_ahead_blocks"):
+    lag_keys = ("peer_ahead_blocks",) if ignore_remaining_blocks else ("remaining_blocks", "peer_ahead_blocks")
+    for key in lag_keys:
         value = safe_int(sync_progress.get(key), -1)
         if value >= 0:
             values.append(value)
@@ -5179,14 +5512,14 @@ def max_catchup_lag_blocks(
     for info in progress_nodes.values():
         if not isinstance(info, dict):
             continue
-        for key in ("remaining_blocks", "peer_ahead_blocks"):
+        for key in lag_keys:
             value = safe_int(info.get(key), -1)
             if value >= 0:
                 values.append(value)
     for info in node_details.values():
         if not isinstance(info, dict):
             continue
-        for key in ("remaining_blocks", "peer_ahead_blocks"):
+        for key in lag_keys:
             value = safe_int(info.get(key), -1)
             if value >= 0:
                 values.append(value)
@@ -5222,14 +5555,22 @@ def build_catchup_policy(
     selected_source_health: Mapping[str, Any] | None = None,
     host_pressure: Mapping[str, Any] | None = None,
     mining_ready: bool | None = None,
+    ignore_remaining_blocks: bool = False,
 ) -> dict[str, Any]:
-    lag = max_catchup_lag_blocks(sync_progress, node_details, selected_source_health)
+    lag = max_catchup_lag_blocks(
+        sync_progress,
+        node_details,
+        selected_source_health,
+        ignore_remaining_blocks=ignore_remaining_blocks,
+    )
     status = str(sync_progress.get("status") or "").lower()
     peer_catchup = lag > 0
     io_pressure_reasons = catchup_io_pressure_reasons(host_pressure)
     backend_unready_reasons = selected_backend_unready_reasons(selected_source_health or {})
-    mining_ready_for_policy = bool(mining_ready) if mining_ready is not None else not bool(
-        backend_unready_reasons
+    mining_ready_for_policy = (
+        bool(mining_ready)
+        if mining_ready is not None
+        else bool(selected_source_health and not backend_unready_reasons)
     )
     backend_unready_under_pressure = bool(
         io_pressure_reasons
@@ -5242,7 +5583,11 @@ def build_catchup_policy(
         and not mining_ready_for_policy
         and ((peer_catchup and lag >= CATCHUP_IO_PRESSURE_MIN_LAG_BLOCKS) or backend_unready_under_pressure)
     )
-    lag_threshold_active = bool(lag > CATCHUP_PAUSE_THRESHOLD_BLOCKS and (status != "synced" or not mining_ready_for_policy))
+    lag_threshold_active = bool(
+        lag > CATCHUP_PAUSE_THRESHOLD_BLOCKS
+        and status != "synced"
+        and not mining_ready_for_policy
+    )
     active = bool(CATCHUP_PAUSE_ENABLED and (io_pressure_active or lag_threshold_active))
     pool_running = bool((containers.get(POOL_CONTAINER) or {}).get("running")) if isinstance(containers, Mapping) else False
     trigger = ("io_pressure" if io_pressure_active else ("lag_threshold" if lag_threshold_active else "")) if active else ""
@@ -5308,6 +5653,7 @@ def build_catchup_policy(
         "mining_ready": mining_ready_for_policy,
         "backend_unready_under_pressure": backend_unready_under_pressure,
         "backend_unready_reasons": backend_unready_reasons,
+        "remaining_blocks_advisory": ignore_remaining_blocks,
         "lag_threshold_active": lag_threshold_active,
         "pool_pause_recommended": active,
         "pool_pause_active": bool(active and not pool_running),
@@ -5673,28 +6019,7 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
     running_pool_containers = [name for name in POOL_CONTAINERS if containers.get(name, {}).get("running")]
     pool_log = docker_logs_many(running_pool_containers, lines=180) if include_logs and running_pool_containers else ""
     pool = parse_pool_log(pool_log)
-    pool_metrics = collect_pool_prometheus_metrics(containers) if include_logs else {
-        "generated_at": now_iso(),
-        "status": "skipped",
-        "error": "logs excluded from status collection",
-        "containers": {},
-        "active_connections": None,
-        "selected_backend": "",
-        "block_submit_outcomes": {},
-        "block_submit_backend_outcomes": {},
-        "blocks": {},
-        "blocks_rejected_by_node": {},
-        "shares_accepted_total": 0.0,
-        "shares_rejected_by_reason": {},
-        "share_processing": {},
-        "loss_ledger": {},
-        "submit_stall_recoveries": {},
-        "submit_stall_recoveries_total": 0.0,
-        "source_job_health": {},
-        "source_backend_health": {},
-        "selected_backend_source_health": {},
-        "template_conversion_stall": {},
-    }
+    pool_metrics = collect_pool_prometheus_metrics(containers)
     pool["metrics"] = pool_metrics
     pool["selected_backend"] = pool_metrics.get("selected_backend") or ""
     pool["metrics_active_connections"] = pool_metrics.get("active_connections")
@@ -5738,6 +6063,11 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
     pool["template_conversion_stall"] = (
         pool_metrics.get("template_conversion_stall")
         if isinstance(pool_metrics.get("template_conversion_stall"), dict)
+        else {}
+    )
+    pool["template_coinbase_rejects"] = (
+        pool_metrics.get("template_coinbase_rejects")
+        if isinstance(pool_metrics.get("template_coinbase_rejects"), dict)
         else {}
     )
     pool_loss_ledger = (
@@ -5847,9 +6177,11 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
         "planned_pause_leader": planned_pause_leader,
     }
     evm_reference_gap_watch = read_json_file(EVM_REFERENCE_GAP_WATCH_FILE, {})
+    evm_reference_gap_restore_required = False
     if isinstance(evm_reference_gap_watch, dict) and evm_reference_gap_watch:
         sync_health["evm_reference_gap_watch"] = evm_reference_gap_watch
         if evm_reference_gap_watch.get("restore_required"):
+            evm_reference_gap_restore_required = True
             sync_health["evm_reference_gap_stalled"] = True
             sync_health["needs_chain_data_restore"] = True
     chain_blocker_nodes = {
@@ -5901,24 +6233,111 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
             ("last_valid_share_age_seconds", 60),
         )
     )
-    pool_has_recent_paid_work = bool(
+    metrics_accepted_block_submissions = pool_metrics_accepted_block_submissions(pool_metrics)
+    metrics_accepted_shares = _float_metric(pool_metrics.get("shares_accepted_total"))
+    pool_submit_metrics_available = bool(
+        pool_metrics.get("status") == "ok"
+        and isinstance(pool_metrics.get("block_submit_outcomes"), Mapping)
+        and pool_metrics.get("block_submit_outcomes")
+    )
+    paid_work_state = update_pool_paid_work_state(
+        metrics_accepted_block_submissions,
+        metrics_available=pool_submit_metrics_available,
+    )
+    if connected_miners > 0 and metrics_accepted_shares > 0:
+        pool_has_recent_share_activity = True
+    log_recent_paid_work = bool(
         safe_int(pool.get("block_submit_success_count"), 0) > 0
         and pool.get("last_block_submit_age_seconds") is not None
-        and int(pool.get("last_block_submit_age_seconds") or 0) <= 60
+        and int(pool.get("last_block_submit_age_seconds") or 0) <= POOL_PAID_WORK_RECENT_SECONDS
     )
+    metrics_recent_paid_work = bool(
+        connected_miners > 0
+        and paid_work_state.get("accepted_block_recent") is True
+        and metrics_accepted_block_submissions > 0
+    )
+    raw_selected_source_mining_safe = selected_backend_mining_safe(selected_source_health)
+    recent_paid_backend_safe = selected_backend_recent_paid_work_safe(
+        selected_source_health,
+        pool_metrics,
+        source_job_health,
+        bool(log_recent_paid_work or metrics_recent_paid_work),
+        connected_miners,
+    )
+    pool_has_recent_paid_work = bool(
+        log_recent_paid_work
+        or metrics_recent_paid_work
+    )
+    sync_progress = sync_progress_for_display_nodes(collect_sync_progress(), display_nodes)
+    native_progress_paid_work_safe = bool(
+        connected_miners > 0
+        and pool_has_recent_paid_work
+        and sync_progress_native_template_health_synced(sync_progress)
+    )
+    native_p2p_current_safe = selected_backend_native_p2p_current_safe(selected_source_health)
+    native_chain_progress_safe = bool(
+        sync_progress_native_template_health_synced(sync_progress)
+        or native_p2p_current_safe
+    )
+    readiness_override_safe = bool(recent_paid_backend_safe or native_progress_paid_work_safe)
+    selected_source_mining_safe = bool(
+        raw_selected_source_mining_safe
+        or recent_paid_backend_safe
+        or native_progress_paid_work_safe
+    )
+    evm_reference_gap_advisory_safe = bool(
+        evm_reference_gap_restore_required
+        and pool_has_recent_paid_work
+        and selected_source_mining_safe
+        and not chain_blocker_nodes
+        and not chain_restore_nodes
+    )
+    if evm_reference_gap_advisory_safe:
+        sync_health.pop("evm_reference_gap_stalled", None)
+        if not sync_health.get("chain_state_blocker") and not sync_health.get("chain_data_restore_required"):
+            sync_health.pop("needs_chain_data_restore", None)
+        sync_health["evm_reference_gap_advisory"] = True
+        sync_health["evm_reference_gap_restore_suppressed_by_native_paid_work"] = True
+        if isinstance(evm_reference_gap_watch, dict):
+            sync_health["evm_reference_gap_watch"] = {
+                **evm_reference_gap_watch,
+                "restore_required": False,
+                "would_restore_required": True,
+                "restore_suppressed_by_native_paid_work": True,
+                "native_paid_work_advisory_reason": "selected backend is mining-safe and recent paid work is present",
+            }
+    if (selected_source_mining_safe or native_chain_progress_safe) and (
+        str(sync_progress.get("status") or "").lower() == "syncing"
+        or sync_progress.get("chain_syncing") is True
+        or sync_progress.get("evm_chain_syncing") is True
+    ):
+        sync_progress = mark_sync_progress_mining_advisory(
+            sync_progress,
+            (
+                "sync progress is advisory while native P2P freshness/current-chain proof is safe; "
+                "EVM/public-RPC lag alone must not pause mining"
+            ),
+        )
+        sync_health["mining_advisory_sync"] = True
     pool_initial_download_transient = bool(
         pool.get("initial_download")
-        and pool_has_recent_paid_work
+        and readiness_override_safe
         and not pool.get("share_stall")
     )
     source_job_health_ok_raw = source_job_health.get("ok") if isinstance(source_job_health, dict) else None
     source_job_health_ok = None if source_job_health_ok_raw is None else bool(source_job_health_ok_raw)
     selected_source_unready_reasons = selected_backend_unready_reasons(selected_source_health)
     selected_source_degraded = bool(selected_source_unready_reasons)
-    source_job_hard_degraded = bool(source_job_health_ok is False and not pool_has_recent_paid_work)
+    source_degradation_advisory_safe = bool(readiness_override_safe or native_chain_progress_safe)
+    source_degradation_advisory_basis = (
+        "accepted block submission remains fresh"
+        if readiness_override_safe
+        else "native P2P freshness/current-chain proof remains safe"
+    )
+    source_job_hard_degraded = bool(source_job_health_ok is False and not source_degradation_advisory_safe)
     selected_source_degradation = selected_backend_source_degradation(
         selected_source_degraded,
-        pool_has_recent_paid_work,
+        source_degradation_advisory_safe,
     )
     source_selected_backend_hard_degraded = bool(selected_source_degradation["hard"])
     source_selected_backend_advisory_degraded = bool(selected_source_degradation["advisory"])
@@ -5947,6 +6366,89 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
         if isinstance(selected_source_health, dict)
         else None
     )
+    source_ready_miners = safe_int(source_job_health.get("ready_miners"), -1)
+    source_ready_miners_known = "ready_miners" in source_job_health
+    native_template_health = (
+        sync_progress.get("native_template_health")
+        if isinstance(sync_progress.get("native_template_health"), dict)
+        else {}
+    )
+    template_coinbase_address = str(
+        selected_source_health.get("node_template_coinbase_address")
+        or native_template_health.get("template_coinbase_address")
+        or ""
+    )
+    template_coinbase_valid = template_coinbase_valid_signal(
+        selected_source_health.get("node_template_coinbase_valid"),
+        str(selected_source_health.get("node_template_coinbase_address") or ""),
+        str(selected_source_health.get("node_reason_code") or selected_source_health.get("node_get_block_template_reason_code") or ""),
+    )
+    if template_coinbase_valid is None:
+        template_coinbase_valid = template_coinbase_valid_signal(
+            native_template_health.get("template_coinbase_valid"),
+            template_coinbase_address,
+            str(native_template_health.get("reason_code") or native_template_health.get("get_block_template_reason_code") or ""),
+        )
+    if template_coinbase_valid is None:
+        template_coinbase_valid = template_coinbase_address_valid(template_coinbase_address)
+    template_coinbase_rejects = pool["template_coinbase_rejects"]
+    zero_coinbase_rejects = zero_coinbase_reject_total(template_coinbase_rejects)
+    zero_coinbase_rate = update_zero_coinbase_reject_rate(
+        zero_coinbase_rejects,
+        metrics_available=pool_metrics.get("status") == "ok",
+    )
+    local_stale_stats = local_stale_block_submit_stats(
+        pool_metrics.get("block_submit_outcomes")
+        if isinstance(pool_metrics.get("block_submit_outcomes"), Mapping)
+        else {}
+    )
+    template_safety = {
+        "template_coinbase_valid": template_coinbase_valid,
+        "template_coinbase_address": template_coinbase_address,
+        "zero_coinbase_reject_total": _prometheus_json_number(zero_coinbase_rejects),
+        "zero_coinbase_reject_rate_per_second": zero_coinbase_rate.get("zero_coinbase_reject_rate_per_second"),
+        "zero_coinbase_reject_delta": zero_coinbase_rate.get("zero_coinbase_reject_delta"),
+        "zero_coinbase_reject_sample_elapsed_seconds": zero_coinbase_rate.get("sample_elapsed_seconds"),
+        "ready_miner_job_count": source_ready_miners if source_ready_miners_known else None,
+        "local_stale_ratio": local_stale_stats.get("local_stale_ratio"),
+        "local_stale_block_submits": local_stale_stats.get("local_stale"),
+        "accepted_block_submits": local_stale_stats.get("accepted"),
+        "automation_restart": automation_restart_marker(latest_action),
+        "selected_backend": pool.get("selected_backend") or "",
+        "source": (
+            "selected-backend-node-health"
+            if selected_source_health.get("node_template_coinbase_valid") is not None
+            else ("native-template-health" if native_template_health else "pool-metrics")
+        ),
+    }
+    pool["template_safety"] = template_safety
+    sync_health["template_coinbase_valid"] = template_coinbase_valid
+    sync_health["zero_coinbase_reject_total"] = _prometheus_json_number(zero_coinbase_rejects)
+    sync_health["ready_miner_job_count"] = template_safety["ready_miner_job_count"]
+    sync_health["local_stale_ratio"] = template_safety["local_stale_ratio"]
+    if template_coinbase_valid is False:
+        selected_source_mining_safe = False
+        recent_paid_backend_safe = False
+        native_progress_paid_work_safe = False
+        readiness_override_safe = False
+        sync_health["selected_backend_recent_paid_work_safe"] = False
+        sync_health["native_progress_paid_work_safe"] = False
+        sync_health["readiness_override_safe"] = False
+        sync_health["selected_backend_mining_safe"] = False
+        add_sync_warning("selected mining template coinbase is invalid or zero")
+    source_job_no_ready_miners = bool(
+        connected_miners > 0
+        and not pool_has_recent_paid_work
+        and source_ready_miners_known
+        and source_ready_miners <= 0
+    )
+    source_job_readiness_unknown = bool(
+        connected_miners > 0
+        and not pool_has_recent_paid_work
+        and not source_ready_miners_known
+    )
+    pool["source_job_no_ready_miners"] = source_job_no_ready_miners
+    pool["source_job_readiness_unknown"] = source_job_readiness_unknown
     pool_initial_download_needs_repair = bool(pool.get("initial_download") and not pool_initial_download_transient)
     pool["initial_download_transient"] = pool_initial_download_transient
     pool["initial_download_needs_repair"] = pool_initial_download_needs_repair
@@ -5954,7 +6456,25 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
     sync_health["pool_has_recent_share_activity"] = pool_has_recent_share_activity
     sync_health["pool_has_recent_paid_work"] = pool_has_recent_paid_work
     sync_health["pool_has_recent_mining"] = pool_has_recent_paid_work
-    if connected_miners > 0 and pool_has_recent_paid_work and sync_warnings:
+    sync_health["pool_metrics_accepted_block_submissions"] = _prometheus_json_number(metrics_accepted_block_submissions)
+    sync_health["pool_paid_work_state"] = paid_work_state
+    sync_health["selected_backend_raw_mining_safe"] = raw_selected_source_mining_safe
+    sync_health["selected_backend_native_p2p_current_safe"] = native_p2p_current_safe
+    sync_health["native_chain_progress_safe"] = native_chain_progress_safe
+    sync_health["selected_backend_recent_paid_work_safe"] = recent_paid_backend_safe
+    sync_health["native_progress_paid_work_safe"] = native_progress_paid_work_safe
+    sync_health["readiness_override_safe"] = readiness_override_safe
+    sync_health["source_degradation_advisory_safe"] = source_degradation_advisory_safe
+    sync_health["source_degradation_advisory_basis"] = source_degradation_advisory_basis
+    sync_health["selected_backend_mining_safe"] = selected_source_mining_safe
+    advisory_sync_warning_basis = ""
+    if readiness_override_safe:
+        advisory_sync_warning_basis = "accepted block submission remains fresh"
+    elif raw_selected_source_mining_safe and source_job_health_ok is not False:
+        advisory_sync_warning_basis = "selected backend is mineable, submit-ready, and native P2P fresh"
+    elif native_chain_progress_safe and not selected_source_unready_reasons and source_job_health_ok is not False:
+        advisory_sync_warning_basis = source_degradation_advisory_basis
+    if connected_miners > 0 and advisory_sync_warning_basis and sync_warnings:
         advisory_sync_warnings = [
             item for item in sync_warnings
             if is_recent_mining_sync_noise(item)
@@ -5969,12 +6489,13 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
                 if not is_recent_mining_sync_noise(item)
             ]
             for item in advisory_sync_warnings:
-                add_maintenance_warning(f"{item}; accepted block submission remains fresh")
+                add_maintenance_warning(f"{item}; {advisory_sync_warning_basis}")
     readiness_contract = selected_backend_readiness_contract(
         str(pool.get("selected_backend") or ""),
         selected_source_health,
         source_job_health,
         pool_has_recent_paid_work,
+        readiness_override_safe,
     )
     pool["selected_backend_readiness_contract"] = readiness_contract
     if pool_initial_download_needs_repair:
@@ -5998,7 +6519,7 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
     if connected_miners > 0 and source_job_hard_degraded:
         add_sync_warning("pool source job health reports not-ok and accepted block submission is stale")
     elif connected_miners > 0 and source_job_health_ok is False:
-        add_maintenance_warning("pool source job health is advisory-degraded while accepted block submission remains fresh")
+        add_maintenance_warning(f"pool source job health is advisory-degraded while {source_degradation_advisory_basis}")
     if connected_miners > 0 and source_selected_backend_hard_degraded:
         backend = pool.get("selected_backend") or "selected backend"
         add_sync_warning(
@@ -6008,12 +6529,18 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
     elif connected_miners > 0 and source_selected_backend_advisory_degraded:
         backend = pool.get("selected_backend") or "selected backend"
         add_maintenance_warning(
-            f"pool source health says {backend} is degraded, but accepted block submission remains fresh "
+            f"pool source health says {backend} is degraded, but {source_degradation_advisory_basis} "
             f"({', '.join(selected_source_unready_reasons)})"
         )
     elif connected_miners > 0 and source_health_transient_degraded:
         backend = pool.get("selected_backend") or "selected backend"
-        add_maintenance_warning(f"pool source health says {backend} is degraded, but accepted block submission remains fresh")
+        add_maintenance_warning(f"pool source health says {backend} is degraded, but {source_degradation_advisory_basis}")
+    if source_job_no_ready_miners:
+        add_sync_warning(
+            f"pool source job health reports zero ready miners while {connected_miners} miner(s) are connected"
+        )
+    elif source_job_readiness_unknown:
+        add_sync_warning("pool source job readiness is unknown while miners are connected")
     if connected_miners > 0 and pool.get("share_stall"):
         age = pool.get("last_valid_share_age_seconds")
         age_text = f"{age}s" if age is not None else "unknown"
@@ -6164,7 +6691,6 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
         ["docker", "images", "--format", "{{.Repository}}:{{.Tag}} {{.Size}}"],
         timeout=docker_images_timeout,
     ).stdout.strip()
-    sync_progress = sync_progress_for_display_nodes(collect_sync_progress(), display_nodes)
     adaptive_concurrency = adaptive_worker_budgets(
         {**host_pressure, "chain_rpc_latency_ms": _sync_chain_rpc_latency_ms(sync_progress)}
     )
@@ -6220,10 +6746,26 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
         sync_health["node_importing"] = bool(active_import_nodes)
         if active_import_nodes:
             sync_health["node_importing_nodes"] = active_import_nodes
+    catchup_ignore_remaining_blocks = bool(pool_has_recent_paid_work or native_chain_progress_safe)
     catchup_mining_ready = bool(
-        sync_progress.get("status") == "synced"
-        and not selected_source_unready_reasons
-        and source_job_health_ok is not False
+        (
+            sync_progress.get("status") == "synced"
+            or selected_source_mining_safe
+            or pool_has_recent_paid_work
+            or native_chain_progress_safe
+        )
+        and (
+            pool_has_recent_paid_work
+            or not selected_source_unready_reasons
+            or readiness_override_safe
+            or native_chain_progress_safe
+        )
+        and (
+            pool_has_recent_paid_work
+            or source_job_health_ok is not False
+            or readiness_override_safe
+            or native_chain_progress_safe
+        )
         and not pool.get("initial_download")
     )
     catchup_policy = build_catchup_policy(
@@ -6233,6 +6775,7 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
         selected_source_health,
         host_pressure,
         mining_ready=catchup_mining_ready,
+        ignore_remaining_blocks=catchup_ignore_remaining_blocks,
     )
     if catchup_policy.get("active"):
         pool_down_message = f"{POOL_CONTAINER} is not running"
@@ -6370,6 +6913,7 @@ def collect_status(include_logs: bool = True) -> dict[str, Any]:
         "sync_coordinator": sync_coordinator,
         "catchup_policy": catchup_policy,
         "rpc_template_health": template_probe_health,
+        "template_safety": template_safety,
         "pool": pool,
         "pool_metrics": pool_metrics,
         "pool_health": pool_health,
@@ -7470,10 +8014,13 @@ def node_template_health_snapshot(url: str, timeout: float) -> dict[str, Any]:
 def native_template_health_is_mining_safe(health: dict[str, Any]) -> bool:
     if not health.get("available"):
         return False
+    if health.get("template_coinbase_valid") is False:
+        return False
     if health.get("last_template_build_error_blocking") is True:
         return False
     required_true = (
         "submit_ready",
+        "template_usable",
         "get_block_template_ready",
         "p2p_mining_fresh",
         "sync_allowed",
@@ -7597,7 +8144,10 @@ def native_template_health_synced_progress(
     evm_lag: dict[str, Any],
 ) -> dict[str, Any]:
     peer_count = safe_int(health.get("p2p_fresh_consensus_peer_count"), 0)
-    return {
+    evm_chain_syncing = bool(evm_lag.get("chain_syncing"))
+    payload = {
+        **chain,
+        **evm_lag,
         "status": "synced",
         "percent": 100.0,
         "current_block": current_block,
@@ -7611,14 +8161,37 @@ def native_template_health_synced_progress(
         "p2p_connections": peer_count,
         "native_template_health": compact_template_health_for_status(health),
         "evm_reference_lag_diagnostic_blocks": evm_lag.get("evm_lag_to_reference"),
-        **chain,
-        **evm_lag,
+        "native_is_current": True,
+        "chain_syncing": False,
+        "evm_chain_syncing": evm_chain_syncing,
+        "mining_advisory_sync": evm_chain_syncing,
     }
+    if evm_chain_syncing:
+        payload.setdefault(
+            "evm_sync_advisory",
+            "eth_syncing active while native P2P mining state is current",
+        )
+    return payload
 
 
 def sync_progress_native_template_health_synced(progress: dict[str, Any]) -> bool:
     health = progress.get("native_template_health")
-    return isinstance(health, dict) and native_template_health_is_chain_synced(health)
+    if isinstance(health, dict) and native_template_health_is_chain_synced(health):
+        return True
+    if progress.get("native_is_current") is not True:
+        return False
+    if str(progress.get("status") or "").lower() not in {"synced", "ok"}:
+        return False
+    if safe_int(progress.get("remaining_blocks"), 0) > NATIVE_SYNC_LEAD_THRESHOLD:
+        return False
+    for key in ("p2p_network_gap", "peer_mainorder_gap"):
+        if safe_int(progress.get(key), 0) > NATIVE_SYNC_LEAD_THRESHOLD:
+            return False
+    if progress.get("chain_syncing") is True and not (
+        progress.get("evm_chain_syncing") is True or progress.get("mining_advisory_sync") is True
+    ):
+        return False
+    return True
 
 
 def compact_template_health_for_status(health: dict[str, Any]) -> dict[str, Any]:
@@ -7626,8 +8199,11 @@ def compact_template_health_for_status(health: dict[str, Any]) -> dict[str, Any]
         "available",
         "mineable_now",
         "submit_ready",
+        "template_usable",
         "get_block_template_ready",
         "get_block_template_reason_code",
+        "template_coinbase_address",
+        "template_coinbase_valid",
         "p2p_current",
         "p2p_mining_fresh",
         "p2p_mining_fresh_reason_code",
@@ -7666,6 +8242,10 @@ def node_sync_progress(source: str, url: str, timeout: float = NODE_CHAIN_RPC_TI
         if evm_lag.get("chain_syncing") is True:
             sync_current = safe_int(evm_lag.get("sync_current_block"), sync_current)
             sync_highest = safe_int(evm_lag.get("sync_highest_block"), sync_highest)
+        if native_template_health_is_mining_safe(template_health) and not (
+            evm_lag.get("public_chain_diverged") or evm_lag.get("solo_mining_suspected")
+        ):
+            return native_template_health_synced_progress(source, template_health, current, chain, evm_lag)
         if chain.get("chain_syncing") is True or evm_lag.get("chain_syncing") is True:
             evm_block = safe_int(evm_lag.get("evm_block_count"), None)
             progress_current = sync_current if sync_current is not None else evm_block if evm_block is not None else current
@@ -7694,8 +8274,6 @@ def node_sync_progress(source: str, url: str, timeout: float = NODE_CHAIN_RPC_TI
                 **chain,
                 **evm_lag,
             }
-        if native_template_health_is_mining_safe(template_health):
-            return native_template_health_synced_progress(source, template_health, current, chain, evm_lag)
         native_template_sync = native_template_health_sync_progress(source, template_health, current)
         if native_template_sync:
             native_template_sync.update(chain)
@@ -7785,7 +8363,7 @@ def collect_sync_progress() -> dict[str, Any]:
         starting_values = []
         error = "; ".join(item.get("error", "") for item in per_node.values() if item.get("error"))
 
-    return {
+    aggregate = {
         "status": status,
         "percent": percent,
         "current_block": min(current_values) if current_values else None,
@@ -7815,6 +8393,25 @@ def collect_sync_progress() -> dict[str, Any]:
         "error": error,
         "nodes": per_node,
     }
+    if known:
+        if all(sync_progress_native_template_health_synced(item) for item in known):
+            aggregate["native_is_current"] = True
+        evm_chain_syncing = any(
+            item.get("evm_chain_syncing") is True
+            or (item.get("chain_syncing") is True and item.get("mining_advisory_sync") is True)
+            for item in known
+        )
+        if evm_chain_syncing:
+            aggregate["evm_chain_syncing"] = True
+            if status == "synced" and aggregate.get("native_is_current") is True:
+                aggregate["chain_syncing"] = False
+                aggregate["mining_advisory_sync"] = True
+                aggregate["evm_sync_advisory"] = "eth_syncing active while native P2P mining state is current"
+        elif status == "synced":
+            aggregate["chain_syncing"] = False
+        elif status == "syncing":
+            aggregate["chain_syncing"] = True
+    return aggregate
 
 
 def sync_progress_for_display_nodes(sync_progress: dict[str, Any], display_nodes: list[str]) -> dict[str, Any]:

@@ -1,0 +1,5952 @@
+{
+  "savepoint_id": "20260622-065500-pre-control-suite-dashboard-deploy-recovered-retained",
+  "created_at": "2026-06-22T06:55:04+02:00",
+  "retained": true,
+  "purpose": "Recovered live dashboard-only predeploy savepoint before installing redis-dash ASIC/pool/chain control suite.",
+  "repos": {
+    "stack_redis_head": "577d99c",
+    "redis_dash_head": "0f983bc"
+  },
+  "images": {
+    "current_dashboard_image": "sha256:21e9bf98ae9a60e44c379cde8b29a2ddf40fc061dc987aebd3d6db741a18529b",
+    "candidate_dashboard_image": "sha256:272a4534b1e9372488805e7ec8ad79db44effaf285062b89c773aa120488d8a3",
+    "dashboard_rollback_tag": "stack-dashboard:pre-control-suite-deploy-recovered-20260622-065500",
+    "pool_image": "sha256:c102be94afedbf98a51ce9362809198725b290979682e902096f0619a7e74c50",
+    "node_image": "sha256:c1b1c24457dc052f0d4352e16cbfbf99144633d5bc3f5f7cf17fb57475933845"
+  },
+  "live_node": {
+    "scope": "do not change for dashboard-only deploy",
+    "command": "/usr/local/bin/blockdag-node --configfile=/run/bdag-ephemeral/node.conf --addpeer=/ip4/16.28.133.168/tcp/8150/p2p/16Uiu2HAm9UcTayJDSajjJYsWwVaN2qqGeczcs9kXse3dMdvGDRjz --addpeer=/ip4/13.140.165.186/tcp/8150/p2p/16Uiu2HAm4hHD7Ht5LJrLgaKXr7YP2RzHHjrrCLNt8zv8FQ9s3gBU --addpeer=/ip4/13.57.132.47/tcp/8150/p2p/16Uiu2HAmDynYpWjWmgVGf9qVWvDdLnJ3ybVgDmFexizR4zMereus --addpeer=/ip4/18.142.70.83/tcp/8150/p2p/16Uiu2HAmBSdn2taoteYwLZJZkDm2iCwL6eQ4UaXYNBBtAwaBU18X --addpeer=/ip4/199.229.220.118/tcp/8151/p2p/16Uiu2HAmUtspBkyUNBG8pQLgj9DrKVgL6SKQzGBhVT9ZShNM1ops --addpeer=/ip4/204.236.141.121/tcp/8150/p2p/16Uiu2HAm5qppgbBCjVpTN5nKtjEU5KsSbs2gz4S9uPiSWVSGfNh1 --addpeer=/ip4/3.126.64.13/tcp/8152/p2p/16Uiu2HAmEFxRaBbbf3sRi43CCvMk5Y6zPkuGY9s4uRK2FKJVJkqo --addpeer=/ip4/52.8.54.60/tcp/8150/p2p/16Uiu2HAkzUWr4YUM7mAhLdCVZgFoV9He6aQzKTyWWrJ7SWQKRTN7 --addpeer=/ip4/54.151.18.92/tcp/8150/p2p/16Uiu2HAmVm91o1JXS2C7P6uTVuVX5empgnRtzuK4UaC8fHmePbKP --addpeer=/ip4/63.182.36.180/tcp/8150/p2p/16Uiu2HAmP8HsTF9ks8JjFamzT9JBZb3ymSiCJ8rkzXBZqYj4yKtP --addpeer=/ip4/169.0.254.182/tcp/8150/p2p/16Uiu2HAmGsEDGnDGhvziZR1UQSELTDihXRKYMB6SrbEQ6NsWBVqD --addpeer=/ip4/102.39.221.179/tcp/8152/p2p/16Uiu2HAm8ebvL9NTNwgLYwm8LEEXSY7QKQhQ7YVcAV7PR6ymsrTm --addpeer=/ip4/80.141.136.179/tcp/8151/p2p/16Uiu2HAmMZNeDNLgfLXFKzEiWZHFjdDejLSCzhunJMYWoYhdT3gv --addpeer=/ip4/102.39.221.179/tcp/8150/p2p/16Uiu2HAmNQznwWPjuAUhXnTkP6EuWsEHa4eRnb1aTm3WcZQKsrFn --addpeer=/ip4/47.156.6.142/tcp/8151/p2p/16Uiu2HAmJz7PTCxSWTnuJhvbf4oXEffFZ1KAE3yNBX9SY72jS1ta --addpeer=/ip4/218.32.84.82/tcp/8150/p2p/16Uiu2HAmNjFKhP3945Az3afdBSUSRwhgDw1uGRBDsqSvSduStbWJ --addpeer=/ip4/5.78.193.245/tcp/8150/p2p/16Uiu2HAkwosZsQdtgAQHoJ57MFKpWnyfGJtSpt2R2aJMgR6ywGME --addpeer=/ip4/3.218.54.171/tcp/8150/p2p/16Uiu2HAmUZBdpuutiLPuru1UQnX8hf6GyvG7yU2B832sYjvNhmQG --addpeer=/ip4/102.182.77.21/tcp/8151/p2p/16Uiu2HAm2uPLqM1dfd3ddbzg3FDAmvuvyo3vbBSXpVHurqAsUxWQ --addpeer=/ip4/121.91.173.235/tcp/8150/p2p/16Uiu2HAkvH1U2kQqQFh6fSVQPGgABaKNHRMT7DceGe6kRtYr6ndY --addpeer=/ip4/102.182.77.16/tcp/8152/p2p/16Uiu2HAm99a8KYuUkL5LGEQbpRNhz5nzScrwYpEh47BfSaVMCg5G --addpeer=/ip4/54.214.229.250/tcp/8154/p2p/16Uiu2HAm1vZgJXKhUfWWC7nz9wzNpUDiYAid7zCZSKb1hhU7QBNB --addpeer=/ip4/54.201.253.248/tcp/8150/p2p/16Uiu2HAm5bpb5ssgN47BT4ChQjmbpGA2zAPJskWGMPknrFwaEtE9 --modules=Blockdag --modules=miner --miner --miningaddr=0x1719E0ee598c15957448D5E568948101DF78e7A0 --obsoleteheight=20 --debuglevel=debug --nofilelogging ",
+    "safety": "Blockdag and miner modules only with explicit mining address"
+  },
+  "live_gates": {
+    "node_template_health": {
+      "checked_at_unix_ms": 1782104104190,
+      "enabled": true,
+      "started": true,
+      "shutdown": false,
+      "reason_code": "node_syncing",
+      "reason": "node is still syncing with peers",
+      "mineable_now": false,
+      "submit_ready": false,
+      "get_block_template_ready": false,
+      "get_block_template_reason_code": "node_syncing",
+      "get_block_template_reason": "node is still syncing with peers",
+      "worker_ready": true,
+      "worker_type": "GBT_Worker",
+      "worker_running": true,
+      "template_available": true,
+      "template_usable": false,
+      "template_age_ms": 7668,
+      "template_max_age_ms": 60000,
+      "template_timestamp_unix": 1782104095,
+      "latest_template_seq": 23553,
+      "template_height": 9367065,
+      "template_parent_root": "0x6e2ea01020082b5b4b5549b59b942961166b2986195b44491273d002066a2be3",
+      "template_tx_count": 0,
+      "template_coinbase_address": "0x1719E0ee598c15957448D5E568948101DF78e7A0",
+      "template_coinbase_valid": true,
+      "last_good_template_available": true,
+      "last_good_template_age_ms": 7668,
+      "last_template_build_at_unix_ms": 1782104096509,
+      "last_template_build_age_ms": 7680,
+      "last_template_build_duration_ms": 12,
+      "last_template_build_reason": "parent_changed",
+      "last_template_build_error_blocking": false,
+      "last_template_invalidation_at_unix_ms": 1782104096509,
+      "last_template_invalidation_seq": 28572,
+      "last_template_invalidation_cause": "parent_changed",
+      "last_template_invalidation_reason": "parent_changed",
+      "pending_template_build": false,
+      "p2p_current": true,
+      "p2p_nearly_synced": false,
+      "p2p_freshness_max_age_ms": 3000,
+      "p2p_peer_lead_tolerance_blocks": 10,
+      "p2p_consensus_peer_count": 23,
+      "p2p_fresh_consensus_peer_count": 1,
+      "p2p_stale_consensus_peer_count": 22,
+      "p2p_best_peer_main_order": 12233845,
+      "p2p_best_peer_lead_blocks": 0,
+      "p2p_best_peer_graph_state_age_ms": 512,
+      "p2p_avg_graph_state_age_ms": 3898354,
+      "p2p_max_graph_state_age_ms": 23198529,
+      "p2p_sync_peer_present": false,
+      "p2p_sync_peer_fresh": false,
+      "p2p_sync_peer_graph_state_age_ms": 0,
+      "p2p_mining_fresh": false,
+      "p2p_mining_fresh_reason_code": "not_enough_fresh_consensus_peers",
+      "sync_allowed": false,
+      "sync_reason_code": "node_syncing",
+      "sync_reason": "node is still syncing with peers",
+      "chain_current": true,
+      "main_order": 12233845,
+      "self_add": 0,
+      "submit_no_synced": false,
+      "nearly_sync_mining": false
+    },
+    "pool_job_state": {
+      "generated_at_unix_ms": 1782104104198,
+      "status": "degraded",
+      "reason_code": "invalidated_current_job",
+      "active_connections": 4,
+      "authorized_connections": 4,
+      "subscribed_connections": 4,
+      "ready_connections": 0,
+      "connections_without_current_job": 0,
+      "stale_current_job_connections": 0,
+      "invalid_current_job_connections": 4,
+      "expired_current_job_connections": 0,
+      "current_template_seq": 28731,
+      "current_parent": "18bb811a57c5258769258ec364b2e5cd8e372e2bd128e99fd4320d417f62f962",
+      "last_broadcast_age_ms": 21475,
+      "max_current_job_age_ms": 21475,
+      "accepted_jobs": {
+        "total": 1626,
+        "stale": 518,
+        "invalidated": 1626,
+        "submitted": 128,
+        "expired": 1370
+      },
+      "expired_job": {
+        "enabled": true,
+        "window_ms": 10000,
+        "window_age_ms": 9051,
+        "window_rejects": 7,
+        "window_clients": 3,
+        "client_resend_threshold": 3,
+        "client_reconnect_threshold": 3,
+        "client_reconnect_window_ms": 120000,
+        "client_reconnect_cooldown_ms": 60000,
+        "global_clean_refresh_threshold": 100,
+        "global_clean_refresh_min_clients": 2,
+        "cooldown_ms": 15000,
+        "cooldown_active": false
+      },
+      "submit_stall": {
+        "enabled": true,
+        "window_ms": 60000,
+        "window_age_ms": 29936,
+        "min_age_ms": 30000,
+        "failures": 3,
+        "stale_failures": 0,
+        "duplicate_failures": 0,
+        "failure_threshold": 8,
+        "stale_threshold": 3,
+        "duplicate_threshold": 6,
+        "cooldown_ms": 20000,
+        "last_recovery_age_ms": 4701267,
+        "cooldown_active": false,
+        "reason_code": "ok"
+      },
+      "template_conversion_stall": {
+        "enabled": true,
+        "window_ms": 120000,
+        "window_age_ms": 3818,
+        "min_age_ms": 30000,
+        "accepted": 0,
+        "failures": 1,
+        "stale_failures": 0,
+        "duplicate_failures": 0,
+        "total_candidates": 1,
+        "failure_ratio": 100,
+        "failure_ratio_threshold": 85,
+        "min_candidates": 40,
+        "active_miners": 4,
+        "min_active_miners": 1,
+        "cooldown_ms": 30000,
+        "last_recovery_age_ms": 712521,
+        "cooldown_active": false,
+        "last_reason": "stale-job",
+        "reason_code": "warming_up"
+      },
+      "clients": [
+        {
+          "address": "192.168.1.101:39615",
+          "remote_host": "192.168.1.101",
+          "asic_mac": "28:e2:97:1e:c0:b5",
+          "lane_id": "mac:28:e2:97:1e:c0:b5",
+          "lane_identity_source": "mac",
+          "authorized": true,
+          "subscribed": true,
+          "extranonce_subscribed": false,
+          "ready": false,
+          "reason_code": "invalidated_current_job",
+          "current_job_id": "28731-18bb4e38a373cc5c_39000000",
+          "current_job_age_ms": 21475,
+          "template_seq": 28731,
+          "backend": "node",
+          "parent": "18bb811a57c5258769258ec364b2e5cd8e372e2bd128e99fd4320d417f62f962",
+          "pdiff": 0.13635887461147622,
+          "expired_rejects": 7,
+          "expired_window_rejects": 0,
+          "low_diff_rejects": 0
+        },
+        {
+          "address": "192.168.1.14:40488",
+          "remote_host": "192.168.1.14",
+          "asic_mac": "28:e2:97:3e:39:63",
+          "lane_id": "mac:28:e2:97:3e:39:63",
+          "lane_identity_source": "mac",
+          "authorized": true,
+          "subscribed": true,
+          "extranonce_subscribed": false,
+          "ready": false,
+          "reason_code": "invalidated_current_job",
+          "current_job_id": "28731-18bb4e38a373cc5c_3c000000",
+          "current_job_age_ms": 21475,
+          "template_seq": 28731,
+          "backend": "node",
+          "parent": "18bb811a57c5258769258ec364b2e5cd8e372e2bd128e99fd4320d417f62f962",
+          "pdiff": 0.14559958533516773,
+          "expired_rejects": 3,
+          "expired_window_rejects": 3,
+          "low_diff_rejects": 0
+        },
+        {
+          "address": "192.168.1.105:51994",
+          "remote_host": "192.168.1.105",
+          "asic_mac": "28:e2:97:4d:44:3a",
+          "lane_id": "mac:28:e2:97:4d:44:3a",
+          "lane_identity_source": "mac",
+          "authorized": true,
+          "subscribed": true,
+          "extranonce_subscribed": false,
+          "ready": false,
+          "reason_code": "invalidated_current_job",
+          "current_job_id": "28731-18bb4e38a373cc5c_3b000000",
+          "current_job_age_ms": 21475,
+          "template_seq": 28731,
+          "backend": "node",
+          "parent": "18bb811a57c5258769258ec364b2e5cd8e372e2bd128e99fd4320d417f62f962",
+          "pdiff": 0.11409061883263331,
+          "expired_rejects": 4,
+          "expired_window_rejects": 2,
+          "low_diff_rejects": 0
+        },
+        {
+          "address": "192.168.1.102:48385",
+          "remote_host": "192.168.1.102",
+          "asic_mac": "2a:71:c7:f5:1f:1e",
+          "lane_id": "mac:2a:71:c7:f5:1f:1e",
+          "lane_identity_source": "mac",
+          "authorized": true,
+          "subscribed": true,
+          "extranonce_subscribed": false,
+          "ready": false,
+          "reason_code": "invalidated_current_job",
+          "current_job_id": "28731-18bb4e38a373cc5c_32000000",
+          "current_job_age_ms": 21475,
+          "template_seq": 28731,
+          "backend": "node",
+          "parent": "18bb811a57c5258769258ec364b2e5cd8e372e2bd128e99fd4320d417f62f962",
+          "pdiff": 0.14232223787390932,
+          "expired_rejects": 4,
+          "expired_window_rejects": 2,
+          "low_diff_rejects": 0
+        }
+      ],
+      "router": {
+        "enabled": true,
+        "node_name": "node",
+        "node": {
+          "name": "node",
+          "selected": true,
+          "healthy": false,
+          "reason": "submit-readiness-template-refresh-node-syncing",
+          "score": 0,
+          "last_template_age_ms": 7676,
+          "last_template_height": 9367065,
+          "last_template_seq": 23553,
+          "ws_connected": true,
+          "recent_submit_errors": 2,
+          "last_submit_age_ms": 21073,
+          "last_submit_error": "structured submit rejected: code=node_syncing message=Client in initial download  : Blockdag is downloading blocks: node is still syncing with peers"
+        }
+      }
+    },
+    "dashboard_status": {
+      "asic_performance": {
+        "age_seconds": 1,
+        "bucket_seconds": 600,
+        "generated_at_unix_ms": 1782104103975,
+        "lanes": [
+          {
+            "asic_mac": "28:e2:97:1e:c0:b5",
+            "blocks_1h": 323,
+            "blocks_24h": 2437,
+            "blocks_30m": 113,
+            "blocks_6h": 2437,
+            "buckets": [
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782017400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782018000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782018600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782019200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782019800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782020400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782021000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782021600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782022200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782022800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782023400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782024000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782024600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782025200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782025800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782026400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782027000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782027600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782028200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782028800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782029400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782030000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782030600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782031200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782031800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782032400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782033000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782033600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782034200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782034800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782035400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782036000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782036600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782037200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782037800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782038400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782039000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782039600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782040200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782040800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782041400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782042000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782042600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782043200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782043800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782044400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782045000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782045600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782046200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782046800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782047400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782048000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782048600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782049200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782049800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782050400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782051000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782051600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782052200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782052800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782053400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782054000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782054600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782055200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782055800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782056400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782057000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782057600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782058200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782058800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782059400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782060000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782060600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782061200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782061800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782062400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782063000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782063600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782064200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782064800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782065400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782066000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782066600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782067200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782067800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782068400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782069000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782069600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782070200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782070800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782071400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782072000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782072600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782073200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782073800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782074400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782075000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782075600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782076200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782076800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782077400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782078000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782078600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782079200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782079800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782080400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782081000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782081600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782082200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782082800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782083400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782084000000
+              },
+              {
+                "counts": {
+                  "accepted": 62,
+                  "rejected": 0,
+                  "rejected_local": 3,
+                  "total": 65
+                },
+                "start_unix_ms": 1782084600000
+              },
+              {
+                "counts": {
+                  "accepted": 88,
+                  "rejected": 1,
+                  "rejected_local": 7,
+                  "total": 96
+                },
+                "start_unix_ms": 1782085200000
+              },
+              {
+                "counts": {
+                  "accepted": 78,
+                  "rejected": 0,
+                  "rejected_local": 5,
+                  "total": 83
+                },
+                "start_unix_ms": 1782085800000
+              },
+              {
+                "counts": {
+                  "accepted": 62,
+                  "rejected": 1,
+                  "rejected_local": 2,
+                  "total": 65
+                },
+                "start_unix_ms": 1782086400000
+              },
+              {
+                "counts": {
+                  "accepted": 91,
+                  "rejected": 0,
+                  "rejected_local": 6,
+                  "total": 97
+                },
+                "start_unix_ms": 1782087000000
+              },
+              {
+                "counts": {
+                  "accepted": 90,
+                  "rejected": 0,
+                  "rejected_local": 3,
+                  "total": 93
+                },
+                "start_unix_ms": 1782087600000
+              },
+              {
+                "counts": {
+                  "accepted": 85,
+                  "rejected": 0,
+                  "rejected_local": 3,
+                  "total": 88
+                },
+                "start_unix_ms": 1782088200000
+              },
+              {
+                "counts": {
+                  "accepted": 63,
+                  "rejected": 3,
+                  "rejected_local": 2,
+                  "total": 68
+                },
+                "start_unix_ms": 1782088800000
+              },
+              {
+                "counts": {
+                  "accepted": 73,
+                  "rejected": 2,
+                  "rejected_local": 5,
+                  "total": 80
+                },
+                "start_unix_ms": 1782089400000
+              },
+              {
+                "counts": {
+                  "accepted": 72,
+                  "rejected": 0,
+                  "rejected_local": 7,
+                  "total": 79
+                },
+                "start_unix_ms": 1782090000000
+              },
+              {
+                "counts": {
+                  "accepted": 89,
+                  "rejected": 0,
+                  "rejected_local": 6,
+                  "total": 95
+                },
+                "start_unix_ms": 1782090600000
+              },
+              {
+                "counts": {
+                  "accepted": 99,
+                  "rejected": 2,
+                  "rejected_local": 9,
+                  "total": 110
+                },
+                "start_unix_ms": 1782091200000
+              },
+              {
+                "counts": {
+                  "accepted": 58,
+                  "rejected": 0,
+                  "rejected_local": 3,
+                  "total": 61
+                },
+                "start_unix_ms": 1782091800000
+              },
+              {
+                "counts": {
+                  "accepted": 69,
+                  "rejected": 2,
+                  "rejected_local": 6,
+                  "total": 77
+                },
+                "start_unix_ms": 1782092400000
+              },
+              {
+                "counts": {
+                  "accepted": 93,
+                  "rejected": 0,
+                  "rejected_local": 6,
+                  "total": 99
+                },
+                "start_unix_ms": 1782093000000
+              },
+              {
+                "counts": {
+                  "accepted": 92,
+                  "rejected": 0,
+                  "rejected_local": 3,
+                  "total": 95
+                },
+                "start_unix_ms": 1782093600000
+              },
+              {
+                "counts": {
+                  "accepted": 82,
+                  "rejected": 0,
+                  "rejected_local": 3,
+                  "total": 85
+                },
+                "start_unix_ms": 1782094200000
+              },
+              {
+                "counts": {
+                  "accepted": 88,
+                  "rejected": 0,
+                  "rejected_local": 8,
+                  "total": 96
+                },
+                "start_unix_ms": 1782094800000
+              },
+              {
+                "counts": {
+                  "accepted": 72,
+                  "rejected": 1,
+                  "rejected_local": 7,
+                  "total": 80
+                },
+                "start_unix_ms": 1782095400000
+              },
+              {
+                "counts": {
+                  "accepted": 88,
+                  "rejected": 2,
+                  "rejected_local": 5,
+                  "total": 95
+                },
+                "start_unix_ms": 1782096000000
+              },
+              {
+                "counts": {
+                  "accepted": 68,
+                  "rejected": 2,
+                  "rejected_local": 2,
+                  "total": 72
+                },
+                "start_unix_ms": 1782096600000
+              },
+              {
+                "counts": {
+                  "accepted": 74,
+                  "rejected": 4,
+                  "rejected_local": 7,
+                  "total": 85
+                },
+                "start_unix_ms": 1782097200000
+              },
+              {
+                "counts": {
+                  "accepted": 69,
+                  "rejected": 1,
+                  "rejected_local": 2,
+                  "total": 72
+                },
+                "start_unix_ms": 1782097800000
+              },
+              {
+                "counts": {
+                  "accepted": 71,
+                  "rejected": 0,
+                  "rejected_local": 4,
+                  "total": 75
+                },
+                "start_unix_ms": 1782098400000
+              },
+              {
+                "counts": {
+                  "accepted": 68,
+                  "rejected": 10,
+                  "rejected_local": 2,
+                  "total": 80
+                },
+                "start_unix_ms": 1782099000000
+              },
+              {
+                "counts": {
+                  "accepted": 88,
+                  "rejected": 0,
+                  "rejected_local": 3,
+                  "total": 91
+                },
+                "start_unix_ms": 1782099600000
+              },
+              {
+                "counts": {
+                  "accepted": 82,
+                  "rejected": 0,
+                  "rejected_local": 5,
+                  "total": 87
+                },
+                "start_unix_ms": 1782100200000
+              },
+              {
+                "counts": {
+                  "accepted": 80,
+                  "rejected": 0,
+                  "rejected_local": 1,
+                  "total": 81
+                },
+                "start_unix_ms": 1782100800000
+              },
+              {
+                "counts": {
+                  "accepted": 63,
+                  "rejected": 0,
+                  "rejected_local": 7,
+                  "total": 70
+                },
+                "start_unix_ms": 1782101400000
+              },
+              {
+                "counts": {
+                  "accepted": 67,
+                  "rejected": 0,
+                  "rejected_local": 2,
+                  "total": 69
+                },
+                "start_unix_ms": 1782102000000
+              },
+              {
+                "counts": {
+                  "accepted": 77,
+                  "rejected": 2,
+                  "rejected_local": 4,
+                  "total": 83
+                },
+                "start_unix_ms": 1782102600000
+              },
+              {
+                "counts": {
+                  "accepted": 4,
+                  "rejected": 13,
+                  "rejected_local": 3,
+                  "total": 20
+                },
+                "start_unix_ms": 1782103200000
+              },
+              {
+                "counts": {
+                  "accepted": 32,
+                  "rejected": 1,
+                  "rejected_local": 3,
+                  "total": 36
+                },
+                "start_unix_ms": 1782103800000
+              }
+            ],
+            "client_addr": "192.168.1.101:39615",
+            "current_job_age_ms": 21253,
+            "extranonce_subscribed": false,
+            "health": "invalidated_current_job",
+            "lane_id": "mac:28:e2:97:1e:c0:b5",
+            "lane_identity_source": "mac",
+            "last_accepted_unix_ms": 1782104073821,
+            "last_event_unix_ms": 1782104100378,
+            "pdiff": 0.13635887461147622,
+            "protocol_variant": "stratum-v1-basic",
+            "ready": false,
+            "rejected_30m": 16,
+            "rejected_local_30m": 10,
+            "remote_host": "192.168.1.101",
+            "totals": {
+              "accepted": 2437,
+              "rejected": 47,
+              "rejected_local": 144,
+              "total": 2628
+            },
+            "worker": "0x1719E0ee598c15957448D5E568948101DF78e7A0"
+          },
+          {
+            "asic_mac": "28:e2:97:3e:39:63",
+            "blocks_1h": 322,
+            "blocks_24h": 2100,
+            "blocks_30m": 108,
+            "blocks_6h": 2100,
+            "buckets": [
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782017400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782018000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782018600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782019200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782019800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782020400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782021000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782021600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782022200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782022800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782023400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782024000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782024600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782025200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782025800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782026400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782027000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782027600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782028200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782028800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782029400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782030000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782030600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782031200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782031800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782032400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782033000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782033600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782034200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782034800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782035400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782036000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782036600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782037200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782037800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782038400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782039000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782039600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782040200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782040800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782041400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782042000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782042600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782043200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782043800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782044400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782045000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782045600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782046200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782046800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782047400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782048000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782048600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782049200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782049800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782050400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782051000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782051600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782052200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782052800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782053400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782054000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782054600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782055200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782055800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782056400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782057000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782057600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782058200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782058800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782059400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782060000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782060600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782061200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782061800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782062400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782063000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782063600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782064200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782064800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782065400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782066000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782066600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782067200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782067800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782068400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782069000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782069600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782070200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782070800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782071400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782072000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782072600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782073200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782073800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782074400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782075000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782075600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782076200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782076800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782077400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782078000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782078600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782079200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782079800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782080400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782081000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782081600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782082200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782082800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782083400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782084000000
+              },
+              {
+                "counts": {
+                  "accepted": 57,
+                  "rejected": 0,
+                  "rejected_local": 3,
+                  "total": 60
+                },
+                "start_unix_ms": 1782084600000
+              },
+              {
+                "counts": {
+                  "accepted": 79,
+                  "rejected": 0,
+                  "rejected_local": 11,
+                  "total": 90
+                },
+                "start_unix_ms": 1782085200000
+              },
+              {
+                "counts": {
+                  "accepted": 73,
+                  "rejected": 0,
+                  "rejected_local": 2,
+                  "total": 75
+                },
+                "start_unix_ms": 1782085800000
+              },
+              {
+                "counts": {
+                  "accepted": 78,
+                  "rejected": 0,
+                  "rejected_local": 5,
+                  "total": 83
+                },
+                "start_unix_ms": 1782086400000
+              },
+              {
+                "counts": {
+                  "accepted": 72,
+                  "rejected": 0,
+                  "rejected_local": 6,
+                  "total": 78
+                },
+                "start_unix_ms": 1782087000000
+              },
+              {
+                "counts": {
+                  "accepted": 63,
+                  "rejected": 1,
+                  "rejected_local": 4,
+                  "total": 68
+                },
+                "start_unix_ms": 1782087600000
+              },
+              {
+                "counts": {
+                  "accepted": 73,
+                  "rejected": 0,
+                  "rejected_local": 3,
+                  "total": 76
+                },
+                "start_unix_ms": 1782088200000
+              },
+              {
+                "counts": {
+                  "accepted": 82,
+                  "rejected": 2,
+                  "rejected_local": 3,
+                  "total": 87
+                },
+                "start_unix_ms": 1782088800000
+              },
+              {
+                "counts": {
+                  "accepted": 81,
+                  "rejected": 4,
+                  "rejected_local": 19,
+                  "total": 104
+                },
+                "start_unix_ms": 1782089400000
+              },
+              {
+                "counts": {
+                  "accepted": 66,
+                  "rejected": 0,
+                  "rejected_local": 5,
+                  "total": 71
+                },
+                "start_unix_ms": 1782090000000
+              },
+              {
+                "counts": {
+                  "accepted": 74,
+                  "rejected": 0,
+                  "rejected_local": 1,
+                  "total": 75
+                },
+                "start_unix_ms": 1782090600000
+              },
+              {
+                "counts": {
+                  "accepted": 64,
+                  "rejected": 1,
+                  "rejected_local": 5,
+                  "total": 70
+                },
+                "start_unix_ms": 1782091200000
+              },
+              {
+                "counts": {
+                  "accepted": 66,
+                  "rejected": 0,
+                  "rejected_local": 4,
+                  "total": 70
+                },
+                "start_unix_ms": 1782091800000
+              },
+              {
+                "counts": {
+                  "accepted": 54,
+                  "rejected": 4,
+                  "rejected_local": 0,
+                  "total": 58
+                },
+                "start_unix_ms": 1782092400000
+              },
+              {
+                "counts": {
+                  "accepted": 82,
+                  "rejected": 0,
+                  "rejected_local": 7,
+                  "total": 89
+                },
+                "start_unix_ms": 1782093000000
+              },
+              {
+                "counts": {
+                  "accepted": 69,
+                  "rejected": 1,
+                  "rejected_local": 5,
+                  "total": 75
+                },
+                "start_unix_ms": 1782093600000
+              },
+              {
+                "counts": {
+                  "accepted": 28,
+                  "rejected": 1,
+                  "rejected_local": 2,
+                  "total": 31
+                },
+                "start_unix_ms": 1782094200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782094800000
+              },
+              {
+                "counts": {
+                  "accepted": 57,
+                  "rejected": 0,
+                  "rejected_local": 3,
+                  "total": 60
+                },
+                "start_unix_ms": 1782095400000
+              },
+              {
+                "counts": {
+                  "accepted": 59,
+                  "rejected": 3,
+                  "rejected_local": 8,
+                  "total": 70
+                },
+                "start_unix_ms": 1782096000000
+              },
+              {
+                "counts": {
+                  "accepted": 60,
+                  "rejected": 1,
+                  "rejected_local": 2,
+                  "total": 63
+                },
+                "start_unix_ms": 1782096600000
+              },
+              {
+                "counts": {
+                  "accepted": 72,
+                  "rejected": 3,
+                  "rejected_local": 7,
+                  "total": 82
+                },
+                "start_unix_ms": 1782097200000
+              },
+              {
+                "counts": {
+                  "accepted": 79,
+                  "rejected": 1,
+                  "rejected_local": 5,
+                  "total": 85
+                },
+                "start_unix_ms": 1782097800000
+              },
+              {
+                "counts": {
+                  "accepted": 82,
+                  "rejected": 0,
+                  "rejected_local": 2,
+                  "total": 84
+                },
+                "start_unix_ms": 1782098400000
+              },
+              {
+                "counts": {
+                  "accepted": 67,
+                  "rejected": 7,
+                  "rejected_local": 2,
+                  "total": 76
+                },
+                "start_unix_ms": 1782099000000
+              },
+              {
+                "counts": {
+                  "accepted": 73,
+                  "rejected": 3,
+                  "rejected_local": 4,
+                  "total": 80
+                },
+                "start_unix_ms": 1782099600000
+              },
+              {
+                "counts": {
+                  "accepted": 68,
+                  "rejected": 0,
+                  "rejected_local": 5,
+                  "total": 73
+                },
+                "start_unix_ms": 1782100200000
+              },
+              {
+                "counts": {
+                  "accepted": 59,
+                  "rejected": 0,
+                  "rejected_local": 2,
+                  "total": 61
+                },
+                "start_unix_ms": 1782100800000
+              },
+              {
+                "counts": {
+                  "accepted": 84,
+                  "rejected": 1,
+                  "rejected_local": 7,
+                  "total": 92
+                },
+                "start_unix_ms": 1782101400000
+              },
+              {
+                "counts": {
+                  "accepted": 71,
+                  "rejected": 0,
+                  "rejected_local": 5,
+                  "total": 76
+                },
+                "start_unix_ms": 1782102000000
+              },
+              {
+                "counts": {
+                  "accepted": 74,
+                  "rejected": 1,
+                  "rejected_local": 5,
+                  "total": 80
+                },
+                "start_unix_ms": 1782102600000
+              },
+              {
+                "counts": {
+                  "accepted": 3,
+                  "rejected": 12,
+                  "rejected_local": 9,
+                  "total": 24
+                },
+                "start_unix_ms": 1782103200000
+              },
+              {
+                "counts": {
+                  "accepted": 31,
+                  "rejected": 0,
+                  "rejected_local": 2,
+                  "total": 33
+                },
+                "start_unix_ms": 1782103800000
+              }
+            ],
+            "client_addr": "192.168.1.14:40488",
+            "current_job_age_ms": 21253,
+            "extranonce_subscribed": false,
+            "health": "invalidated_current_job",
+            "lane_id": "mac:28:e2:97:3e:39:63",
+            "lane_identity_source": "mac",
+            "last_accepted_unix_ms": 1782104074155,
+            "last_event_unix_ms": 1782104074155,
+            "pdiff": 0.14559958533516773,
+            "protocol_variant": "stratum-v1-basic",
+            "ready": false,
+            "rejected_30m": 13,
+            "rejected_local_30m": 16,
+            "remote_host": "192.168.1.14",
+            "totals": {
+              "accepted": 2100,
+              "rejected": 46,
+              "rejected_local": 153,
+              "total": 2299
+            },
+            "worker": "0x1719E0ee598c15957448D5E568948101DF78e7A0"
+          },
+          {
+            "asic_mac": "28:e2:97:4d:44:3a",
+            "blocks_1h": 293,
+            "blocks_24h": 2198,
+            "blocks_30m": 99,
+            "blocks_6h": 2198,
+            "buckets": [
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782017400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782018000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782018600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782019200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782019800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782020400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782021000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782021600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782022200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782022800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782023400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782024000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782024600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782025200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782025800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782026400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782027000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782027600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782028200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782028800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782029400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782030000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782030600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782031200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782031800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782032400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782033000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782033600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782034200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782034800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782035400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782036000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782036600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782037200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782037800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782038400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782039000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782039600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782040200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782040800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782041400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782042000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782042600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782043200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782043800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782044400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782045000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782045600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782046200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782046800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782047400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782048000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782048600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782049200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782049800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782050400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782051000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782051600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782052200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782052800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782053400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782054000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782054600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782055200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782055800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782056400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782057000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782057600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782058200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782058800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782059400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782060000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782060600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782061200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782061800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782062400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782063000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782063600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782064200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782064800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782065400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782066000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782066600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782067200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782067800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782068400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782069000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782069600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782070200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782070800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782071400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782072000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782072600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782073200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782073800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782074400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782075000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782075600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782076200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782076800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782077400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782078000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782078600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782079200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782079800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782080400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782081000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782081600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782082200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782082800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782083400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782084000000
+              },
+              {
+                "counts": {
+                  "accepted": 54,
+                  "rejected": 0,
+                  "rejected_local": 2,
+                  "total": 56
+                },
+                "start_unix_ms": 1782084600000
+              },
+              {
+                "counts": {
+                  "accepted": 86,
+                  "rejected": 0,
+                  "rejected_local": 7,
+                  "total": 93
+                },
+                "start_unix_ms": 1782085200000
+              },
+              {
+                "counts": {
+                  "accepted": 81,
+                  "rejected": 0,
+                  "rejected_local": 3,
+                  "total": 84
+                },
+                "start_unix_ms": 1782085800000
+              },
+              {
+                "counts": {
+                  "accepted": 68,
+                  "rejected": 1,
+                  "rejected_local": 2,
+                  "total": 71
+                },
+                "start_unix_ms": 1782086400000
+              },
+              {
+                "counts": {
+                  "accepted": 92,
+                  "rejected": 0,
+                  "rejected_local": 6,
+                  "total": 98
+                },
+                "start_unix_ms": 1782087000000
+              },
+              {
+                "counts": {
+                  "accepted": 67,
+                  "rejected": 2,
+                  "rejected_local": 5,
+                  "total": 74
+                },
+                "start_unix_ms": 1782087600000
+              },
+              {
+                "counts": {
+                  "accepted": 80,
+                  "rejected": 0,
+                  "rejected_local": 5,
+                  "total": 85
+                },
+                "start_unix_ms": 1782088200000
+              },
+              {
+                "counts": {
+                  "accepted": 61,
+                  "rejected": 3,
+                  "rejected_local": 5,
+                  "total": 69
+                },
+                "start_unix_ms": 1782088800000
+              },
+              {
+                "counts": {
+                  "accepted": 72,
+                  "rejected": 3,
+                  "rejected_local": 6,
+                  "total": 81
+                },
+                "start_unix_ms": 1782089400000
+              },
+              {
+                "counts": {
+                  "accepted": 66,
+                  "rejected": 1,
+                  "rejected_local": 4,
+                  "total": 71
+                },
+                "start_unix_ms": 1782090000000
+              },
+              {
+                "counts": {
+                  "accepted": 77,
+                  "rejected": 0,
+                  "rejected_local": 5,
+                  "total": 82
+                },
+                "start_unix_ms": 1782090600000
+              },
+              {
+                "counts": {
+                  "accepted": 88,
+                  "rejected": 1,
+                  "rejected_local": 9,
+                  "total": 98
+                },
+                "start_unix_ms": 1782091200000
+              },
+              {
+                "counts": {
+                  "accepted": 70,
+                  "rejected": 0,
+                  "rejected_local": 3,
+                  "total": 73
+                },
+                "start_unix_ms": 1782091800000
+              },
+              {
+                "counts": {
+                  "accepted": 59,
+                  "rejected": 2,
+                  "rejected_local": 4,
+                  "total": 65
+                },
+                "start_unix_ms": 1782092400000
+              },
+              {
+                "counts": {
+                  "accepted": 71,
+                  "rejected": 1,
+                  "rejected_local": 10,
+                  "total": 82
+                },
+                "start_unix_ms": 1782093000000
+              },
+              {
+                "counts": {
+                  "accepted": 63,
+                  "rejected": 0,
+                  "rejected_local": 5,
+                  "total": 68
+                },
+                "start_unix_ms": 1782093600000
+              },
+              {
+                "counts": {
+                  "accepted": 71,
+                  "rejected": 1,
+                  "rejected_local": 3,
+                  "total": 75
+                },
+                "start_unix_ms": 1782094200000
+              },
+              {
+                "counts": {
+                  "accepted": 70,
+                  "rejected": 3,
+                  "rejected_local": 5,
+                  "total": 78
+                },
+                "start_unix_ms": 1782094800000
+              },
+              {
+                "counts": {
+                  "accepted": 67,
+                  "rejected": 1,
+                  "rejected_local": 7,
+                  "total": 75
+                },
+                "start_unix_ms": 1782095400000
+              },
+              {
+                "counts": {
+                  "accepted": 73,
+                  "rejected": 3,
+                  "rejected_local": 3,
+                  "total": 79
+                },
+                "start_unix_ms": 1782096000000
+              },
+              {
+                "counts": {
+                  "accepted": 68,
+                  "rejected": 0,
+                  "rejected_local": 3,
+                  "total": 71
+                },
+                "start_unix_ms": 1782096600000
+              },
+              {
+                "counts": {
+                  "accepted": 76,
+                  "rejected": 3,
+                  "rejected_local": 6,
+                  "total": 85
+                },
+                "start_unix_ms": 1782097200000
+              },
+              {
+                "counts": {
+                  "accepted": 58,
+                  "rejected": 1,
+                  "rejected_local": 0,
+                  "total": 59
+                },
+                "start_unix_ms": 1782097800000
+              },
+              {
+                "counts": {
+                  "accepted": 64,
+                  "rejected": 0,
+                  "rejected_local": 3,
+                  "total": 67
+                },
+                "start_unix_ms": 1782098400000
+              },
+              {
+                "counts": {
+                  "accepted": 68,
+                  "rejected": 7,
+                  "rejected_local": 2,
+                  "total": 77
+                },
+                "start_unix_ms": 1782099000000
+              },
+              {
+                "counts": {
+                  "accepted": 64,
+                  "rejected": 1,
+                  "rejected_local": 3,
+                  "total": 68
+                },
+                "start_unix_ms": 1782099600000
+              },
+              {
+                "counts": {
+                  "accepted": 71,
+                  "rejected": 0,
+                  "rejected_local": 2,
+                  "total": 73
+                },
+                "start_unix_ms": 1782100200000
+              },
+              {
+                "counts": {
+                  "accepted": 72,
+                  "rejected": 0,
+                  "rejected_local": 4,
+                  "total": 76
+                },
+                "start_unix_ms": 1782100800000
+              },
+              {
+                "counts": {
+                  "accepted": 64,
+                  "rejected": 2,
+                  "rejected_local": 5,
+                  "total": 71
+                },
+                "start_unix_ms": 1782101400000
+              },
+              {
+                "counts": {
+                  "accepted": 58,
+                  "rejected": 0,
+                  "rejected_local": 3,
+                  "total": 61
+                },
+                "start_unix_ms": 1782102000000
+              },
+              {
+                "counts": {
+                  "accepted": 73,
+                  "rejected": 0,
+                  "rejected_local": 4,
+                  "total": 77
+                },
+                "start_unix_ms": 1782102600000
+              },
+              {
+                "counts": {
+                  "accepted": 1,
+                  "rejected": 9,
+                  "rejected_local": 3,
+                  "total": 13
+                },
+                "start_unix_ms": 1782103200000
+              },
+              {
+                "counts": {
+                  "accepted": 25,
+                  "rejected": 1,
+                  "rejected_local": 1,
+                  "total": 27
+                },
+                "start_unix_ms": 1782103800000
+              }
+            ],
+            "client_addr": "192.168.1.105:51994",
+            "current_job_age_ms": 21253,
+            "extranonce_subscribed": false,
+            "health": "invalidated_current_job",
+            "lane_id": "mac:28:e2:97:4d:44:3a",
+            "lane_identity_source": "mac",
+            "last_accepted_unix_ms": 1782104058746,
+            "last_event_unix_ms": 1782104083029,
+            "pdiff": 0.11409061883263331,
+            "protocol_variant": "stratum-v1-basic",
+            "ready": false,
+            "rejected_30m": 10,
+            "rejected_local_30m": 8,
+            "remote_host": "192.168.1.105",
+            "totals": {
+              "accepted": 2198,
+              "rejected": 46,
+              "rejected_local": 138,
+              "total": 2382
+            },
+            "worker": "0x1719E0ee598c15957448D5E568948101DF78e7A0"
+          },
+          {
+            "asic_mac": "2a:71:c7:f5:1f:1e",
+            "blocks_1h": 346,
+            "blocks_24h": 2360,
+            "blocks_30m": 116,
+            "blocks_6h": 2360,
+            "buckets": [
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782017400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782018000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782018600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782019200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782019800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782020400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782021000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782021600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782022200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782022800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782023400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782024000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782024600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782025200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782025800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782026400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782027000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782027600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782028200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782028800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782029400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782030000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782030600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782031200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782031800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782032400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782033000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782033600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782034200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782034800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782035400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782036000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782036600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782037200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782037800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782038400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782039000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782039600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782040200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782040800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782041400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782042000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782042600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782043200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782043800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782044400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782045000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782045600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782046200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782046800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782047400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782048000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782048600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782049200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782049800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782050400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782051000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782051600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782052200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782052800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782053400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782054000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782054600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782055200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782055800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782056400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782057000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782057600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782058200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782058800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782059400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782060000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782060600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782061200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782061800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782062400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782063000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782063600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782064200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782064800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782065400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782066000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782066600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782067200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782067800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782068400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782069000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782069600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782070200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782070800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782071400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782072000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782072600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782073200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782073800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782074400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782075000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782075600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782076200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782076800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782077400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782078000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782078600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782079200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782079800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782080400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782081000000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782081600000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782082200000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782082800000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782083400000
+              },
+              {
+                "counts": {
+                  "accepted": 0,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 0
+                },
+                "start_unix_ms": 1782084000000
+              },
+              {
+                "counts": {
+                  "accepted": 44,
+                  "rejected": 0,
+                  "rejected_local": 1,
+                  "total": 45
+                },
+                "start_unix_ms": 1782084600000
+              },
+              {
+                "counts": {
+                  "accepted": 77,
+                  "rejected": 3,
+                  "rejected_local": 13,
+                  "total": 93
+                },
+                "start_unix_ms": 1782085200000
+              },
+              {
+                "counts": {
+                  "accepted": 75,
+                  "rejected": 0,
+                  "rejected_local": 6,
+                  "total": 81
+                },
+                "start_unix_ms": 1782085800000
+              },
+              {
+                "counts": {
+                  "accepted": 96,
+                  "rejected": 1,
+                  "rejected_local": 5,
+                  "total": 102
+                },
+                "start_unix_ms": 1782086400000
+              },
+              {
+                "counts": {
+                  "accepted": 73,
+                  "rejected": 2,
+                  "rejected_local": 7,
+                  "total": 82
+                },
+                "start_unix_ms": 1782087000000
+              },
+              {
+                "counts": {
+                  "accepted": 62,
+                  "rejected": 0,
+                  "rejected_local": 7,
+                  "total": 69
+                },
+                "start_unix_ms": 1782087600000
+              },
+              {
+                "counts": {
+                  "accepted": 77,
+                  "rejected": 0,
+                  "rejected_local": 3,
+                  "total": 80
+                },
+                "start_unix_ms": 1782088200000
+              },
+              {
+                "counts": {
+                  "accepted": 65,
+                  "rejected": 1,
+                  "rejected_local": 2,
+                  "total": 68
+                },
+                "start_unix_ms": 1782088800000
+              },
+              {
+                "counts": {
+                  "accepted": 89,
+                  "rejected": 2,
+                  "rejected_local": 14,
+                  "total": 105
+                },
+                "start_unix_ms": 1782089400000
+              },
+              {
+                "counts": {
+                  "accepted": 95,
+                  "rejected": 0,
+                  "rejected_local": 4,
+                  "total": 99
+                },
+                "start_unix_ms": 1782090000000
+              },
+              {
+                "counts": {
+                  "accepted": 80,
+                  "rejected": 0,
+                  "rejected_local": 3,
+                  "total": 83
+                },
+                "start_unix_ms": 1782090600000
+              },
+              {
+                "counts": {
+                  "accepted": 67,
+                  "rejected": 1,
+                  "rejected_local": 6,
+                  "total": 74
+                },
+                "start_unix_ms": 1782091200000
+              },
+              {
+                "counts": {
+                  "accepted": 70,
+                  "rejected": 0,
+                  "rejected_local": 6,
+                  "total": 76
+                },
+                "start_unix_ms": 1782091800000
+              },
+              {
+                "counts": {
+                  "accepted": 82,
+                  "rejected": 2,
+                  "rejected_local": 5,
+                  "total": 89
+                },
+                "start_unix_ms": 1782092400000
+              },
+              {
+                "counts": {
+                  "accepted": 90,
+                  "rejected": 0,
+                  "rejected_local": 5,
+                  "total": 95
+                },
+                "start_unix_ms": 1782093000000
+              },
+              {
+                "counts": {
+                  "accepted": 79,
+                  "rejected": 0,
+                  "rejected_local": 11,
+                  "total": 90
+                },
+                "start_unix_ms": 1782093600000
+              },
+              {
+                "counts": {
+                  "accepted": 83,
+                  "rejected": 1,
+                  "rejected_local": 4,
+                  "total": 88
+                },
+                "start_unix_ms": 1782094200000
+              },
+              {
+                "counts": {
+                  "accepted": 82,
+                  "rejected": 0,
+                  "rejected_local": 6,
+                  "total": 88
+                },
+                "start_unix_ms": 1782094800000
+              },
+              {
+                "counts": {
+                  "accepted": 75,
+                  "rejected": 0,
+                  "rejected_local": 3,
+                  "total": 78
+                },
+                "start_unix_ms": 1782095400000
+              },
+              {
+                "counts": {
+                  "accepted": 69,
+                  "rejected": 2,
+                  "rejected_local": 4,
+                  "total": 75
+                },
+                "start_unix_ms": 1782096000000
+              },
+              {
+                "counts": {
+                  "accepted": 69,
+                  "rejected": 1,
+                  "rejected_local": 2,
+                  "total": 72
+                },
+                "start_unix_ms": 1782096600000
+              },
+              {
+                "counts": {
+                  "accepted": 70,
+                  "rejected": 2,
+                  "rejected_local": 9,
+                  "total": 81
+                },
+                "start_unix_ms": 1782097200000
+              },
+              {
+                "counts": {
+                  "accepted": 61,
+                  "rejected": 0,
+                  "rejected_local": 3,
+                  "total": 64
+                },
+                "start_unix_ms": 1782097800000
+              },
+              {
+                "counts": {
+                  "accepted": 78,
+                  "rejected": 0,
+                  "rejected_local": 1,
+                  "total": 79
+                },
+                "start_unix_ms": 1782098400000
+              },
+              {
+                "counts": {
+                  "accepted": 65,
+                  "rejected": 4,
+                  "rejected_local": 4,
+                  "total": 73
+                },
+                "start_unix_ms": 1782099000000
+              },
+              {
+                "counts": {
+                  "accepted": 70,
+                  "rejected": 2,
+                  "rejected_local": 3,
+                  "total": 75
+                },
+                "start_unix_ms": 1782099600000
+              },
+              {
+                "counts": {
+                  "accepted": 71,
+                  "rejected": 0,
+                  "rejected_local": 3,
+                  "total": 74
+                },
+                "start_unix_ms": 1782100200000
+              },
+              {
+                "counts": {
+                  "accepted": 73,
+                  "rejected": 0,
+                  "rejected_local": 3,
+                  "total": 76
+                },
+                "start_unix_ms": 1782100800000
+              },
+              {
+                "counts": {
+                  "accepted": 68,
+                  "rejected": 1,
+                  "rejected_local": 4,
+                  "total": 73
+                },
+                "start_unix_ms": 1782101400000
+              },
+              {
+                "counts": {
+                  "accepted": 89,
+                  "rejected": 0,
+                  "rejected_local": 5,
+                  "total": 94
+                },
+                "start_unix_ms": 1782102000000
+              },
+              {
+                "counts": {
+                  "accepted": 77,
+                  "rejected": 3,
+                  "rejected_local": 3,
+                  "total": 83
+                },
+                "start_unix_ms": 1782102600000
+              },
+              {
+                "counts": {
+                  "accepted": 2,
+                  "rejected": 10,
+                  "rejected_local": 4,
+                  "total": 16
+                },
+                "start_unix_ms": 1782103200000
+              },
+              {
+                "counts": {
+                  "accepted": 37,
+                  "rejected": 0,
+                  "rejected_local": 0,
+                  "total": 37
+                },
+                "start_unix_ms": 1782103800000
+              }
+            ],
+            "client_addr": "192.168.1.102:48385",
+            "current_job_age_ms": 21253,
+            "extranonce_subscribed": false,
+            "health": "invalidated_current_job",
+            "lane_id": "mac:2a:71:c7:f5:1f:1e",
+            "lane_identity_source": "mac",
+            "last_accepted_unix_ms": 1782104069933,
+            "last_event_unix_ms": 1782104069933,
+            "pdiff": 0.14232223787390932,
+            "protocol_variant": "stratum-v1-basic",
+            "ready": false,
+            "rejected_30m": 13,
+            "rejected_local_30m": 7,
+            "remote_host": "192.168.1.102",
+            "totals": {
+              "accepted": 2360,
+              "rejected": 38,
+              "rejected_local": 159,
+              "total": 2557
+            },
+            "worker": "0x1719E0ee598c15957448D5E568948101DF78e7A0"
+          }
+        ],
+        "last_update_age_seconds": 1,
+        "source": "pool-health-asic-performance",
+        "updated_at": "2026-06-22T04:55:03Z",
+        "updated_at_epoch": 1782104103,
+        "window_seconds": 86400
+      },
+      "can_accept_shares": true,
+      "can_submit_blocks": false,
+      "chain_block_count": "12233846",
+      "containers": {
+        "node": {
+          "running": true
+        },
+        "pool": {
+          "running": true
+        }
+      },
+      "miner_health": {
+        "configured_count": 4,
+        "connected_count": 0,
+        "identity_contract": "mac-only",
+        "managed_count": 4,
+        "managed_miners": [
+          {
+            "blocks_1h": "323",
+            "blocks_24h": "2437",
+            "blocks_30m": "113",
+            "blocks_6h": "2437",
+            "configured_pool_url": "stratum+tcp://192.168.1.100:3334",
+            "connected": false,
+            "current_job_age_ms": "21253",
+            "device_id": "mac:28:e2:97:1e:c0:b5",
+            "device_type": "asic",
+            "extranonce_subscribed": false,
+            "health": "invalidated_current_job",
+            "identity": "28:e2:97:1e:c0:b5",
+            "intended_wallet": "0x1719E0ee598c15957448D5E568948101DF78e7A0",
+            "ip": "192.168.1.101",
+            "lane_id": "mac:28:e2:97:1e:c0:b5",
+            "last_block_at_epoch_ms": "1782104073821",
+            "last_event_at_epoch_ms": "1782104100378",
+            "last_seen_at": "2026-06-22T04:54:43Z",
+            "mac": "28:e2:97:1e:c0:b5",
+            "managed": true,
+            "pdiff": "0.13635887461147622",
+            "protocol_variant": "stratum-v1-basic",
+            "ready": false,
+            "rejected_30m": "16",
+            "rejected_local_30m": "10",
+            "source": "env-overrides",
+            "status": "invalidated_current_job"
+          },
+          {
+            "blocks_1h": "346",
+            "blocks_24h": "2360",
+            "blocks_30m": "116",
+            "blocks_6h": "2360",
+            "configured_pool_url": "stratum+tcp://192.168.1.100:3334",
+            "connected": false,
+            "current_job_age_ms": "21253",
+            "device_id": "mac:2a:71:c7:f5:1f:1e",
+            "device_type": "asic",
+            "extranonce_subscribed": false,
+            "health": "invalidated_current_job",
+            "identity": "2a:71:c7:f5:1f:1e",
+            "intended_wallet": "0x1719E0ee598c15957448D5E568948101DF78e7A0",
+            "ip": "192.168.1.102",
+            "lane_id": "mac:2a:71:c7:f5:1f:1e",
+            "last_block_at_epoch_ms": "1782104069933",
+            "last_event_at_epoch_ms": "1782104069933",
+            "last_seen_at": "2026-06-22T04:54:43Z",
+            "mac": "2a:71:c7:f5:1f:1e",
+            "managed": true,
+            "pdiff": "0.14232223787390932",
+            "protocol_variant": "stratum-v1-basic",
+            "ready": false,
+            "rejected_30m": "13",
+            "rejected_local_30m": "7",
+            "source": "env-overrides",
+            "status": "invalidated_current_job"
+          },
+          {
+            "blocks_1h": "293",
+            "blocks_24h": "2198",
+            "blocks_30m": "99",
+            "blocks_6h": "2198",
+            "configured_pool_url": "stratum+tcp://192.168.1.100:3334",
+            "connected": false,
+            "current_job_age_ms": "21253",
+            "device_id": "mac:28:e2:97:4d:44:3a",
+            "device_type": "asic",
+            "extranonce_subscribed": false,
+            "health": "invalidated_current_job",
+            "identity": "28:e2:97:4d:44:3a",
+            "intended_wallet": "0x1719E0ee598c15957448D5E568948101DF78e7A0",
+            "ip": "192.168.1.105",
+            "lane_id": "mac:28:e2:97:4d:44:3a",
+            "last_block_at_epoch_ms": "1782104058746",
+            "last_event_at_epoch_ms": "1782104083029",
+            "last_seen_at": "2026-06-22T04:54:43Z",
+            "mac": "28:e2:97:4d:44:3a",
+            "managed": true,
+            "pdiff": "0.11409061883263331",
+            "protocol_variant": "stratum-v1-basic",
+            "ready": false,
+            "rejected_30m": "10",
+            "rejected_local_30m": "8",
+            "source": "env-overrides",
+            "status": "invalidated_current_job"
+          },
+          {
+            "blocks_1h": "322",
+            "blocks_24h": "2100",
+            "blocks_30m": "108",
+            "blocks_6h": "2100",
+            "configured_pool_url": "stratum+tcp://192.168.1.100:3334",
+            "connected": false,
+            "current_job_age_ms": "21253",
+            "device_id": "mac:28:e2:97:3e:39:63",
+            "device_type": "asic",
+            "extranonce_subscribed": false,
+            "health": "invalidated_current_job",
+            "identity": "28:e2:97:3e:39:63",
+            "intended_wallet": "0x1719E0ee598c15957448D5E568948101DF78e7A0",
+            "ip": "192.168.1.14",
+            "lane_id": "mac:28:e2:97:3e:39:63",
+            "last_block_at_epoch_ms": "1782104074155",
+            "last_event_at_epoch_ms": "1782104074155",
+            "last_seen_at": "2026-06-22T04:54:43Z",
+            "mac": "28:e2:97:3e:39:63",
+            "managed": true,
+            "pdiff": "0.14559958533516773",
+            "protocol_variant": "stratum-v1-basic",
+            "ready": false,
+            "rejected_30m": "13",
+            "rejected_local_30m": "16",
+            "source": "env-overrides",
+            "status": "invalidated_current_job"
+          }
+        ],
+        "miners": [
+          {
+            "blocks_1h": "323",
+            "blocks_24h": "2437",
+            "blocks_30m": "113",
+            "blocks_6h": "2437",
+            "configured_pool_url": "stratum+tcp://192.168.1.100:3334",
+            "connected": false,
+            "current_job_age_ms": "21253",
+            "device_id": "mac:28:e2:97:1e:c0:b5",
+            "device_type": "asic",
+            "extranonce_subscribed": false,
+            "health": "invalidated_current_job",
+            "identity": "28:e2:97:1e:c0:b5",
+            "intended_wallet": "0x1719E0ee598c15957448D5E568948101DF78e7A0",
+            "ip": "192.168.1.101",
+            "lane_id": "mac:28:e2:97:1e:c0:b5",
+            "last_block_at_epoch_ms": "1782104073821",
+            "last_event_at_epoch_ms": "1782104100378",
+            "last_seen_at": "2026-06-22T04:54:43Z",
+            "mac": "28:e2:97:1e:c0:b5",
+            "managed": true,
+            "pdiff": "0.13635887461147622",
+            "protocol_variant": "stratum-v1-basic",
+            "ready": false,
+            "rejected_30m": "16",
+            "rejected_local_30m": "10",
+            "source": "env-overrides",
+            "status": "invalidated_current_job"
+          },
+          {
+            "blocks_1h": "346",
+            "blocks_24h": "2360",
+            "blocks_30m": "116",
+            "blocks_6h": "2360",
+            "configured_pool_url": "stratum+tcp://192.168.1.100:3334",
+            "connected": false,
+            "current_job_age_ms": "21253",
+            "device_id": "mac:2a:71:c7:f5:1f:1e",
+            "device_type": "asic",
+            "extranonce_subscribed": false,
+            "health": "invalidated_current_job",
+            "identity": "2a:71:c7:f5:1f:1e",
+            "intended_wallet": "0x1719E0ee598c15957448D5E568948101DF78e7A0",
+            "ip": "192.168.1.102",
+            "lane_id": "mac:2a:71:c7:f5:1f:1e",
+            "last_block_at_epoch_ms": "1782104069933",
+            "last_event_at_epoch_ms": "1782104069933",
+            "last_seen_at": "2026-06-22T04:54:43Z",
+            "mac": "2a:71:c7:f5:1f:1e",
+            "managed": true,
+            "pdiff": "0.14232223787390932",
+            "protocol_variant": "stratum-v1-basic",
+            "ready": false,
+            "rejected_30m": "13",
+            "rejected_local_30m": "7",
+            "source": "env-overrides",
+            "status": "invalidated_current_job"
+          },
+          {
+            "blocks_1h": "293",
+            "blocks_24h": "2198",
+            "blocks_30m": "99",
+            "blocks_6h": "2198",
+            "configured_pool_url": "stratum+tcp://192.168.1.100:3334",
+            "connected": false,
+            "current_job_age_ms": "21253",
+            "device_id": "mac:28:e2:97:4d:44:3a",
+            "device_type": "asic",
+            "extranonce_subscribed": false,
+            "health": "invalidated_current_job",
+            "identity": "28:e2:97:4d:44:3a",
+            "intended_wallet": "0x1719E0ee598c15957448D5E568948101DF78e7A0",
+            "ip": "192.168.1.105",
+            "lane_id": "mac:28:e2:97:4d:44:3a",
+            "last_block_at_epoch_ms": "1782104058746",
+            "last_event_at_epoch_ms": "1782104083029",
+            "last_seen_at": "2026-06-22T04:54:43Z",
+            "mac": "28:e2:97:4d:44:3a",
+            "managed": true,
+            "pdiff": "0.11409061883263331",
+            "protocol_variant": "stratum-v1-basic",
+            "ready": false,
+            "rejected_30m": "10",
+            "rejected_local_30m": "8",
+            "source": "env-overrides",
+            "status": "invalidated_current_job"
+          },
+          {
+            "blocks_1h": "322",
+            "blocks_24h": "2100",
+            "blocks_30m": "108",
+            "blocks_6h": "2100",
+            "configured_pool_url": "stratum+tcp://192.168.1.100:3334",
+            "connected": false,
+            "current_job_age_ms": "21253",
+            "device_id": "mac:28:e2:97:3e:39:63",
+            "device_type": "asic",
+            "extranonce_subscribed": false,
+            "health": "invalidated_current_job",
+            "identity": "28:e2:97:3e:39:63",
+            "intended_wallet": "0x1719E0ee598c15957448D5E568948101DF78e7A0",
+            "ip": "192.168.1.14",
+            "lane_id": "mac:28:e2:97:3e:39:63",
+            "last_block_at_epoch_ms": "1782104074155",
+            "last_event_at_epoch_ms": "1782104074155",
+            "last_seen_at": "2026-06-22T04:54:43Z",
+            "mac": "28:e2:97:3e:39:63",
+            "managed": true,
+            "pdiff": "0.14559958533516773",
+            "protocol_variant": "stratum-v1-basic",
+            "ready": false,
+            "rejected_30m": "13",
+            "rejected_local_30m": "16",
+            "source": "env-overrides",
+            "status": "invalidated_current_job"
+          }
+        ],
+        "source": "redis-asic-status",
+        "source_key": "bdag:miners:by_mac",
+        "tracked_count": 4
+      },
+      "mode": "mining",
+      "overall": "degraded",
+      "pool_health": {
+        "accepted_block_count": "9095",
+        "block_submit_error_count": "177",
+        "block_submit_success_count": "9095",
+        "source_job_health": {
+          "authorized_miners": "4",
+          "ready_miners": "0"
+        },
+        "stale_jobs": false,
+        "valid_share_count": "10043"
+      },
+      "pool_metrics": {
+        "accepted_block_recent": true,
+        "accepted_block_submissions": 9095,
+        "accepted_block_submissions_delta": 0,
+        "accepted_block_submissions_rate_per_second": 0,
+        "active_connections": 4,
+        "authorized_miners": 4,
+        "backend_main_order": 12233840,
+        "backend_mineable": 0,
+        "backend_p2p_mining_fresh": 0,
+        "backend_peer_lead_blocks": 0,
+        "backend_submit_ready": 0,
+        "blocks_found_total": 9272,
+        "expired_miners": 0,
+        "invalidated_miners": 4,
+        "last_accepted_block_submission_age_seconds": 25,
+        "last_accepted_block_submission_at_epoch": 1782104078,
+        "ready_miners": 0,
+        "rejected_block_submissions": 177,
+        "shares_accepted_total": 10043,
+        "shares_rejected_total": 3656,
+        "stale_miners": 0,
+        "template_age_seconds": 3.468
+      },
+      "source": "redis-live",
+      "status": "ok",
+      "sync_progress": {
+        "best_peer_mainorder": 12233845,
+        "chain_block_count": 12233846,
+        "chain_rpc_source": "getBlockCount",
+        "chain_syncing": false,
+        "current_block": 12233846,
+        "eth_syncing": false,
+        "evm_block_count": "11864803",
+        "evm_chain_syncing": false,
+        "evm_rpc_url": "http://host.docker.internal:18545",
+        "highest_block": 12233846,
+        "native_is_current": true,
+        "p2p_connections": 1,
+        "p2p_network_gap": 0,
+        "p2p_network_height": 12233845,
+        "peer_count": 1,
+        "peer_mainorder_gap": 0,
+        "remaining_blocks": 0,
+        "source": "native-rpc",
+        "status": "synced"
+      },
+      "updated_at": "2026-06-22T04:55:04Z"
+    }
+  },
+  "guard": {
+    "result": "standard forbidden module grep guard clean before deploy"
+  },
+  "rollback_commands": [
+    "cd /home/jeremy/blockdag-source/stack-redis",
+    "docker image tag stack-dashboard:pre-control-suite-deploy-recovered-20260622-065500 stack-dashboard:latest",
+    "docker compose up -d --no-deps --no-build dashboard",
+    "verify /api/status, /health/job-state, and 4 ready connections"
+  ],
+  "notes": [
+    "Dashboard-only deploy candidate already built; node/pool must not be restarted by this savepoint.",
+    "If ready connections drop or dashboard health fails, rollback dashboard image first and reassess."
+  ]
+}

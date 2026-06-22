@@ -127,10 +127,10 @@ valid_tcp_port() {
 }
 
 configured_p2p_port() {
-  local port="${P2P_PORT:-8150}"
+  local port="${P2P_PORT:-8155}"
   if ! valid_tcp_port "$port"; then
-    log "invalid P2P_PORT=$port; using release default P2P_PORT=8150"
-    port=8150
+    log "invalid P2P_PORT=$port; using release default P2P_PORT=8155"
+    port=8155
   fi
   printf '%s\n' "$port"
 }
@@ -360,6 +360,20 @@ node_args_contains_prefix() {
   return 1
 }
 
+configured_node_mining_address() {
+  local value
+  for value in "${POOL_COINBASE_ADDRESS:-}" "${MINING_POOL_ADDRESS:-}" "${MINING_ADDRESS:-}"; do
+    value="${value//[[:space:]]/}"
+    [ -n "$value" ] || continue
+    printf '%s' "$value" | grep -Eiq '^0x[0-9a-f]{40}$' || continue
+    if [ "$(lower_ascii "$value")" != "0x0000000000000000000000000000000000000000" ]; then
+      printf '%s\n' "$value"
+      return 0
+    fi
+  done
+  return 1
+}
+
 append_node_arg_prefix_once() {
   local flag="$1"
   local node_args="$2"
@@ -369,6 +383,12 @@ append_node_arg_prefix_once() {
   fi
   NODE_ARGS_APPEND="${NODE_ARGS_APPEND:+$NODE_ARGS_APPEND }$flag"
   export NODE_ARGS_APPEND
+}
+
+forbidden_node_module() {
+  local module_name
+  module_name="$(lower_ascii "$1")"
+  [ "$module_name" = "$(printf 'p%s' '2p')" ]
 }
 
 rewrite_node_args_configfile() {
@@ -443,22 +463,85 @@ apply_node_mining_runtime_args() {
     *) return 0 ;;
   esac
 
-  local node_args modules word
+  local node_args modules word mining_address
   node_args="$(node_args_from_argv "$@" || true)"
+  if [ -z "${BDAG_NODE_MINING_ARGS:-}" ]; then
+    if mining_address="$(configured_node_mining_address)"; then
+      BDAG_NODE_MINING_ARGS="--miner --miningaddr=${mining_address}"
+      export BDAG_NODE_MINING_ARGS
+      log "derived BDAG_NODE_MINING_ARGS from configured pool payout address"
+    else
+      log "BDAG_ENABLE_NODE_MINING=1 but no valid non-zero pool payout address was provided; node mining args left unchanged"
+    fi
+  fi
   modules="${BDAG_NODE_MODULES:-}"
   if [ -n "$modules" ]; then
-    modules="$(printf '%s' "$modules" | tr ',' ' ')"
-    for word in $modules; do
-      [ -n "$word" ] || continue
-      append_node_arg_once "--modules=${word}" "$node_args ${NODE_ARGS_APPEND:-}"
-    done
-  fi
+	    modules="$(printf '%s' "$modules" | tr ',' ' ')"
+	    for word in $modules; do
+	      [ -n "$word" ] || continue
+	      if forbidden_node_module "$word"; then
+	        log "BDAG_NODE_MODULES contains a forbidden peer module; mining nodes must use Blockdag,miner only"
+	        exit 1
+	      fi
+	      append_node_arg_once "--modules=${word}" "$node_args ${NODE_ARGS_APPEND:-}"
+	    done
+	  fi
   for word in ${BDAG_NODE_MINING_ARGS:-}; do
     case "$word" in
       --miningaddr=*) append_node_arg_prefix_once "$word" "$node_args ${NODE_ARGS_APPEND:-}" ;;
       --*) append_node_arg_once "$word" "$node_args ${NODE_ARGS_APPEND:-}" ;;
     esac
   done
+}
+
+apply_node_mining_template_runtime_args() {
+  local node_args obsolete_height no_pending
+  node_args="$(node_args_from_argv "$@" || true)"
+
+  obsolete_height="${BDAG_NODE_OBSOLETE_HEIGHT:-}"
+  if [ -n "$obsolete_height" ]; then
+    case "$obsolete_height" in
+      *[!0-9]*)
+        log "ignoring invalid BDAG_NODE_OBSOLETE_HEIGHT=$obsolete_height"
+        ;;
+      *)
+        append_node_arg_prefix_once "--obsoleteheight=$obsolete_height" "$node_args ${NODE_ARGS_APPEND:-}"
+        ;;
+    esac
+  fi
+
+  no_pending="${BDAG_NODE_MINING_NO_PENDING_TX:-0}"
+  case "$no_pending" in
+    1|true|TRUE|yes|YES|on|ON)
+      append_node_arg_once "--miningnopendingtx" "$node_args ${NODE_ARGS_APPEND:-}"
+      ;;
+  esac
+}
+
+apply_node_log_runtime_args() {
+  local node_args level normalized_level no_file_logging
+  node_args="$(node_args_from_argv "$@" || true)"
+  level="${BDAG_NODE_DEBUG_LEVEL:-warn}"
+  normalized_level="$(lower_ascii "$level")"
+  case "$normalized_level" in
+    ""|default|none|off|disable|disabled)
+      ;;
+    trace|debug|info|warn|error|critical)
+      append_node_arg_prefix_once "--debuglevel=$normalized_level" "$node_args ${NODE_ARGS_APPEND:-}"
+      ;;
+    *)
+      log "invalid BDAG_NODE_DEBUG_LEVEL=$level; using warn"
+      append_node_arg_prefix_once "--debuglevel=warn" "$node_args ${NODE_ARGS_APPEND:-}"
+      ;;
+  esac
+
+  no_file_logging="${BDAG_NODE_NO_FILE_LOGGING:-1}"
+  if env_value_true "$no_file_logging"; then
+    append_node_arg_once "--nofilelogging" "$node_args ${NODE_ARGS_APPEND:-}"
+  elif ! env_value_false "$no_file_logging"; then
+    log "invalid BDAG_NODE_NO_FILE_LOGGING=$no_file_logging; using enabled"
+    append_node_arg_once "--nofilelogging" "$node_args ${NODE_ARGS_APPEND:-}"
+  fi
 }
 
 mount_source_for_path() {
@@ -867,7 +950,9 @@ maybe_http_snapshot_bootstrap() {
 
 apply_ordered_fastsync_peers "$@"
 apply_no_fastsync_serve_guard "$@"
+apply_node_mining_template_runtime_args "$@"
 apply_node_mining_runtime_args "$@"
+apply_node_log_runtime_args "$@"
 apply_archival_flag "$@"
 maybe_http_snapshot_bootstrap "$@"
 

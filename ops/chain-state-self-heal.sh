@@ -191,6 +191,20 @@ if not isinstance(payload, dict):
 sync = payload.get("sync_health") if isinstance(payload.get("sync_health"), dict) else {}
 nodes = payload.get("nodes") if isinstance(payload.get("nodes"), dict) else {}
 chain_state = bool(sync.get("needs_chain_data_restore") or sync.get("chain_state_blocker"))
+evm_watch = sync.get("evm_reference_gap_watch") if isinstance(sync.get("evm_reference_gap_watch"), dict) else {}
+soft_evm_restore_only = bool(sync.get("evm_reference_gap_stalled") or evm_watch.get("restore_required")) and not bool(
+    sync.get("chain_state_blocker")
+    or sync.get("chain_data_restore_required")
+    or sync.get("chain_state_blocker_nodes")
+    or sync.get("chain_data_restore_nodes")
+)
+native_paid_safe = bool(
+    sync.get("native_progress_paid_work_safe")
+    or (sync.get("selected_backend_mining_safe") and sync.get("pool_has_recent_paid_work"))
+)
+if chain_state and soft_evm_restore_only and native_paid_safe:
+    print("EVM reference gap is advisory under native-safe paid mining")
+    sys.exit(1)
 if not chain_state:
     chain_state = any(isinstance(info, dict) and info.get("chain_state_blocker") for info in nodes.values())
 if chain_state:

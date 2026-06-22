@@ -131,6 +131,46 @@ class AutomationControlTests(unittest.TestCase):
                 self.assertIn("denies high-risk", decision.reason)
                 self.assertEqual(1, len(self.event_lines()))
 
+    def test_repair_hold_allows_only_allowlisted_mining_recovery_actions(self) -> None:
+        self.write_state(
+            self.control_state(
+                "repair_hold",
+                allowed_mutations=[
+                    f"{automation_control.ACTION_ASIC_POOL_START}:asic-pool",
+                    f"{automation_control.ACTION_ASIC_POOL_RESTART}:asic-pool",
+                    f"{automation_control.ACTION_ASIC_MINER_OPEN_RESTART}:*",
+                    f"{automation_control.ACTION_NODE_RESTART}:*",
+                    f"{automation_control.ACTION_CONFIG_EDIT}:*",
+                ],
+            )
+        )
+
+        pool_start = self.check(automation_control.ACTION_ASIC_POOL_START, target="asic-pool")
+        pool_restart = self.check(automation_control.ACTION_ASIC_POOL_RESTART, target="asic-pool")
+        miner_restart = self.check(automation_control.ACTION_ASIC_MINER_OPEN_RESTART, target="192.168.1.101")
+        node_restart = self.check(automation_control.ACTION_NODE_RESTART, target="node")
+        config_edit = self.check(automation_control.ACTION_CONFIG_EDIT, target="node.env")
+
+        self.assertTrue(pool_start.allowed, pool_start.reason)
+        self.assertTrue(pool_restart.allowed, pool_restart.reason)
+        self.assertTrue(miner_restart.allowed, miner_restart.reason)
+        self.assertFalse(node_restart.allowed)
+        self.assertFalse(config_edit.allowed)
+        self.assertEqual(2, len(self.event_lines()))
+
+    def test_controlled_stop_ignores_mining_recovery_allowlist(self) -> None:
+        self.write_state(
+            self.control_state(
+                "controlled_stop",
+                allowed_mutations=[f"{automation_control.ACTION_ASIC_POOL_START}:asic-pool"],
+            )
+        )
+
+        decision = self.check(automation_control.ACTION_ASIC_POOL_START, target="asic-pool")
+
+        self.assertFalse(decision.allowed)
+        self.assertIn("controlled_stop", decision.reason)
+
     def test_normal_control_allows_high_risk_mutation(self) -> None:
         self.write_state(self.control_state("normal"))
 
@@ -383,6 +423,127 @@ class AutomationControlTests(unittest.TestCase):
         lock_handle.close.assert_called_once()
         self.assertEqual("running", writes[0]["status"])
         self.assertEqual("ok", writes[-1]["status"])
+
+    def test_watchdog_flags_missing_managed_asic_lane_when_api_stalls(self) -> None:
+        worker = "0x1719E0ee598c15957448D5E568948101DF78e7A0"
+        expected_url = pool_ops.default_miner_pool_settings()["pool_url"]
+        managed_rows = [
+            {
+                "ip": "192.168.1.101",
+                "mac": "28:e2:97:1e:c0:b5",
+                "device_id": "mac:28:e2:97:1e:c0:b5",
+                "device_type": "asic",
+                "managed": True,
+                "connected": False,
+                "status": "configured",
+                "expected_pool_url": expected_url,
+                "expected_worker_user": worker,
+            },
+            {
+                "ip": "192.168.1.102",
+                "mac": "2a:71:c7:f5:1f:1e",
+                "device_id": "mac:2a:71:c7:f5:1f:1e",
+                "device_type": "asic",
+                "managed": True,
+                "connected": False,
+                "status": "configured",
+                "expected_pool_url": expected_url,
+                "expected_worker_user": worker,
+            },
+            {
+                "ip": "192.168.1.105",
+                "mac": "28:e2:97:4d:44:3a",
+                "device_id": "mac:28:e2:97:4d:44:3a",
+                "device_type": "asic",
+                "managed": True,
+                "connected": False,
+                "status": "configured",
+                "expected_pool_url": expected_url,
+                "expected_worker_user": worker,
+            },
+            {
+                "ip": "192.168.1.14",
+                "mac": "28:e2:97:3e:39:63",
+                "device_id": "mac:28:e2:97:3e:39:63",
+                "device_type": "asic",
+                "managed": True,
+                "connected": False,
+                "status": "configured",
+                "expected_pool_url": expected_url,
+                "expected_worker_user": worker,
+            },
+        ]
+        status = {
+            "mining_address": worker,
+            "pool_health": {"job_notify_count": 100},
+            "pool_metrics": {"active_connections": 3, "authorized_miners": 3, "ready_miners": 3},
+            "miner_health": {"miners": managed_rows},
+        }
+        active_lanes = [
+            {"mac": "28:e2:97:1e:c0:b5", "pool_job_state_authorized": True},
+            {"mac": "2a:71:c7:f5:1f:1e", "pool_job_state_authorized": True},
+            {"mac": "28:e2:97:3e:39:63", "pool_job_state_authorized": True},
+        ]
+
+        with unittest.mock.patch.object(watchdog, "collect_pool_job_state_activity", return_value=active_lanes), unittest.mock.patch.object(
+            watchdog, "get_miner_pools", side_effect=TimeoutError("timed out")
+        ), unittest.mock.patch.object(
+            watchdog, "get_miner_cgminer_devs", side_effect=TimeoutError("timed out")
+        ):
+            affected = watchdog.asic_api_stall_primary_miners(status)
+
+        self.assertEqual(["192.168.1.105"], [item["ip"] for item in affected])
+        self.assertTrue(affected[0]["pool_job_state_missing_lane"])
+        self.assertTrue(affected[0]["restart_open_first"])
+        self.assertEqual(watchdog.DEFAULT_ASIC_MISSING_LANE_CONFIRM_SECONDS, affected[0]["api_stall_confirm_seconds"])
+
+    def test_watchdog_does_not_flag_missing_asic_lane_when_api_is_healthy(self) -> None:
+        worker = "0x1719E0ee598c15957448D5E568948101DF78e7A0"
+        expected_url = pool_ops.default_miner_pool_settings()["pool_url"]
+        status = {
+            "mining_address": worker,
+            "pool_health": {"job_notify_count": 100},
+            "pool_metrics": {"active_connections": 1, "authorized_miners": 1, "ready_miners": 1},
+            "miner_health": {
+                "miners": [
+                    {
+                        "ip": "192.168.1.101",
+                        "mac": "28:e2:97:1e:c0:b5",
+                        "device_id": "mac:28:e2:97:1e:c0:b5",
+                        "device_type": "asic",
+                        "managed": True,
+                        "connected": False,
+                        "status": "configured",
+                        "expected_pool_url": expected_url,
+                        "expected_worker_user": worker,
+                    },
+                    {
+                        "ip": "192.168.1.105",
+                        "mac": "28:e2:97:4d:44:3a",
+                        "device_id": "mac:28:e2:97:4d:44:3a",
+                        "device_type": "asic",
+                        "managed": True,
+                        "connected": False,
+                        "status": "configured",
+                        "expected_pool_url": expected_url,
+                        "expected_worker_user": worker,
+                    },
+                ]
+            },
+        }
+
+        with unittest.mock.patch.object(
+            watchdog,
+            "collect_pool_job_state_activity",
+            return_value=[{"mac": "28:e2:97:1e:c0:b5", "pool_job_state_authorized": True}],
+        ), unittest.mock.patch.object(
+            watchdog, "get_miner_pools", return_value=[{"active": True}]
+        ), unittest.mock.patch.object(
+            watchdog, "get_miner_cgminer_devs", return_value={"minerstatus": "Mining"}
+        ):
+            affected = watchdog.asic_api_stall_primary_miners(status)
+
+        self.assertEqual([], affected)
 
     def test_sentinel_suppresses_pool_starts_when_control_missing(self) -> None:
         incidents: list[tuple[str, str, str, str]] = []

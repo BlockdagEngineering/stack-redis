@@ -51,11 +51,16 @@ class PoolEfficiencyLossLedgerTests(unittest.TestCase):
         source_health = {"node_mineable": False, "node_submit_ready": False, "node_p2p_mining_fresh": True}
         job_health = {"ok": False}
 
-        contradiction = pool_ops.selected_backend_readiness_contract("node", source_health, job_health, True)
-        hard_unready = pool_ops.selected_backend_readiness_contract("node", source_health, job_health, False)
+        contradiction = pool_ops.selected_backend_readiness_contract("node", source_health, job_health, True, True)
+        paid_but_not_safe = pool_ops.selected_backend_readiness_contract("node", source_health, job_health, True, False)
+        hard_unready = pool_ops.selected_backend_readiness_contract("node", source_health, job_health, False, False)
 
         self.assertTrue(contradiction["contradiction"])
         self.assertFalse(contradiction["hard_unready"])
+        self.assertTrue(contradiction["readiness_override_safe"])
+        self.assertTrue(paid_but_not_safe["contradiction"])
+        self.assertTrue(paid_but_not_safe["hard_unready"])
+        self.assertFalse(paid_but_not_safe["readiness_override_safe"])
         self.assertFalse(hard_unready["contradiction"])
         self.assertTrue(hard_unready["hard_unready"])
 
@@ -78,6 +83,101 @@ class PoolEfficiencyLossLedgerTests(unittest.TestCase):
                 "template_build_error_blocking=true",
             ],
         )
+
+    def test_native_p2p_current_safety_survives_template_readiness_flicker(self) -> None:
+        self.assertTrue(
+            pool_ops.selected_backend_native_p2p_current_safe(
+                {
+                    "healthy": True,
+                    "node_mineable": False,
+                    "node_submit_ready": False,
+                    "node_p2p_mining_fresh": True,
+                    "node_p2p_fresh_consensus_peer_count": 2,
+                    "node_p2p_best_peer_lead_blocks": pool_ops.CATCHUP_NATIVE_P2P_MAX_PEER_LEAD_BLOCKS,
+                }
+            )
+        )
+
+    def test_native_p2p_current_safety_rejects_peer_loss_and_peer_lead(self) -> None:
+        peer_loss = {
+            "healthy": True,
+            "node_p2p_mining_fresh": True,
+            "node_p2p_fresh_consensus_peer_count": 1,
+            "node_p2p_best_peer_lead_blocks": 0,
+        }
+        peer_lead = {
+            "healthy": True,
+            "node_p2p_mining_fresh": True,
+            "node_p2p_fresh_consensus_peer_count": 3,
+            "node_p2p_best_peer_lead_blocks": pool_ops.CATCHUP_NATIVE_P2P_MAX_PEER_LEAD_BLOCKS + 1,
+        }
+        stale = {
+            "healthy": True,
+            "node_p2p_mining_fresh": False,
+            "node_p2p_fresh_consensus_peer_count": 3,
+            "node_p2p_best_peer_lead_blocks": 0,
+        }
+
+        self.assertFalse(pool_ops.selected_backend_native_p2p_current_safe(peer_loss))
+        self.assertFalse(pool_ops.selected_backend_native_p2p_current_safe(peer_lead))
+        self.assertFalse(pool_ops.selected_backend_native_p2p_current_safe(stale))
+
+    def test_selected_backend_safety_rejects_invalid_template_coinbase(self) -> None:
+        source_health = {
+            "healthy": True,
+            "node_template_coinbase_valid": False,
+            "node_mineable": True,
+            "node_submit_ready": True,
+            "node_p2p_mining_fresh": True,
+            "node_p2p_fresh_consensus_peer_count": 3,
+            "node_p2p_best_peer_lead_blocks": 0,
+        }
+
+        self.assertFalse(pool_ops.selected_backend_mining_safe(source_health))
+        self.assertFalse(pool_ops.selected_backend_native_p2p_current_safe(source_health))
+        self.assertIn("template_coinbase_valid=false", pool_ops.selected_backend_unready_reasons(source_health))
+
+    def test_template_coinbase_valid_signal_keeps_missing_template_unknown(self) -> None:
+        self.assertIsNone(pool_ops.template_coinbase_valid_signal(False, "", "node_syncing"))
+        self.assertFalse(
+            pool_ops.template_coinbase_valid_signal(
+                False,
+                "0x0000000000000000000000000000000000000000",
+                "zero-template-coinbase",
+            )
+        )
+
+    def test_selected_backend_safety_fails_closed_on_unknown_peer_floor_or_lead(self) -> None:
+        base = {
+            "healthy": True,
+            "node_mineable": True,
+            "node_submit_ready": True,
+            "node_p2p_mining_fresh": True,
+            "node_p2p_fresh_consensus_peer_count": 3,
+            "node_p2p_best_peer_lead_blocks": 0,
+        }
+
+        self.assertTrue(pool_ops.selected_backend_mining_safe(base))
+        self.assertTrue(pool_ops.selected_backend_native_p2p_current_safe(base))
+
+        missing_peers = dict(base)
+        missing_peers.pop("node_p2p_fresh_consensus_peer_count")
+        self.assertFalse(pool_ops.selected_backend_mining_safe(missing_peers))
+        self.assertFalse(pool_ops.selected_backend_native_p2p_current_safe(missing_peers))
+
+        missing_lead = dict(base)
+        missing_lead.pop("node_p2p_best_peer_lead_blocks")
+        self.assertFalse(pool_ops.selected_backend_mining_safe(missing_lead))
+        self.assertFalse(pool_ops.selected_backend_native_p2p_current_safe(missing_lead))
+
+        for lead in (10, 11, 12):
+            safe = dict(base, node_p2p_best_peer_lead_blocks=lead)
+            self.assertTrue(pool_ops.selected_backend_mining_safe(safe), f"lead={lead}")
+            self.assertTrue(pool_ops.selected_backend_native_p2p_current_safe(safe), f"lead={lead}")
+
+        unsafe = dict(base, node_p2p_best_peer_lead_blocks=13)
+        self.assertFalse(pool_ops.selected_backend_mining_safe(unsafe))
+        self.assertFalse(pool_ops.selected_backend_native_p2p_current_safe(unsafe))
 
     def test_selected_backend_source_degradation_is_advisory_with_recent_paid_work(self) -> None:
         advisory = pool_ops.selected_backend_source_degradation(True, True)
@@ -103,6 +203,51 @@ class PoolEfficiencyLossLedgerTests(unittest.TestCase):
         self.assertIn("mining work is intentionally paused", policy["summary"])
         self.assertIn("Leave miners configured", policy["user_message"])
         self.assertEqual(policy["trigger"], "lag_threshold")
+
+    def test_catchup_policy_ignores_remaining_blocks_when_paid_work_recent(self) -> None:
+        policy = pool_ops.build_catchup_policy(
+            {
+                "status": "syncing",
+                "remaining_blocks": 14_982,
+                "nodes": {"node": {"remaining_blocks": 14_982, "peer_ahead_blocks": 24}},
+            },
+            {"node": {"remaining_blocks": 14_982, "peer_ahead_blocks": 24}},
+            {"pool": {"running": True}},
+            {},
+            mining_ready=True,
+            ignore_remaining_blocks=True,
+        )
+
+        self.assertFalse(policy["active"])
+        self.assertTrue(policy["mining_ready"])
+        self.assertTrue(policy["remaining_blocks_advisory"])
+        self.assertEqual(policy["lag_blocks"], 24)
+
+    def test_catchup_policy_treats_evm_lag_as_advisory_when_native_p2p_is_safe(self) -> None:
+        source_health = {
+            "node_mineable": False,
+            "node_submit_ready": False,
+            "node_p2p_mining_fresh": True,
+            "node_p2p_fresh_consensus_peer_count": 7,
+            "node_p2p_best_peer_lead_blocks": 0,
+        }
+        policy = pool_ops.build_catchup_policy(
+            {
+                "status": "syncing",
+                "remaining_blocks": 14_982,
+                "nodes": {"node": {"remaining_blocks": 14_982}},
+            },
+            {"node": {"remaining_blocks": 14_982}},
+            {"pool": {"running": True}},
+            source_health,
+            mining_ready=pool_ops.selected_backend_native_p2p_current_safe(source_health),
+            ignore_remaining_blocks=pool_ops.selected_backend_native_p2p_current_safe(source_health),
+        )
+
+        self.assertFalse(policy["active"])
+        self.assertEqual(policy["lag_blocks"], 0)
+        self.assertTrue(policy["mining_ready"])
+        self.assertTrue(policy["remaining_blocks_advisory"])
 
     def test_catchup_policy_uses_io_pressure_as_primary_trigger(self) -> None:
         policy = pool_ops.build_catchup_policy(
@@ -207,6 +352,53 @@ pool_shares_rejected_total{pool_id="0",reason="invalidated_job"} 15
         self.assertFalse(payload["selected_backend_source_health"]["node_mineable"])
         self.assertEqual(payload["loss_ledger"]["severity"], "critical")
         self.assertEqual(payload["loss_ledger"]["share_outcomes"]["accepted_ratio_percent"], 25.0)
+
+    def test_pool_metrics_accept_node_label_for_backend_health(self) -> None:
+        metrics = """
+pool_active_connections 3
+pool_rpc_backend_selected{node="node",pool_id="0"} 1
+pool_rpc_backend_healthy{node="node",pool_id="0"} 1
+pool_rpc_backend_node_health_mineable{node="node",pool_id="0"} 1
+pool_rpc_backend_node_health_submit_ready{node="node",pool_id="0"} 1
+pool_rpc_backend_node_health_p2p_mining_fresh{node="node",pool_id="0"} 1
+pool_rpc_backend_node_health_p2p_fresh_consensus_peer_count{node="node",pool_id="0"} 3
+pool_rpc_backend_node_health_p2p_best_peer_lead_blocks{node="node",pool_id="0"} 0
+pool_job_health_ok{pool_id="0"} 1
+pool_job_health_ready_miners{pool_id="0"} 3
+pool_block_submit_outcomes_total{outcome="accepted",pool_id="0",reason="ok"} 4
+"""
+        pool_ops.fetch_text_url = lambda *_args, **_kwargs: metrics
+
+        payload = pool_ops.collect_pool_prometheus_metrics(
+            {"asic-pool": {"running": True, "network_ips": ["10.0.0.2"]}}
+        )
+
+        self.assertEqual(payload["selected_backend"], "node")
+        self.assertTrue(payload["selected_backend_source_health"]["healthy"])
+        self.assertTrue(payload["selected_backend_source_health"]["node_mineable"])
+        self.assertTrue(pool_ops.selected_backend_mining_safe(payload["selected_backend_source_health"]))
+
+    def test_pool_metrics_parse_template_coinbase_rejects_and_local_stale_ratio(self) -> None:
+        metrics = """
+pool_active_connections 4
+pool_template_coinbase_rejects_total{pool_id="0",reason="zero-template-address",source="ws-push"} 7
+pool_template_coinbase_rejects_total{pool_id="0",reason="wrong-template-address",source="http-fetch"} 2
+pool_block_submit_outcomes_total{outcome="accepted",pool_id="0",reason="ok"} 10
+pool_block_submit_outcomes_total{outcome="rejected-local",pool_id="0",reason="stale-job"} 3
+pool_block_submit_outcomes_total{outcome="rejected-local",pool_id="0",reason="stale-parent"} 2
+"""
+        pool_ops.fetch_text_url = lambda *_args, **_kwargs: metrics
+
+        payload = pool_ops.collect_pool_prometheus_metrics(
+            {"asic-pool": {"running": True, "network_ips": ["10.0.0.2"]}}
+        )
+        stale_stats = pool_ops.local_stale_block_submit_stats(payload["block_submit_outcomes"])
+
+        self.assertEqual(payload["template_coinbase_rejects"]["ws-push:zero-template-address"], 7)
+        self.assertEqual(pool_ops.zero_coinbase_reject_total(payload["template_coinbase_rejects"]), 7)
+        self.assertEqual(stale_stats["accepted"], 10)
+        self.assertEqual(stale_stats["local_stale"], 5)
+        self.assertEqual(stale_stats["local_stale_ratio"], 0.333333)
 
 
 if __name__ == "__main__":

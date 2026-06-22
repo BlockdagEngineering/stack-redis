@@ -31,7 +31,24 @@ def unsafe_catchup_status() -> dict[str, object]:
     }
 
 
-def safe_canonical_status() -> dict[str, object]:
+def native_health(**overrides: object) -> dict[str, object]:
+    health: dict[str, object] = {
+        "chain_current": True,
+        "p2p_mining_fresh": True,
+        "p2p_mining_fresh_reason_code": "ok",
+        "p2p_fresh_consensus_peer_count": 2,
+        "p2p_best_peer_lead_blocks": 0,
+        "get_block_template_ready": True,
+        "submit_ready": True,
+        "mineable_now": True,
+        "template_usable": True,
+        "sync_allowed": True,
+    }
+    health.update(overrides)
+    return health
+
+
+def safe_native_status() -> dict[str, object]:
     return {
         "fresh": True,
         "mode": "synced",
@@ -42,6 +59,7 @@ def safe_canonical_status() -> dict[str, object]:
             "peer_count": 2,
             "nodes": {
                 "blockdag-node-1": {
+                    "native_template_health": native_health(),
                     "canonical_mining_safety": {
                         "safe": True,
                         "schema": "stack_evm_public_reference_v1",
@@ -52,6 +70,35 @@ def safe_canonical_status() -> dict[str, object]:
         },
         "rpc_template_health": {"all_nodes_ready": True},
     }
+
+
+def advisory_evm_sync_status() -> dict[str, object]:
+    status = safe_native_status()
+    status["mode"] = "catchup_pause"
+    status["overall"] = "syncing"
+    status["status_reason"] = "catch-up pause active: EVM reference is behind, native mining safety is current"
+    status["catchup_policy"] = {
+        "active": True,
+        "remaining_blocks_advisory": True,
+        "native_advisory_safe": True,
+    }
+    status["sync_health"] = {
+        "catchup_pause_active": True,
+        "native_chain_progress_safe": True,
+    }
+    sync_progress = status["sync_progress"]
+    sync_progress["status"] = "syncing"
+    sync_progress["remaining_blocks"] = 5
+    sync_progress["chain_syncing"] = False
+    sync_progress["evm_chain_syncing"] = True
+    sync_progress["mining_advisory_sync"] = True
+    node = sync_progress["nodes"]["blockdag-node-1"]
+    node["status"] = "syncing"
+    node["remaining_blocks"] = 5
+    node["chain_syncing"] = False
+    node["evm_chain_syncing"] = True
+    node["mining_advisory_sync"] = True
+    return status
 
 
 class SingleGateOrchestrationTests(unittest.TestCase):
@@ -80,7 +127,7 @@ class SingleGateOrchestrationTests(unittest.TestCase):
         self.assertIn("overall stack status is syncing", decision.reason)
 
     def test_shared_gate_blocks_sync_progress_even_when_top_level_is_mining(self) -> None:
-        status = safe_canonical_status()
+        status = safe_native_status()
         status["mode"] = "mining"
         status["overall"] = "ok"
         sync_progress = status["sync_progress"]
@@ -92,7 +139,48 @@ class SingleGateOrchestrationTests(unittest.TestCase):
         self.assertFalse(decision.allowed)
         self.assertIn("sync progress is syncing with 5 block(s) remaining", decision.reason)
 
-    def test_shared_gate_blocks_synced_status_without_canonical_proof(self) -> None:
+    def test_shared_gate_allows_native_safe_advisory_evm_sync(self) -> None:
+        decision = pool_start_gate.pool_start_decision(advisory_evm_sync_status())
+
+        self.assertTrue(decision.allowed, decision.reason)
+
+    def test_shared_gate_blocks_advisory_evm_sync_when_native_proof_is_unsafe(self) -> None:
+        status = advisory_evm_sync_status()
+        node = status["sync_progress"]["nodes"]["blockdag-node-1"]
+        node["native_template_health"] = native_health(
+            p2p_mining_fresh=False,
+            p2p_mining_fresh_reason_code="no_fresh_peers",
+        )
+
+        decision = pool_start_gate.pool_start_decision(status)
+
+        self.assertFalse(decision.allowed)
+        self.assertIn("p2p_mining_fresh_not_true:no_fresh_peers", decision.reason)
+        self.assertIn("chain catch-up pause is active", decision.reason)
+
+    def test_shared_gate_peer_lead_threshold_is_inclusive_and_fails_closed_when_unknown(self) -> None:
+        for lead in (10, 11, 12):
+            status = safe_native_status()
+            node = status["sync_progress"]["nodes"]["blockdag-node-1"]
+            node["native_template_health"] = native_health(p2p_best_peer_lead_blocks=lead)
+            decision = pool_start_gate.pool_start_decision(status)
+            self.assertTrue(decision.allowed, f"lead={lead}: {decision.reason}")
+
+        unsafe = safe_native_status()
+        unsafe["sync_progress"]["nodes"]["blockdag-node-1"]["native_template_health"] = native_health(
+            p2p_best_peer_lead_blocks=13
+        )
+        self.assertFalse(pool_start_gate.pool_start_decision(unsafe).allowed)
+
+        unknown = safe_native_status()
+        unknown["sync_progress"]["nodes"]["blockdag-node-1"]["native_template_health"].pop(
+            "p2p_best_peer_lead_blocks"
+        )
+        decision = pool_start_gate.pool_start_decision(unknown)
+        self.assertFalse(decision.allowed)
+        self.assertIn("p2p_peer_lead_unknown", decision.reason)
+
+    def test_shared_gate_blocks_synced_status_without_native_proof(self) -> None:
         decision = pool_start_gate.pool_start_decision(
             {
                 "fresh": True,
@@ -104,15 +192,44 @@ class SingleGateOrchestrationTests(unittest.TestCase):
         )
 
         self.assertFalse(decision.allowed)
-        self.assertIn("canonical public-chain safety proof is missing", decision.reason)
+        self.assertIn("native mining safety proof is missing", decision.reason)
 
-    def test_shared_gate_allows_ready_status_with_canonical_proof(self) -> None:
-        decision = pool_start_gate.pool_start_decision(safe_canonical_status())
+    def test_shared_gate_blocks_canonical_only_status_without_native_proof(self) -> None:
+        status = safe_native_status()
+        node = status["sync_progress"]["nodes"]["blockdag-node-1"]
+        node.pop("native_template_health")
+
+        decision = pool_start_gate.pool_start_decision(status)
+
+        self.assertFalse(decision.allowed)
+        self.assertIn("native mining safety proof is missing", decision.reason)
+
+    def test_shared_gate_allows_ready_status_with_native_proof(self) -> None:
+        decision = pool_start_gate.pool_start_decision(safe_native_status())
 
         self.assertTrue(decision.allowed, decision.reason)
 
+    def test_shared_gate_allows_native_safe_status_without_public_canonical_proof(self) -> None:
+        status = safe_native_status()
+        node = status["sync_progress"]["nodes"]["blockdag-node-1"]
+        node.pop("canonical_mining_safety")
+
+        decision = pool_start_gate.pool_start_decision(status)
+
+        self.assertTrue(decision.allowed, decision.reason)
+
+    def test_shared_gate_blocks_native_unsafe_even_with_public_canonical_proof(self) -> None:
+        status = safe_native_status()
+        node = status["sync_progress"]["nodes"]["blockdag-node-1"]
+        node["native_template_health"] = native_health(p2p_mining_fresh=False, p2p_mining_fresh_reason_code="no_fresh_peers")
+
+        decision = pool_start_gate.pool_start_decision(status)
+
+        self.assertFalse(decision.allowed)
+        self.assertIn("p2p_mining_fresh_not_true:no_fresh_peers", decision.reason)
+
     def test_shared_gate_blocks_single_peer_even_when_synced(self) -> None:
-        status = safe_canonical_status()
+        status = safe_native_status()
         status["sync_progress"]["peer_count"] = 1
 
         decision = pool_start_gate.pool_start_decision(status)

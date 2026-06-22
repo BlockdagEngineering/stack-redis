@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-PORT="${P2P_PORT:-8150}"
+PORT="${P2P_PORT:-8155}"
 PROTOCOLS="${BDAG_P2P_PROTOCOLS:-tcp}"
 
 add_rule() {

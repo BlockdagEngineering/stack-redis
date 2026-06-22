@@ -37,6 +37,32 @@ class StackDefaultsTests(unittest.TestCase):
         )
         self.assertIn(expected, compose)
 
+    def test_stale_race_reconnect_is_disabled_by_default(self) -> None:
+        defaults = parse_env(ROOT_DIR / "ops/config/stack-defaults.env")
+        compose = (ROOT_DIR / "docker-compose.yml").read_text(encoding="utf-8")
+
+        self.assertEqual(defaults["POOL_STALE_RACE_CLIENT_RECONNECT_THRESHOLD"], "0")
+        self.assertIn(
+            "POOL_STALE_RACE_CLIENT_RECONNECT_THRESHOLD: "
+            "${POOL_STALE_RACE_CLIENT_RECONNECT_THRESHOLD:-0}",
+            compose,
+        )
+
+    def test_evm_head_guard_is_advisory_by_default(self) -> None:
+        defaults = parse_env(ROOT_DIR / "ops/config/stack-defaults.env")
+        env_example = parse_env(ROOT_DIR / ".env.example")
+        portable = parse_env(ROOT_DIR / "ops/portable.env.example")
+        compose = (ROOT_DIR / "docker-compose.yml").read_text(encoding="utf-8")
+
+        self.assertEqual(defaults["POOL_RPC_ROUTER_EVM_HEAD_GUARD_ENABLED"], "false")
+        self.assertEqual(env_example["POOL_RPC_ROUTER_EVM_HEAD_GUARD_ENABLED"], "false")
+        self.assertEqual(portable["POOL_RPC_ROUTER_EVM_HEAD_GUARD_ENABLED"], "false")
+        self.assertIn(
+            "POOL_RPC_ROUTER_EVM_HEAD_GUARD_ENABLED: "
+            "${POOL_RPC_ROUTER_EVM_HEAD_GUARD_ENABLED:-false}",
+            compose,
+        )
+
     def test_pool_database_defaults_match_compose(self) -> None:
         defaults = parse_env(ROOT_DIR / "ops/config/stack-defaults.env")
         env_example = parse_env(ROOT_DIR / ".env.example")
@@ -48,6 +74,44 @@ class StackDefaultsTests(unittest.TestCase):
         self.assertEqual(env_example["POSTGRES_DB"], defaults["BDAG_POOL_DB_NAME"])
         self.assertIn('os.environ.get("BDAG_POOL_DB_USER", "bdag_pool")', pool_ops)
         self.assertIn('os.environ.get("BDAG_POOL_DB_NAME", "bdagpool")', pool_ops)
+
+    def test_native_safe_mining_defaults_are_stack_owned(self) -> None:
+        defaults = parse_env(ROOT_DIR / "ops/config/stack-defaults.env")
+        env_example = parse_env(ROOT_DIR / ".env.example")
+        compose = (ROOT_DIR / "docker-compose.yml").read_text(encoding="utf-8")
+
+        expected = {
+            "NODE_DATA_DIR": "./data/node",
+            "POOL_ASIC_ARP_TABLE_PATH": "/host/proc/net/arp",
+            "POOL_RPC_ROUTER_NODE_HEALTH_FRESH_TEMPLATE_GRACE_SECONDS": "15",
+            "POOL_RPC_ROUTER_NODE_HEALTH_MIN_CONSENSUS_PEERS": "2",
+            "POOL_RECENT_STALE_BLOCK_CANDIDATE_SUBMIT_GRACE_MS": "1750",
+            "POOL_TEMPLATE_TTL_REFRESH_MS": "100",
+            "POOL_MAX_BLOCK_CANDIDATE_JOB_AGE_MS": "1750",
+            "POOL_BLOCK_TIMING_CONTROLLER_MIN_JOB_AGE_MS": "1750",
+            "POOL_BLOCK_TIMING_CONTROLLER_MAX_JOB_AGE_MS": "1750",
+            "POOL_BLOCK_TIMING_CONTROLLER_MIN_TEMPLATE_TTL_MS": "100",
+            "POOL_BLOCK_TIMING_CONTROLLER_MAX_TEMPLATE_TTL_MS": "100",
+            "POOL_AUTO_TUNE_BLOCK_CANDIDATE_JOB_AGE": "true",
+            "POOL_AUTO_TUNE_BLOCK_CANDIDATE_MAX_AGE_MS": "8000",
+            "POOL_PREEMPTIVE_BLOCK_CANDIDATE_CLEAN_REISSUE_ENABLED": "false",
+            "POOL_PREEMPTIVE_BLOCK_CANDIDATE_REFRESH_DELAY_MS": "0",
+            "POOL_PREEMPTIVE_BLOCK_CANDIDATE_REFRESH_INTERVAL_MS": "20",
+            "POOL_PREEMPTIVE_BLOCK_CANDIDATE_REFRESH_TIMEOUT_MS": "1000",
+            "BDAG_ENABLE_NODE_MINING": "0",
+            "BDAG_NODE_MODULES": "Blockdag,miner",
+            "BDAG_EVM_SYNC_BACKOFF_SECONDS": "60",
+        }
+        for key, value in expected.items():
+            self.assertEqual(defaults[key], value)
+            self.assertEqual(env_example[key], value)
+            self.assertIn(f"${{{key}:-{value}}}", compose)
+
+        self.assertIn(
+            "MINING_POOL_ADDRESS: ${MINING_POOL_ADDRESS:?set MINING_POOL_ADDRESS to a non-zero payout address}",
+            compose,
+        )
+        self.assertIn("POOL_COINBASE_ADDRESS: ${POOL_COINBASE_ADDRESS:-}", compose)
 
     def test_stack_defaults_validator_passes(self) -> None:
         result = subprocess.run(

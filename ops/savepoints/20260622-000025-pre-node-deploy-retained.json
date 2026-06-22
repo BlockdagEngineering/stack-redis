@@ -1,0 +1,107 @@
+{
+  "config_hashes": {
+    "compose_config_sha256": "f57e0b5ac8d97f9b7468740d5e13d303ad0464978c21c0290c7d9d9fba590154",
+    "env_sha256_redacted_reference_only": "f46f2c508dec2d79fdf286c5674d01913b80bdc3241aba2d01e06029b7079ff2",
+    "node_conf_sha256": "d403a9f2b9b9bc1ebd625d3a9b79cdafd8a693b8546455d3b44fce3a4f69af62"
+  },
+  "images": {
+    "dashboard": {
+      "candidate_latest_id": "sha256:ade262780dbc75954ace95ff0f88c8eccc702453127e898bb59e2b2c7709afb6",
+      "live_image_id": "sha256:ade262780dbc75954ace95ff0f88c8eccc702453127e898bb59e2b2c7709afb6"
+    },
+    "node": {
+      "candidate_latest_id": "sha256:1fc2c1bc63a9e73aaf7190e571eeb130c96a263f956bdfee84ee67129969c147",
+      "live_image_id": "sha256:db65d3cd9860cc01e2f241832f2c525299d5140073a8d683ba7ef04c0012ee85"
+    },
+    "pool": {
+      "candidate_latest_id": "sha256:6c9f9647273e036e8061657ce6c31d8ccc6e4a12ffab6325a2a25e47ce3051f4",
+      "live_image_id": "sha256:6c9f9647273e036e8061657ce6c31d8ccc6e4a12ffab6325a2a25e47ce3051f4"
+    },
+    "status-sampler": {
+      "candidate_latest_id": "sha256:6e45c75e084826a9ec44f0bd101b124610b450f31908396b9972d99685cd7739",
+      "live_image_id": "sha256:6e45c75e084826a9ec44f0bd101b124610b450f31908396b9972d99685cd7739"
+    }
+  },
+  "live_health": {
+    "accepted_ok": 38.0,
+    "active_connections": 4.0,
+    "authorized_miners": 4,
+    "can_accept_shares": true,
+    "can_submit_blocks": true,
+    "fresh_consensus_peers": 11,
+    "mode": "mining",
+    "overall": "ok",
+    "p2p_mining_fresh": true,
+    "paid_blocks": 40.0,
+    "ready_miners": 4,
+    "template_coinbase_valid": true
+  },
+  "live_node_command": "Path=/usr/local/bin/docker-entrypoint-nodeworker.sh Args=[\"/usr/local/bin/nodeworker\",\"--node-binary=/usr/local/bin/blockdag-node\",\"--node-args=--configfile /etc/bdagStack/node.conf\",\"--rpc-url=ws://127.0.0.1:18546\",\"--dag-rpc-url=http://127.0.0.1:38131\",\"--persist-root=/var/lib/bdagStack/nodeworker\",\"--health-min-peers=2\",\"--rollout-window=30m\"] Entrypoint=[\"/usr/local/bin/docker-entrypoint-nodeworker.sh\",\"/usr/local/bin/nodeworker\",\"--node-binary=/usr/local/bin/blockdag-node\",\"--node-args=--configfile /etc/bdagStack/node.conf\",\"--rpc-url=ws://127.0.0.1:18546\",\"--dag-rpc-url=http://127.0.0.1:38131\",\"--persist-root=/var/lib/bdagStack/nodeworker\",\"--health-min-peers=2\",\"--rollout-window=30m\"]",
+  "purpose": "Pre-node-deploy rollback point after dashboard/status-sampler and pool candidate deploys recovered to 4 ready miners; retain until post-upgrade savepoint is proven.",
+  "recorded_at": "2026-06-22T00:00:25+0200",
+  "rollback_commands": [
+    "docker tag sha256:db65d3cd9860cc01e2f241832f2c525299d5140073a8d683ba7ef04c0012ee85 stack-node:latest",
+    "docker compose up -d --no-deps node",
+    "docker tag sha256:0f5f66595a3708eea4b084ae1a2c8a9457bb1ae28c9ddfbdf414d87faae0b03d stack-pool:latest",
+    "docker compose up -d --no-deps pool",
+    "docker tag sha256:4b04283d589857d4d9e45bf6656dd7293671879ec472a89e86d32af9647c7686 stack-dashboard:latest",
+    "docker tag sha256:678391c079a5544621ac100e7a3da55a12b90c25d586ba7d4c69b66817b765ff stack-status-sampler:latest",
+    "docker compose up -d --no-deps dashboard status-sampler"
+  ],
+  "safety_invariant": "Live node must use Blockdag and miner modules only, with --miner and non-zero --miningaddr. The separate p2p module remains excluded.",
+  "savepoint_id": "20260622-000025-pre-node-deploy-retained",
+  "schema_version": 1,
+  "source_commits": {
+    "blockdag-corechain": {
+      "branch": "codex/native-safe-mining-20260620-corechain",
+      "head": "33a449269607790e42bc38bcfa3fd213d82ed02e",
+      "status_short": [
+        "M core/json/blocktemplate.go",
+        " M services/miner/health.go",
+        " M services/miner/miner_test.go"
+      ]
+    },
+    "pool": {
+      "branch": "codex/native-safe-mining-20260620-pool",
+      "head": "e02f5b5d68ca62888cbd145fd6928e04c98d3555",
+      "status_short": [
+        "M internal/pool/server/evm_head_guard.go",
+        " M internal/pool/server/jobBroadcast.go",
+        " M internal/pool/server/job_broadcast_test.go",
+        " M internal/pool/server/maturity.go",
+        " M internal/pool/server/metrics.go",
+        " M internal/pool/server/node_health.go",
+        " M internal/pool/server/rpc_router.go",
+        " M internal/pool/server/rpc_router_test.go"
+      ]
+    },
+    "redis-dash": {
+      "branch": "codex/native-safe-mining-20260620-dashboard",
+      "head": "8a28b1817f3e10fe1505be5ba1dab93913cb6400",
+      "status_short": [
+        "M main.go",
+        " M status_test.go"
+      ]
+    },
+    "stack-redis": {
+      "branch": "codex/native-safe-mining-20260620-stack",
+      "head": "7b3c812d476bd4d3ef96a9b449de1d692330e40b",
+      "status_short": [
+        "M .env.example",
+        " M docker-compose.yml",
+        " M docker/entrypoint-nodeworker.sh",
+        " M ops/config/stack-defaults.env",
+        " M ops/pool_ops.py",
+        " M ops/tests/test_no_miner_collect_status.py",
+        " M ops/tests/test_nodeworker_entrypoint.py",
+        " M ops/tests/test_pool_efficiency_loss_ledger.py",
+        " M ops/tests/test_stack_defaults.py",
+        " M ops/tests/test_watchdog_sync_restart.py",
+        " M ops/watchdog.py",
+        " M scripts/validate-stack-defaults.py",
+        "?? ops/savepoints/20260621-233309-tonight-baseline-retained.json"
+      ]
+    }
+  },
+  "timezone": "Africa/Johannesburg"
+}

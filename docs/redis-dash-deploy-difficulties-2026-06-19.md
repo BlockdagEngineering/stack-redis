@@ -159,8 +159,29 @@ Mitigations now required by source:
 - Chain-state self-heal stops/parks mining work, quarantines the stale node
   data, restores from a configured trusted source or snapshot, restarts
   node/dashboard, and leaves the pool stopped until readiness gates pass.
-- Mining must never be resumed merely because native P2P is fresh if local EVM
-  remains syncing or materially behind public reference heads.
+- Local EVM sync lag is advisory when native template health and pool backend
+  metrics prove mining safety (`mineable`, `submit_ready`, `p2p_mining_fresh`,
+  zero peer lead). It becomes a hard blocker only when native safety is missing
+  or public/reference evidence shows explicit divergence or solo-mining risk.
+
+### Dashboard EVM Polling Must Back Off During Sync
+
+After node logging was reduced, the remaining avoidable pressure came from
+redis-dash EVM polling and trend backfill retrying while the EVM gateway was
+still syncing or had no active relay peer. That produced repeated gateway
+warnings and extra node work without improving mining readiness.
+
+Mitigations now required by source:
+
+- Redis-dash treats explicit EVM sync/no-relay responses as a cooldown signal
+  and pauses live polling, warmup, and trend catch-up during
+  `BDAG_EVM_SYNC_BACKOFF_SECONDS` instead of hammering `eth_getBlockByNumber`.
+- The first `eth_getBlockByNumber(latest)` sync/no-peer failure is terminal for
+  that pass; redis-dash must not immediately fall through to `eth_blockNumber`
+  and another `latest` request.
+- Stack defaults set `BDAG_EVM_SYNC_BACKOFF_SECONDS=60`, which keeps the UI
+  responsive when EVM is healthy while protecting the native mining path during
+  catch-up.
 
 ### Peer Lists And Peerstores Need Durable Service Endpoints
 
@@ -193,6 +214,185 @@ source of truth is:
 - direct container/process state: `docker ps`, listening ports, and recent
   `pool`/`node` logs.
 
+`backend_mineable` and `backend_submit_ready` can briefly drop to zero during
+parent/template invalidation immediately after accepted blocks. Redis-dash
+therefore records a per-sample `accepted_block_submissions_delta` from the live
+pool metrics stream. A fresh accepted-block delta may bridge that transient only
+when P2P freshness, peer lead, ready miners, and template age are also safe; it
+must not be replaced with a lifetime accepted-block total.
+
+ASIC MAC identity must not be pinned to stale IP addresses. During the live
+recovery, `POOL_ASIC_MAC_OVERRIDES` still mapped a previous DHCP assignment, so
+two active Stratum lanes were reported with the same MAC even though the host ARP
+table had the correct current IP-to-MAC mapping. Pool releases must prefer a
+complete live ARP/neighbor entry over an override and use overrides only as a
+fallback when the container cannot see LAN neighbors.
+
 During the fixed run, the pool correctly moved from zero ready miners while the
 node was behind peers to four ready miners after native health returned
 `submit_ready=true`.
+
+### 2026-06-21 Live Node Mutation Incident
+
+The stack later proved a separate automation hazard. While the pool had already
+accepted thousands of blocks, the status sampler saw ASIC demand and enabled
+node mining/template support. The accepted-block "recent" check had aged out by
+roughly 70 seconds, so the repair path edited runtime config and recreated the
+`node` service. The recreated node exposed near-genesis chain data even though
+the previous node had been mining close to the live chain, forcing the pool into
+`node_syncing` and correctly pausing jobs.
+
+Root failure:
+
+- paid work was treated as recent-only, not as durable evidence that the node is
+  production-active;
+- catch-up/runtime and node-template repairs were allowed to mutate node config
+  before proving the pool was cold or idle;
+- Compose recreate was used where preserving the existing node process identity
+  and datadir view mattered more than applying a convenience config repair.
+
+Mitigations now required by source:
+
+- Any running `pool` container, recent paid work, or lifetime accepted-block
+  evidence blocks node config edits and `node` recreates from status-sampler
+  automation. Cold/idle setup may prepare missing node mining/template support
+  before the pool is live, but only after native safety gates pass.
+- `recreate_node_services()` is the central guard for status-sampler node
+  recreates. Repair paths must call it rather than constructing their own
+  Compose recreate command.
+- Catch-up runtime adjustment may pause templates, but it must not rewrite node
+  mining flags, cache settings, peer lists, or recreate `node` while a live pool
+  or accepted-block history exists.
+- Chain restore is an explicit operator/self-heal flow: stop the mining path,
+  quarantine the old datadir, preserve `network.key`, restore a verified
+  datadir/snapshot, start the existing node, and require native
+  `getTemplateHealth` to prove `chain_current`, `p2p_mining_fresh`,
+  `mineable_now`, and `submit_ready` before mining resumes.
+- Release tests must include stale-but-present paid-work evidence. A lifetime
+  accepted-block count is enough to block live node mutation even when the last
+  accepted block is outside the short freshness window.
+- EVM/public-reference lag and cached catch-up state are advisory only when
+  native mining proof is complete: current chain, fresh P2P, fresh consensus
+  peer floor, safe peer lead, template readiness, and submit readiness. Unknown
+  peer count or unknown peer lead fails closed.
+- A selected backend may not be treated as mining-safe from `p2p_mining_fresh`
+  alone. Backend metrics must also include enough peer-count and peer-lead
+  evidence, and connected miners with zero ready lanes keep
+  `can_submit_blocks=false` unless fresh paid-block evidence proves the submit
+  path is already working.
+- `repair_hold` is not a blanket permission model. It remains a hard block for
+  node restarts, node/container recreates, and config edits, but it may carry an
+  explicit allow-list for pool and ASIC recovery actions so a stale incident hold
+  cannot prevent mining recovery after native safety is proven. The pool start
+  gate still makes the final native-safety decision.
+
+### ASIC Pool APIs Can Wedge While Controllers Stay Alive
+
+X100 controllers can still answer `/mcb/status` and `/mcb/setting` while the
+pool/cgminer endpoint `/mcb/pools` times out or returns errors. Treating that
+as "not a miner" hides a recoverable ASIC and leaves pool operators looking at
+only the surviving miners.
+
+Mitigations now required by source:
+
+- Miner discovery keeps an ASIC visible when status/settings identify it but
+  the pool API is wedged. The scan row includes `pool_api_error`, an empty
+  pool list, and `active=false` instead of disappearing.
+- MAC address remains the canonical ASIC identity. DHCP/IP reuse after restart
+  is expected; do not key miner health, retirement, or restart decisions by IP.
+- When native/pool health is good but an ASIC has controller responses and no
+  pool API, restart that ASIC controller first. Do not restart node or pool for
+  this symptom.
+
+### Payout Balance Log Flood Can Steal Catch-Up I/O
+
+When the payout wallet has zero balance and a large mature backlog exists, the
+pool can repeatedly log payout-processing and insufficient-balance lines for
+every eligible block. This does not fix payouts, but it does add Docker log I/O
+while the node is trying to catch up.
+
+Mitigations now required by source:
+
+- The pool checks wallet balance before logging that a payout block is being
+  processed.
+- The pool defers payout transaction submission unless the selected native
+  backend is mining-safe: fresh node health, submit-ready templates, safe P2P,
+  and the same native predicate that allows mining.
+- The lifecycle loop stops scanning further payout blocks after the first
+  insufficient-balance proof in a tick, because later blocks cannot be paid
+  until the wallet balance changes.
+- Payout backlog processing is capped by
+  `POOL_PAYOUT_MAX_BLOCKS_PER_TICK=5` by default so catch-up payouts cannot
+  monopolize RPC and log I/O after the native backend is safe enough to accept
+  payout traffic. Set it to `0` only when explicitly choosing unlimited payout
+  catch-up over mining-node recovery.
+- Repeated insufficient-balance warnings are throttled and summarized while
+  real payout send failures and database update failures remain immediate.
+
+### Stratum Retry Logs Can Steal Catch-Up I/O
+
+When the backend is syncing and templates are intentionally unavailable, X100
+ASICs repeatedly reconnect and retry normal subscribe/authorize flows. Logging
+every accepted socket, request, authorization, and short EOF can create heavy
+Docker log churn without making the node catch up faster.
+
+Mitigations now required by source:
+
+- The pool throttles routine Stratum connection logs by event type, ASIC lane,
+  and detail with `POOL_STRATUM_CONNECTION_LOG_INTERVAL_SECONDS=60` by default.
+- The throttle is logging-only. Stratum behavior, accepted shares, block
+  submissions, invalid JSON, unsupported methods, authorization failures, and
+  socket read errors keep their existing behavior.
+- Set `POOL_STRATUM_CONNECTION_LOG_INTERVAL_SECONDS=0` only during focused
+  Stratum debugging when every retry line is worth the extra log I/O.
+
+### Node Import Logs Can Steal Catch-Up I/O
+
+When the node runs at the upstream default `debuglevel=info`, catch-up emits an
+`Imported new chain segment` line for almost every imported block. On a
+USB-backed mining appliance this produced roughly a thousand Docker log lines
+per minute while the chain was still behind peers, adding avoidable disk I/O to
+the same host that needed to catch up before mining could resume.
+
+Mitigations now required by source:
+
+- The node entrypoint defaults `BDAG_NODE_DEBUG_LEVEL=warn` and
+  `BDAG_NODE_NO_FILE_LOGGING=1`, appending `--debuglevel=warn` and
+  `--nofilelogging` independently of `NODE_ARGS_APPEND`.
+- `NODE_ARGS_APPEND` is still reserved for operator/mining flags. Runtime code
+  quotes env-file values with spaces so generated `.env` files remain
+  sourceable by install/support scripts.
+- The mining-appliance preflight warns when an install is configured for
+  high-volume node logging.
+
+### Stale Repair Holds Can Block The Only Useful Sync Repair
+
+On 2026-06-21 the live node stopped advancing while peer tips kept moving. The
+pool correctly withheld jobs because native readiness reported node syncing and
+unsafe P2P freshness, but the automation control file was still in
+`repair_hold` from a previous incident. That hold allowed pool/ASIC recovery
+only, so node restart and chain-state self-heal attempts were repeatedly
+denied while the pool stayed idle.
+
+Recovery that worked:
+
+- Prove the node is stuck with two direct `eth_syncing` samples. The bad state
+  was `currentBlock` unchanged while `highestBlock` increased.
+- Clear the stale automation hold only after confirming there is no recent
+  paid work and the pool is already withholding jobs.
+- Restart the node without deleting or recreating the datadir. In this
+  incident the peer lead fell from roughly 6259 blocks to zero in minutes.
+- Recreate the pool after pinning the best observed ASIC timing so the pool
+  starts with `POOL_TEMPLATE_TTL_REFRESH_MS=100`,
+  `POOL_MAX_BLOCK_CANDIDATE_JOB_AGE_MS=1750`,
+  `POOL_RECENT_STALE_BLOCK_CANDIDATE_SUBMIT_GRACE_MS=1750`, and multiple block
+  candidates enabled.
+
+Mitigations now required by source:
+
+- Stack defaults and Compose start from the 05:40-05:57 SAST best production
+  timing instead of the old broad cold-start range.
+- The timing controller min/max bounds are pinned to that proven timing so it
+  cannot silently drift away without an explicit config and test change.
+- Regression tests assert the timing defaults across `stack-defaults.env`,
+  `.env.example`, and Compose.

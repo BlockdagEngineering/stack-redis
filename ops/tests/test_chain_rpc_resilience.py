@@ -17,6 +17,8 @@ class ChainRpcResilienceTests(unittest.TestCase):
         self.old_pool_rpc_refused_warn_seconds = pool_ops.POOL_RPC_REFUSED_WARN_SECONDS
         self.old_mining_rpc_call = pool_ops.mining_rpc_call
         self.old_json_rpc_call = pool_ops.json_rpc_call
+        self.old_node_rpc_urls = pool_ops.node_rpc_urls
+        self.old_node_sync_progress = pool_ops.node_sync_progress
         self.old_evm_reference_rpc_urls = pool_ops.evm_reference_rpc_urls
         self.old_alignment_always_sample = pool_ops.EVM_PUBLIC_ALIGNMENT_ALWAYS_SAMPLE
         self.old_alignment_min_samples = pool_ops.EVM_PUBLIC_ALIGNMENT_MIN_SAMPLES
@@ -31,6 +33,8 @@ class ChainRpcResilienceTests(unittest.TestCase):
         pool_ops.POOL_RPC_REFUSED_WARN_SECONDS = self.old_pool_rpc_refused_warn_seconds
         pool_ops.mining_rpc_call = self.old_mining_rpc_call
         pool_ops.json_rpc_call = self.old_json_rpc_call
+        pool_ops.node_rpc_urls = self.old_node_rpc_urls
+        pool_ops.node_sync_progress = self.old_node_sync_progress
         pool_ops.evm_reference_rpc_urls = self.old_evm_reference_rpc_urls
         pool_ops.EVM_PUBLIC_ALIGNMENT_ALWAYS_SAMPLE = self.old_alignment_always_sample
         pool_ops.EVM_PUBLIC_ALIGNMENT_MIN_SAMPLES = self.old_alignment_min_samples
@@ -215,7 +219,7 @@ class ChainRpcResilienceTests(unittest.TestCase):
         self.assertEqual(progress["canonical_mining_safety"]["hash_mismatch_count"], 2)
         self.assertFalse(progress["canonical_mining_safety"]["public_chain_diverged"])
 
-    def test_eth_syncing_overrides_native_template_synced_status(self) -> None:
+    def test_native_template_health_overrides_eth_syncing_for_mining_status(self) -> None:
         pool_ops.NODE_CHAIN_RPC_RETRIES = 1
 
         def fake_mining_rpc(_url, method, _params, timeout):
@@ -257,6 +261,109 @@ class ChainRpcResilienceTests(unittest.TestCase):
 
         progress = pool_ops.node_sync_progress("node", "http://local:38131", timeout=8.0)
 
+        self.assertEqual(progress["status"], "synced")
+        self.assertEqual(progress["source"], "node:native-template-health")
+        self.assertEqual(progress["current_block"], 12000)
+        self.assertEqual(progress["highest_block"], 12000)
+        self.assertEqual(progress["remaining_blocks"], 0)
+        self.assertEqual(progress["current_block_source"], "getBlockCount")
+        self.assertFalse(progress["chain_syncing"])
+        self.assertTrue(progress["evm_chain_syncing"])
+        self.assertTrue(progress["mining_advisory_sync"])
+        self.assertTrue(progress["native_template_health"]["mineable_now"])
+
+    def test_collect_sync_progress_keeps_evm_sync_advisory_out_of_native_chain_sync(self) -> None:
+        pool_ops.node_rpc_urls = lambda: [("node", "http://local:38131")]
+        pool_ops.node_sync_progress = lambda _source, _url: {
+            "status": "synced",
+            "percent": 100.0,
+            "current_block": 12000,
+            "highest_block": 12000,
+            "remaining_blocks": 0,
+            "source": "node:native-template-health",
+            "chain_rpc_source": "getBlockCount",
+            "chain_block_count": 12000,
+            "native_is_current": True,
+            "chain_syncing": False,
+            "evm_chain_syncing": True,
+            "mining_advisory_sync": True,
+            "p2p_network_gap": 0,
+            "peer_mainorder_gap": 0,
+        }
+
+        progress = pool_ops.collect_sync_progress()
+
+        self.assertEqual(progress["status"], "synced")
+        self.assertTrue(progress["native_is_current"])
+        self.assertFalse(progress["chain_syncing"])
+        self.assertTrue(progress["evm_chain_syncing"])
+        self.assertTrue(progress["mining_advisory_sync"])
+        self.assertEqual(progress["remaining_blocks"], 0)
+
+    def test_native_current_progress_counts_as_synced_for_busy_log_suppression(self) -> None:
+        progress = {
+            "status": "synced",
+            "native_is_current": True,
+            "chain_syncing": False,
+            "evm_chain_syncing": True,
+            "mining_advisory_sync": True,
+            "remaining_blocks": 0,
+            "p2p_network_gap": 0,
+            "peer_mainorder_gap": 0,
+        }
+
+        self.assertTrue(pool_ops.sync_progress_native_template_health_synced(progress))
+
+        progress["chain_syncing"] = True
+        progress["evm_chain_syncing"] = False
+        progress["mining_advisory_sync"] = False
+
+        self.assertFalse(pool_ops.sync_progress_native_template_health_synced(progress))
+
+    def test_eth_syncing_blocks_status_when_native_template_health_is_unsafe(self) -> None:
+        pool_ops.NODE_CHAIN_RPC_RETRIES = 1
+
+        def fake_mining_rpc(_url, method, _params, timeout):
+            if method == "getBlockCount":
+                return "12000"
+            if method == "getMainChainHeight":
+                return "9000"
+            if method == "getTemplateHealth":
+                return {
+                    "reason_code": "node_syncing",
+                    "mineable_now": False,
+                    "submit_ready": False,
+                    "get_block_template_ready": False,
+                    "get_block_template_reason_code": "node_syncing",
+                    "p2p_current": True,
+                    "p2p_mining_fresh": True,
+                    "sync_allowed": True,
+                    "chain_current": True,
+                    "main_order": 12000,
+                    "p2p_best_peer_main_order": 12000,
+                    "p2p_best_peer_lead_blocks": 0,
+                    "p2p_fresh_consensus_peer_count": 3,
+                    "p2p_consensus_peer_count": 3,
+                }
+            raise AssertionError(method)
+
+        def fake_json_rpc(_url, method, _params, timeout):
+            if method == "eth_syncing":
+                return {
+                    "currentBlock": "0x1f40",
+                    "highestBlock": "0x2710",
+                    "startingBlock": "0x0",
+                }
+            if method == "eth_blockNumber":
+                return "0x1f40"
+            raise AssertionError(method)
+
+        pool_ops.mining_rpc_call = fake_mining_rpc
+        pool_ops.json_rpc_call = fake_json_rpc
+        pool_ops.evm_reference_rpc_urls = lambda: []
+
+        progress = pool_ops.node_sync_progress("node", "http://local:38131", timeout=8.0)
+
         self.assertEqual(progress["status"], "syncing")
         self.assertEqual(progress["source"], "node:eth_syncing")
         self.assertEqual(progress["current_block"], 8000)
@@ -264,7 +371,7 @@ class ChainRpcResilienceTests(unittest.TestCase):
         self.assertEqual(progress["remaining_blocks"], 2000)
         self.assertEqual(progress["current_block_source"], "eth_syncing")
         self.assertTrue(progress["chain_syncing"])
-        self.assertTrue(progress["native_template_health"]["mineable_now"])
+        self.assertFalse(progress["native_template_health"]["mineable_now"])
 
     def test_native_template_health_blocks_synced_status_when_peer_lead_is_unsafe(self) -> None:
         pool_ops.NODE_CHAIN_RPC_RETRIES = 1

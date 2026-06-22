@@ -77,6 +77,12 @@ HIGH_RISK_ACTIONS = {
 }
 LOW_RISK_ACTIONS = {ACTION_READ_STATUS, ACTION_WRITE_INCIDENT}
 CONTAINMENT_ACTIONS = {ACTION_CONTAINMENT_STOP}
+REPAIR_HOLD_RECOVERY_ACTIONS = {
+    ACTION_ASIC_MINER_OPEN_RESTART,
+    ACTION_ASIC_MINER_RESTART,
+    ACTION_ASIC_POOL_START,
+    ACTION_ASIC_POOL_RESTART,
+}
 
 
 @dataclass(frozen=True)
@@ -338,6 +344,12 @@ def _transition_hold_allows(control: dict[str, Any], action: str, actor: str, ta
     return any(item in tokens for item in allowed)
 
 
+def _repair_hold_recovery_allows(control: dict[str, Any], action: str, actor: str, target: str) -> bool:
+    if action not in REPAIR_HOLD_RECOVERY_ACTIONS:
+        return False
+    return _transition_hold_allows(control, action, actor, target)
+
+
 def is_high_risk_action(action: str) -> bool:
     if action in LOW_RISK_ACTIONS or action in CONTAINMENT_ACTIONS:
         return False
@@ -411,7 +423,27 @@ def check_mutation_allowed(
             maybe_log_denial_event(decision, requested_reason=reason, event_path=event_path, lock_path=lock_path)
         return decision
 
-    if state in BLOCKING_STATES and high_risk:
+    if state == STATE_REPAIR_HOLD and high_risk:
+        allowed = _repair_hold_recovery_allows(control, action, actor, target)
+        decision = ControlDecision(
+            allowed,
+            action,
+            actor,
+            target,
+            state,
+            status,
+            (
+                "repair_hold mining recovery allow-list matched"
+                if allowed
+                else f"automation control state {state} denies high-risk mutation"
+            ),
+            str(path),
+        )
+        if not allowed and log_denial:
+            maybe_log_denial_event(decision, requested_reason=reason, event_path=event_path, lock_path=lock_path)
+        return decision
+
+    if state in {STATE_CONTROLLED_STOP, STATE_CHAIN_INCIDENT} and high_risk:
         decision = ControlDecision(
             False,
             action,

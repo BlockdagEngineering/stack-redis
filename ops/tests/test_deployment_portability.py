@@ -222,7 +222,7 @@ root 41658 41563 0 16:41 ? 00:00:00 /run/rosetta/rosetta /usr/sbin/runuser runus
         compose = (ROOT_DIR / "docker-compose.yml").read_text(encoding="utf-8")
 
         self.assertIn("postgres-data:/var/lib/postgresql/data", compose)
-        self.assertIn("${NODE_DATA_DIR:-node-data}:/var/lib/bdagStack/node", compose)
+        self.assertIn("${NODE_DATA_DIR:-./data/node}:/var/lib/bdagStack/node", compose)
         self.assertIn("nodeworker-data:/var/lib/bdagStack/nodeworker", compose)
         self.assertIn("  postgres-data:", compose)
         self.assertIn("  node-data:", compose)
@@ -331,6 +331,10 @@ root 41658 41563 0 16:41 ? 00:00:00 /run/rosetta/rosetta /usr/sbin/runuser runus
         self.assertIn("BDAG_DOCKER_BRIDGE_CIDRS=172.16.0.0/12", env_example)
         self.assertIn("BDAG_ALLOW_DOCKER_BRIDGE_ASIC_IPS=0", env_example)
         self.assertIn("BDAG_ASIC_LAN_CIDRS: ${BDAG_ASIC_LAN_CIDRS:-}", compose)
+        self.assertIn("POOL_ASIC_ARP_TABLE_PATH=/host/proc/net/arp", env_example)
+        self.assertIn("${BDAG_HOST_ARP_TABLE_PATH:-/proc/net/arp}:/host/proc/net/arp:ro", compose)
+        self.assertIn("POOL_ASIC_ARP_TABLE_PATH: ${POOL_ASIC_ARP_TABLE_PATH:-/host/proc/net/arp}", compose)
+        self.assertIn("POOL_ASIC_MAC_ALLOWLIST: ${POOL_ASIC_MAC_ALLOWLIST:-}", compose)
         self.assertIn("tr ',' ' '", entrypoint)
         self.assertIn('append_node_arg_once "--modules=${word}"', entrypoint)
         self.assertIn('set_env_value .env BDAG_ASIC_LAN_CIDRS "$scan_target"', local_installer)
@@ -359,9 +363,9 @@ root 41658 41563 0 16:41 ? 00:00:00 /run/rosetta/rosetta /usr/sbin/runuser runus
         unit = (ROOT_DIR / "ops" / "systemd" / "bdag-p2p-firewall.service").read_text(encoding="utf-8")
 
         combined = "\n".join([env_example, firewall, installer, unit])
-        self.assertIn("P2P_PORT=8150", env_example)
-        self.assertIn('PORT="${P2P_PORT:-8150}"', firewall)
-        self.assertIn("Environment=P2P_PORT=8150", unit)
+        self.assertIn("P2P_PORT=8155", env_example)
+        self.assertIn('PORT="${P2P_PORT:-8155}"', firewall)
+        self.assertIn("Environment=P2P_PORT=8155", unit)
         self.assertNotIn("BDAG_P2P_PORTS", combined)
         self.assertNotIn("--dports", firewall)
 

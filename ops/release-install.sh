@@ -241,11 +241,28 @@ random_secret() {
 
 set_env_value() {
   local file="$1" key="$2" value="$3"
+  local line escaped
+  line="${key}=$(quote_env_value "$value")"
+  escaped="$(printf '%s' "$line" | sed 's/[&|\\]/\\&/g')"
   if grep -q "^${key}=" "$file"; then
-    sed -i "s|^${key}=.*|${key}=${value}|" "$file"
+    sed -i "s|^${key}=.*|${escaped}|" "$file"
   else
-    printf '%s=%s\n' "$key" "$value" >> "$file"
+    printf '%s\n' "$line" >> "$file"
   fi
+}
+
+quote_env_value() {
+  local value="$1"
+  case "$value" in
+    *[!A-Za-z0-9_./:@,%+=-]*)
+      printf '"'
+      printf '%s' "$value" | sed 's/[\\$"`]/\\&/g'
+      printf '"'
+      ;;
+    *)
+      printf '%s' "$value"
+      ;;
+  esac
 }
 
 set_stack_default_env_value() {

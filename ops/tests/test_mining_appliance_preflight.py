@@ -94,6 +94,7 @@ class MiningAppliancePreflightTest(unittest.TestCase):
                 "BDAG_STATUS_SAMPLER_ENABLED": "0",
                 "BDAG_ADAPTIVE_CONCURRENCY_ENABLED": "0",
                 "BDAG_ENTRYPOINT_CHOWN_MODE": "always",
+                "BDAG_NODE_DEBUG_LEVEL": "info",
             },
             profile,
         )
@@ -106,6 +107,29 @@ class MiningAppliancePreflightTest(unittest.TestCase):
         self.assertIn("status_sampler", warnings)
         self.assertIn("adaptive_concurrency", warnings)
         self.assertIn("entrypoint_chown_mode", warnings)
+        self.assertIn("node_log_budget", warnings)
+
+    def test_node_log_budget_accepts_low_noise_defaults(self) -> None:
+        profile = preflight.HostProfile(
+            os_name="linux",
+            arch="x86_64",
+            cpu_count=8,
+            memory_bytes=16 * preflight.GIB,
+            profile="standard",
+            kernel="test",
+        )
+        checks = []
+        preflight.check_env_defaults(
+            checks,
+            {
+                "BDAG_NODE_DEBUG_LEVEL": "warn",
+                "BDAG_NODE_NO_FILE_LOGGING": "1",
+            },
+            profile,
+        )
+
+        found = {check.name: check for check in checks}
+        self.assertEqual(found["node_log_budget"].status, "pass")
 
     def test_constrained_mining_profile_accepts_disabled_node_mining(self) -> None:
         profile = preflight.HostProfile(

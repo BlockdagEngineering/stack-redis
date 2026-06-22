@@ -13,6 +13,41 @@ sys.path.insert(0, str(OPS_DIR))
 import pool_ops  # noqa: E402
 
 
+class MinerDiscoveryTests(unittest.TestCase):
+    def test_discover_miner_keeps_asic_visible_when_pool_api_is_wedged(self) -> None:
+        old_get_pools = pool_ops.get_miner_pools
+        old_get_status = pool_ops.get_miner_status
+        old_get_settings = pool_ops.get_miner_settings
+        self.addCleanup(lambda: setattr(pool_ops, "get_miner_pools", old_get_pools))
+        self.addCleanup(lambda: setattr(pool_ops, "get_miner_status", old_get_status))
+        self.addCleanup(lambda: setattr(pool_ops, "get_miner_settings", old_get_settings))
+
+        pool_ops.get_miner_pools = lambda ip, timeout=0: (_ for _ in ()).throw(
+            pool_ops.MinerAPIError("pool API timed out")
+        )
+        pool_ops.get_miner_status = lambda ip, timeout=0: {
+            "model": "X100",
+            "hardware": "20.10.SA",
+            "firmware": "2.2.2",
+        }
+        pool_ops.get_miner_settings = lambda ip, timeout=0: {
+            "name": "2A:71:C7:F5:1F:1E",
+        }
+
+        miner = pool_ops.discover_miner("192.168.1.101", timeout=0.1)
+
+        self.assertIsNotNone(miner)
+        assert miner is not None
+        self.assertEqual(miner["ip"], "192.168.1.101")
+        self.assertEqual(miner["mac"], "2a:71:c7:f5:1f:1e")
+        self.assertEqual(miner["model"], "X100")
+        self.assertEqual(miner["pool_count"], 0)
+        self.assertEqual(miner["pools"], [])
+        self.assertEqual(miner["current_pool"], {})
+        self.assertFalse(miner["active"])
+        self.assertIn("pool API timed out", miner["pool_api_error"])
+
+
 class MinerRetirementIdentityTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()

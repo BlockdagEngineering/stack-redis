@@ -64,7 +64,11 @@ def build_state() -> dict[str, Any]:
         if isinstance(sync_health.get("evm_reference_gap_watch"), dict)
         else {}
     )
-    evm_gap_restore_required = bool(evm_gap_watch.get("restore_required"))
+    native_paid_safe = bool(
+        sync_health.get("native_progress_paid_work_safe")
+        or (sync_health.get("selected_backend_mining_safe") and sync_health.get("pool_has_recent_paid_work"))
+    )
+    evm_gap_restore_required = bool(evm_gap_watch.get("restore_required") and not native_paid_safe)
     active_node = NODES[0] if NODES else "node"
     node_info = nodes.get(active_node, {}) if isinstance(nodes, dict) else {}
     remaining = safe_int(node_info.get("remaining_blocks"), safe_int(sync_progress.get("remaining_blocks") if isinstance(sync_progress, dict) else 0))

@@ -778,6 +778,8 @@ def check_node_data_layout(checks: list[Check], root: Path, env: dict[str, str])
 def check_env_defaults(checks: list[Check], env: dict[str, str], profile: HostProfile) -> None:
     evidence = {
         "BDAG_NODE_CACHE_MB": env.get("BDAG_NODE_CACHE_MB"),
+        "BDAG_NODE_DEBUG_LEVEL": env.get("BDAG_NODE_DEBUG_LEVEL"),
+        "BDAG_NODE_NO_FILE_LOGGING": env.get("BDAG_NODE_NO_FILE_LOGGING"),
         "NODE_MAX_PEERS": env.get("NODE_MAX_PEERS"),
         "SYNC_SOURCE_NODE": env.get("SYNC_SOURCE_NODE"),
         "BDAG_STORAGE_PROFILE": env.get("BDAG_STORAGE_PROFILE"),
@@ -811,6 +813,15 @@ def check_env_defaults(checks: list[Check], env: dict[str, str], profile: HostPr
         add(checks, "warn", "peer_budget", f"NODE_MAX_PEERS={max_peers} is high for this host.", "Use 160 or lower on constrained single-ASIC appliances.", evidence)
     else:
         add(checks, "pass", "peer_budget", f"NODE_MAX_PEERS={max_peers}", evidence=evidence)
+
+    debug_level = (env.get("BDAG_NODE_DEBUG_LEVEL") or "warn").strip().lower()
+    file_logging = (env.get("BDAG_NODE_NO_FILE_LOGGING") or "1").strip().lower()
+    if debug_level in {"trace", "debug", "info"}:
+        add(checks, "warn", "node_log_budget", f"BDAG_NODE_DEBUG_LEVEL={debug_level} emits high-volume import logs.", "Use warn or error on mining appliances; status-sampler tracks catch-up progress without per-block node logs.", evidence)
+    elif file_logging in {"0", "false", "no", "off", "disabled"}:
+        add(checks, "warn", "node_log_budget", "node file logging is enabled.", "Use BDAG_NODE_NO_FILE_LOGGING=1 so catch-up writes do not also hit /var/log/bdagStack.", evidence)
+    else:
+        add(checks, "pass", "node_log_budget", f"BDAG_NODE_DEBUG_LEVEL={debug_level}; file logging disabled", evidence=evidence)
 
     storage_profile = (env.get("BDAG_STORAGE_PROFILE") or "").strip().lower()
     topology = (env.get("BDAG_DETECTED_NETWORK_TOPOLOGY") or env.get("BDAG_NETWORK_TOPOLOGY") or "").strip().lower()

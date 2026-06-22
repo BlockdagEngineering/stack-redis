@@ -42,6 +42,8 @@ from pool_ops import (
     write_status_sampler_payload,
 )
 
+SAFE_ENV_VALUE_RE = re.compile(r"^[A-Za-z0-9_./:@,%+=-]*$")
+
 
 def env_float(name: str, default: float, minimum: float | None = None) -> float:
     try:
@@ -249,6 +251,7 @@ def set_env_file_value(path: Any, key: str, value: str) -> bool:
     env_path = path if hasattr(path, "read_text") else PROJECT_ROOT / str(path)
     if not env_path.exists():
         return False
+    formatted_value = format_env_value(value)
     lines = env_path.read_text(encoding="utf-8", errors="replace").splitlines()
     changed = False
     found = False
@@ -259,13 +262,13 @@ def set_env_file_value(path: Any, key: str, value: str) -> bool:
         assignment = stripped[7:].strip() if prefix else stripped
         if assignment.startswith(f"{key}="):
             found = True
-            replacement = f"{prefix}{key}={value}" if prefix else f"{key}={value}"
+            replacement = f"{prefix}{key}={formatted_value}" if prefix else f"{key}={formatted_value}"
             output.append(replacement)
             changed = changed or line != replacement
         else:
             output.append(line)
     if not found:
-        output.append(f"{key}={value}")
+        output.append(f"{key}={formatted_value}")
         changed = True
     if not changed:
         return False
@@ -273,6 +276,18 @@ def set_env_file_value(path: Any, key: str, value: str) -> bool:
     tmp.write_text("\n".join(output) + "\n", encoding="utf-8")
     os.replace(tmp, env_path)
     return True
+
+
+def format_env_value(value: str) -> str:
+    if SAFE_ENV_VALUE_RE.match(value):
+        return value
+    escaped = (
+        value.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("$", "\\$")
+        .replace("`", "\\`")
+    )
+    return f'"{escaped}"'
 
 
 def set_runtime_env_value(key: str, value: str) -> list[str]:
@@ -344,11 +359,27 @@ def node_args_assignment_value(args: str, flag: str) -> str | None:
     return None
 
 
+def configured_node_obsolete_height() -> str:
+    value = config_value("BDAG_NODE_OBSOLETE_HEIGHT", "20").strip()
+    if not value.isdigit():
+        return ""
+    return value
+
+
+def node_mining_no_pending_tx_enabled() -> bool:
+    return env_enabled_value(config_value("BDAG_NODE_MINING_NO_PENDING_TX", "0"), False)
+
+
 def node_mining_runtime_args(address: str) -> str:
     parts = [
         *NODE_MINING_REQUIRED_BOOL_FLAGS,
         f"--miningaddr={address}",
     ]
+    obsolete_height = configured_node_obsolete_height()
+    if obsolete_height:
+        parts.append(f"--obsoleteheight={obsolete_height}")
+    if node_mining_no_pending_tx_enabled():
+        parts.append("--miningnopendingtx")
     if constrained_storage_profile():
         # A USB-backed ASIC router should mine and relay blocks, not serve as a
         # catch-up source for other peers while it is trying to convert shares
@@ -367,6 +398,14 @@ def node_mining_args_are_safe_and_complete(args: str, address: str) -> bool:
     for flag in NODE_MINING_REQUIRED_BOOL_FLAGS:
         if not node_args_have_bool_flag(args, flag):
             return False
+    obsolete_height = configured_node_obsolete_height()
+    if obsolete_height and node_args_assignment_value(args, "--obsoleteheight") != obsolete_height:
+        return False
+    if node_mining_no_pending_tx_enabled():
+        if not node_args_have_bool_flag(args, "--miningnopendingtx"):
+            return False
+    elif node_args_have_bool_flag(args, "--miningnopendingtx"):
+        return False
     if constrained_storage_profile():
         for flag, wanted in NODE_MINING_CONSTRAINED_ASSIGNMENTS.items():
             if node_args_assignment_value(args, flag) != wanted:
@@ -508,22 +547,42 @@ def public_chain_divergence_reasons(payload: dict[str, Any]) -> list[str]:
     return sorted(set(str(item) for item in reasons if item))
 
 
+def native_chain_progress_advisory_safe(payload: dict[str, Any]) -> tuple[bool, str]:
+    sync_health = dict_value(payload.get("sync_health"))
+    for key, reason in (
+        ("native_chain_progress_safe", "native chain progress is already marked safe"),
+        ("selected_backend_native_p2p_current_safe", "selected backend native P2P/current-chain proof is marked safe"),
+        ("selected_backend_mining_safe", "selected backend is marked mining-safe"),
+        ("native_progress_paid_work_safe", "native progress and recent paid work are already marked safe"),
+    ):
+        if sync_health.get(key) is True:
+            return True, reason
+    native_safe, native_reason = pool_start_gate.native_mining_safety_proven(payload)
+    if native_safe:
+        return True, native_reason
+    return False, native_reason
+
+
 def catchup_lag_blocks(payload: dict[str, Any]) -> int:
     values: list[int] = []
+    paid_work_recent = pool_has_recent_paid_work(payload)
+    native_advisory_safe, _native_advisory_reason = native_chain_progress_advisory_safe(payload)
+    remaining_blocks_advisory = bool(paid_work_recent or native_advisory_safe)
+    lag_keys = ("peer_ahead_blocks",) if remaining_blocks_advisory else ("remaining_blocks", "peer_ahead_blocks")
     policy = dict_value(payload.get("catchup_policy"))
     policy_lag = safe_int(policy.get("lag_blocks"), -1)
-    if policy_lag >= 0:
+    if policy_lag >= 0 and not remaining_blocks_advisory:
         values.append(policy_lag)
 
     sync = dict_value(payload.get("sync_progress"))
-    for key in ("remaining_blocks", "peer_ahead_blocks"):
+    for key in lag_keys:
         value = safe_int(sync.get(key), -1)
         if value >= 0:
             values.append(value)
     for info in dict_value(sync.get("nodes")).values():
         if not isinstance(info, dict):
             continue
-        for key in ("remaining_blocks", "peer_ahead_blocks"):
+        for key in lag_keys:
             value = safe_int(info.get(key), -1)
             if value >= 0:
                 values.append(value)
@@ -542,6 +601,64 @@ def catchup_lag_blocks(payload: dict[str, Any]) -> int:
     if value >= 0:
         values.append(value)
     return max(values) if values else 0
+
+
+def native_peer_lag_blocks(payload: dict[str, Any]) -> int:
+    values: list[int] = []
+
+    def add(value: Any) -> None:
+        lag = safe_int(value, -1)
+        if lag >= 0:
+            values.append(lag)
+
+    sync = dict_value(payload.get("sync_progress"))
+    add(sync.get("peer_ahead_blocks"))
+    for info in dict_value(sync.get("nodes")).values():
+        if isinstance(info, dict):
+            add(info.get("peer_ahead_blocks"))
+    for info in dict_value(payload.get("nodes")).values():
+        if isinstance(info, dict):
+            add(info.get("peer_ahead_blocks"))
+
+    selected_health = dict_value(
+        dict_value(payload.get("pool_metrics")).get("selected_backend_source_health")
+    ) or dict_value(dict_value(payload.get("pool")).get("selected_backend_source_health"))
+    add(selected_health.get("node_p2p_best_peer_lead_blocks"))
+    return max(values) if values else 0
+
+
+def has_active_native_p2p_lag_evidence(payload: dict[str, Any]) -> bool:
+    def progress_evidence(progress: dict[str, Any]) -> bool:
+        status_text = str(progress.get("status") or "").strip().lower()
+        error_text = str(progress.get("error") or "").strip().lower()
+        if status_text == "p2p_down":
+            return False
+        if "no active native p2p peers" in error_text or "syncing but no active peers" in error_text:
+            return False
+        if safe_int(progress.get("peer_count"), -1) > 0 or safe_int(progress.get("p2p_connections"), -1) > 0:
+            return True
+        health = dict_value(progress.get("native_template_health"))
+        if safe_int(health.get("p2p_fresh_consensus_peer_count"), -1) > 0:
+            return True
+        if safe_int(health.get("p2p_consensus_peer_count"), -1) > 0:
+            return True
+        return health.get("p2p_mining_fresh") is True
+
+    sync = dict_value(payload.get("sync_progress"))
+    if progress_evidence(sync):
+        return True
+    for info in dict_value(sync.get("nodes")).values():
+        if isinstance(info, dict) and progress_evidence(info):
+            return True
+
+    selected_health = dict_value(
+        dict_value(payload.get("pool_metrics")).get("selected_backend_source_health")
+    ) or dict_value(dict_value(payload.get("pool")).get("selected_backend_source_health"))
+    if selected_health.get("node_p2p_mining_fresh") is True:
+        return True
+    if safe_int(selected_health.get("node_p2p_fresh_consensus_peer_count"), -1) > 0:
+        return True
+    return safe_int(selected_health.get("node_p2p_consensus_peer_count"), -1) > 0
 
 
 def catchup_io_pressure_reasons(payload: dict[str, Any]) -> list[str]:
@@ -567,12 +684,22 @@ def catchup_policy_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
     lag = catchup_lag_blocks(payload)
     sync = dict_value(payload.get("sync_progress"))
     sync_status = str(sync.get("status") or "").strip().lower()
+    paid_work_recent = pool_has_recent_paid_work(payload)
+    native_advisory_safe, native_advisory_reason = native_chain_progress_advisory_safe(payload)
+    remaining_blocks_advisory = bool(paid_work_recent or native_advisory_safe)
+    mining_ready = bool(
+        policy.get("mining_ready", payload.get("can_mine") is True)
+        or paid_work_recent
+        or native_advisory_safe
+    )
+    cached_syncing_active = bool(policy.get("syncing_active")) and not remaining_blocks_advisory
     syncing_active = bool(
-        policy.get("syncing_active")
+        cached_syncing_active
         or (
             CATCHUP_PAUSE_ON_SYNCING
             and sync_status in {"syncing", "catchup_pause"}
             and lag > 0
+            and not mining_ready
         )
     )
     io_pressure_reasons = policy.get("io_pressure_reasons")
@@ -580,7 +707,6 @@ def catchup_policy_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
         io_pressure_reasons = catchup_io_pressure_reasons(payload)
     io_pressure_enabled = bool(policy.get("io_pressure_pause_enabled", CATCHUP_IO_PRESSURE_PAUSE_ENABLED))
     io_min_lag = safe_int(policy.get("io_pressure_min_lag_blocks"), CATCHUP_IO_PRESSURE_MIN_LAG_BLOCKS)
-    mining_ready = bool(policy.get("mining_ready", payload.get("can_mine") is True))
     backend_unready_under_pressure = bool(
         policy.get("backend_unready_under_pressure")
         or (io_pressure_reasons and not mining_ready and payload.get("can_mine") is False)
@@ -591,10 +717,16 @@ def catchup_policy_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
         and not mining_ready
         and (lag >= io_min_lag or backend_unready_under_pressure)
     )
-    lag_threshold_active = bool(lag > threshold and (not chain_ready_for_mining(payload) or not mining_ready))
+    lag_threshold_active = bool(
+        lag > threshold
+        and not mining_ready
+        and not chain_ready_for_mining(payload)
+    )
     active = bool(policy.get("active")) if "active" in policy else False
     if not active:
         active = bool(CATCHUP_PAUSE_ENABLED and (syncing_active or io_pressure_active or lag_threshold_active))
+    if active and remaining_blocks_advisory and not (syncing_active or io_pressure_active or lag_threshold_active):
+        active = False
     trigger = str(policy.get("trigger") or "")
     if not trigger and active:
         if syncing_active:
@@ -622,6 +754,9 @@ def catchup_policy_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "backend_unready_under_pressure": backend_unready_under_pressure,
         "lag_threshold_active": lag_threshold_active,
         "mining_ready": mining_ready,
+        "remaining_blocks_advisory": remaining_blocks_advisory,
+        "native_advisory_safe": native_advisory_safe,
+        "native_advisory_reason": native_advisory_reason if native_advisory_safe else "",
     }
 
 
@@ -632,7 +767,12 @@ def catchup_pause_active(payload: dict[str, Any]) -> bool:
 def chain_state_restore_hard_reasons(payload: dict[str, Any]) -> list[str]:
     reasons: list[str] = []
     sync_health = dict_value(payload.get("sync_health"))
-    if sync_health.get("needs_chain_data_restore") or sync_health.get("chain_data_restore_required"):
+    soft_evm_restore_only = evm_reference_gap_restore_only(sync_health)
+    evm_restore_advisory, _advisory_reason = evm_reference_gap_native_paid_advisory(payload)
+    if (
+        sync_health.get("needs_chain_data_restore")
+        or sync_health.get("chain_data_restore_required")
+    ) and not (soft_evm_restore_only and evm_restore_advisory):
         restore_nodes = dict_value(sync_health.get("chain_data_restore_nodes"))
         for node, info in restore_nodes.items():
             node_reasons = info.get("reasons") if isinstance(info, dict) else None
@@ -664,6 +804,32 @@ def chain_state_restore_hard_reasons(payload: dict[str, Any]) -> list[str]:
         if missing_trie >= CHAIN_STATE_MISSING_TRIE_RESTORE_WARNINGS:
             reasons.append(f"{node} has {missing_trie} missing-trie state warning(s)")
     return sorted(set(reasons))
+
+
+def evm_reference_gap_restore_only(sync_health: dict[str, Any]) -> bool:
+    if not (
+        sync_health.get("evm_reference_gap_stalled")
+        or dict_value(sync_health.get("evm_reference_gap_watch")).get("restore_required")
+    ):
+        return False
+    return not bool(
+        sync_health.get("chain_state_blocker")
+        or sync_health.get("chain_data_restore_required")
+        or dict_value(sync_health.get("chain_state_blocker_nodes"))
+        or dict_value(sync_health.get("chain_data_restore_nodes"))
+    )
+
+
+def evm_reference_gap_native_paid_advisory(payload: dict[str, Any]) -> tuple[bool, str]:
+    sync_health = dict_value(payload.get("sync_health"))
+    if sync_health.get("native_progress_paid_work_safe") is True:
+        return True, "native progress and recent paid work are already marked safe"
+    if sync_health.get("selected_backend_mining_safe") is True:
+        reason = "selected backend is mining-safe"
+        if sync_health.get("pool_has_recent_paid_work") is True:
+            reason += " and recent paid work is present"
+        return True, reason
+    return native_chain_progress_advisory_safe(payload)
 
 
 def sync_progress_height(payload: dict[str, Any]) -> int:
@@ -704,35 +870,45 @@ def update_stalled_import_watch(payload: dict[str, Any]) -> dict[str, Any]:
     sync = dict_value(payload.get("sync_progress"))
     status = str(sync.get("status") or payload.get("mode") or "").lower()
     height = sync_progress_height(payload)
-    lag = catchup_lag_blocks(payload)
+    lag = native_peer_lag_blocks(payload)
+    native_p2p_evidence = has_active_native_p2p_lag_evidence(payload)
     candidate = bool(
         CHAIN_STATE_STALLED_IMPORT_RESTORE_ENABLED
         and status in {"syncing", "catchup_pause"}
         and height >= 0
+        and native_p2p_evidence
         and lag >= CHAIN_STATE_STALLED_IMPORT_RESTORE_PEER_AHEAD_BLOCKS
     )
     previous = read_import_watch_state()
     previous_height = safe_int(previous.get("height"), -1)
-    if not candidate or previous_height != height:
+    previous_first_stalled_epoch = safe_float(previous.get("first_stalled_epoch"), 0.0)
+    if not candidate or previous_height != height or previous_first_stalled_epoch <= 0:
+        reason = "height changed or stall candidate inactive"
+        if not native_p2p_evidence:
+            reason = "stall candidate inactive: no active native P2P peer-lag evidence"
+        elif candidate and previous_first_stalled_epoch <= 0:
+            reason = "stall candidate started or invalid previous stall epoch reset"
         state = {
             "schema_version": 1,
             "updated_at": now_iso(),
             "epoch": now_epoch,
+            "candidate": candidate,
             "status": status,
             "height": height,
             "lag_blocks": lag,
+            "native_p2p_lag_evidence": native_p2p_evidence,
             "first_stalled_epoch": now_epoch if candidate else 0,
             "stalled_seconds": 0,
             "min_lag_blocks": lag if candidate else 0,
             "max_lag_blocks": lag if candidate else 0,
             "gap_growth_blocks": 0,
             "restore_required": False,
-            "reason": "height changed or stall candidate inactive",
+            "reason": reason,
         }
         write_json_file(CHAIN_STATE_IMPORT_WATCH_FILE, state, mode=0o600)
         return state
 
-    first_stalled_epoch = safe_float(previous.get("first_stalled_epoch"), now_epoch)
+    first_stalled_epoch = previous_first_stalled_epoch
     min_lag = min(safe_int(previous.get("min_lag_blocks"), lag), lag)
     max_lag = max(safe_int(previous.get("max_lag_blocks"), lag), lag)
     stalled_seconds = max(0, int(now_epoch - first_stalled_epoch))
@@ -749,9 +925,11 @@ def update_stalled_import_watch(payload: dict[str, Any]) -> dict[str, Any]:
         "schema_version": 1,
         "updated_at": now_iso(),
         "epoch": now_epoch,
+        "candidate": True,
         "status": status,
         "height": height,
         "lag_blocks": lag,
+        "native_p2p_lag_evidence": native_p2p_evidence,
         "first_stalled_epoch": first_stalled_epoch,
         "stalled_seconds": stalled_seconds,
         "min_lag_blocks": min_lag,
@@ -894,12 +1072,23 @@ def update_evm_reference_gap_watch(payload: dict[str, Any]) -> dict[str, Any]:
             f"for {stalled_seconds}s while lag is {lag} block(s)"
         )
 
+    would_restore_required = restore_required
+    advisory_safe, advisory_reason = evm_reference_gap_native_paid_advisory(payload)
+    if restore_required and advisory_safe:
+        restore_required = False
+        reason = f"{reason}; advisory under native mining safety: {advisory_reason}"
+
     state = {
         "schema_version": 1,
         "updated_at": now_iso(),
         "epoch": now_epoch,
         "candidate": True,
         "restore_required": restore_required,
+        "would_restore_required": would_restore_required,
+        "restore_suppressed_by_native_mining_safety": bool(would_restore_required and advisory_safe),
+        "restore_suppressed_by_native_paid_work": bool(would_restore_required and advisory_safe),
+        "native_paid_work_advisory_reason": advisory_reason if advisory_safe else "",
+        "native_mining_safety_advisory_reason": advisory_reason if advisory_safe else "",
         "reason": reason,
         "sample": sample,
         "lag_blocks": lag,
@@ -1035,6 +1224,8 @@ def status_payload_has_tracking_gap(payload: dict[str, Any]) -> bool:
     miner_health = dict_value(payload.get("miner_health"))
     if safe_int(miner_health.get("tracked_count")) > 0:
         return False
+    if "tracked_count" not in miner_health and miner_health.get("connected_count_source") == "pool-metrics":
+        return False
     return status_payload_has_miner_demand(payload) or asic_lan_neighbor_present()
 
 
@@ -1067,6 +1258,55 @@ def miner_row_has_visible_share_evidence(row: dict[str, Any]) -> bool:
         return True
     if safe_int(row.get("last_shares_window")) > 0 or safe_int(row.get("last_share_work_window")) > 0:
         return recent_age_seconds(row.get("last_share_age_seconds"))
+    return False
+
+
+def pool_has_recent_paid_work(payload: dict[str, Any]) -> bool:
+    sync_health = dict_value(payload.get("sync_health"))
+    if sync_health.get("pool_has_recent_paid_work") is True:
+        return True
+    paid_work = dict_value(sync_health.get("pool_paid_work_state"))
+    if paid_work.get("accepted_block_recent") is True:
+        return True
+    pool = dict_value(payload.get("pool"))
+    pool_health = dict_value(payload.get("pool_health"))
+    for source in (pool, pool_health):
+        accepted = safe_int(source.get("block_submit_success_count"))
+        age = safe_float(source.get("last_block_submit_age_seconds"), default=10_000)
+        if accepted > 0 and age <= MINING_IMPERATIVE_MINER_ACTIVITY_STALE_SECONDS:
+            return True
+    return False
+
+
+def pool_has_any_paid_work_evidence(payload: dict[str, Any]) -> bool:
+    sync_health = dict_value(payload.get("sync_health"))
+    paid_work = dict_value(sync_health.get("pool_paid_work_state"))
+    sources = (
+        paid_work,
+        dict_value(payload.get("pool")),
+        dict_value(payload.get("pool_health")),
+        dict_value(payload.get("pool_metrics")),
+    )
+    for source in sources:
+        for key in (
+            "accepted_block_submissions",
+            "accepted_block_submission_count",
+            "block_submit_success_count",
+            "accepted_blocks",
+            "blocks_found",
+        ):
+            if safe_int(source.get(key)) > 0:
+                return True
+    return False
+
+
+def live_pool_state_blocks_node_runtime_mutation(payload: dict[str, Any]) -> bool:
+    if pool_container_running(payload):
+        return True
+    if pool_has_recent_paid_work(payload):
+        return True
+    if pool_has_any_paid_work_evidence(payload):
+        return True
     return False
 
 
@@ -1162,19 +1402,29 @@ def node_mining_template_support_should_repair(payload: dict[str, Any]) -> bool:
     address = configured_mining_address()
     if not valid_mining_address(address):
         return False
+    if not pool_start_gate.pool_start_decision(payload).allowed:
+        return False
+    if live_pool_state_blocks_node_runtime_mutation(payload):
+        return False
+    args = config_value("BDAG_NODE_MINING_ARGS")
+    append_args = config_value("NODE_ARGS_APPEND")
+    unsafe_args_present = any(
+        flag in f"{args} {append_args}"
+        for flag in ("--allowminingwhennearlysynced", "--allowsubmitwhennotsynced")
+    )
+    if pool_has_recent_paid_work(payload) and not unsafe_args_present:
+        return False
     modules = {
         item.strip().lower()
         for item in config_value("BDAG_NODE_MODULES", NODE_MINING_MODULES).split(",")
         if item.strip()
     }
-    args = config_value("BDAG_NODE_MINING_ARGS")
     if not env_enabled_value(config_value("BDAG_ENABLE_NODE_MINING"), False):
         return True
     if modules != NODE_MINING_MODULE_SET:
         return True
     if not node_mining_args_are_safe_and_complete(args, address):
         return True
-    append_args = config_value("NODE_ARGS_APPEND")
     if append_args and not node_mining_args_are_safe_and_complete(append_args, address):
         return True
     for service in node_services_for_recreate():
@@ -1256,6 +1506,25 @@ def automation_repair_mutation_allowed(
 
 
 def recreate_node_services(payload: dict[str, Any], reason: str) -> tuple[bool, list[dict[str, Any]]]:
+    if live_pool_state_blocks_node_runtime_mutation(payload):
+        node_results = [
+            {
+                "service": service,
+                "returncode": None,
+                "ok": False,
+                "blocked": True,
+                "blocked_reason": "live pool or paid-block evidence blocks node recreate",
+            }
+            for service in node_services_for_recreate()
+        ]
+        record_incident(
+            "mining_imperative_node_recreate_live_pool_blocked",
+            "critical",
+            "Mining imperative left node services unchanged because live pool or paid-block evidence blocks recreate",
+            {"reason": reason, "node_recreate_results": node_results},
+            payload,
+        )
+        return False, node_results
     node_results = []
     ok = True
     for service in node_services_for_recreate():
@@ -1384,6 +1653,16 @@ def repair_miner_activity_visibility(payload: dict[str, Any]) -> bool:
 
 def repair_fastsync_orphan_peers(payload: dict[str, Any]) -> bool:
     peer_ids = fastsync_orphan_peer_ids(payload)
+    if live_pool_state_blocks_node_runtime_mutation(payload):
+        log("mining imperative left FastSync peer config unchanged because live pool state blocks node mutation")
+        record_incident(
+            "mining_imperative_fastsync_peer_quarantine_live_pool_blocked",
+            "critical",
+            "FastSync orphan peer quarantine was deferred because live pool or paid-block evidence blocks node mutation",
+            {"peer_ids": peer_ids},
+            payload,
+        )
+        return False
     if not automation_repair_mutation_allowed(
         automation_control.ACTION_CONFIG_EDIT,
         target="fastsync-peer-config",
@@ -1515,6 +1794,19 @@ def catchup_target_node_cache_mb() -> int:
 
 
 def apply_catchup_node_runtime(payload: dict[str, Any], policy: dict[str, Any]) -> bool:
+    if pool_has_recent_paid_work(payload):
+        log("catch-up runtime adjustment skipped because accepted block submissions remain recent")
+        return False
+    native_advisory_safe, native_advisory_reason = native_chain_progress_advisory_safe(payload)
+    if policy.get("native_advisory_safe") is True or native_advisory_safe:
+        log(
+            "catch-up runtime adjustment skipped because native mining safety makes "
+            f"EVM/public lag advisory: {policy.get('native_advisory_reason') or native_advisory_reason}"
+        )
+        return False
+    if live_pool_state_blocks_node_runtime_mutation(payload):
+        log("catch-up runtime adjustment skipped because live pool/miner state blocks node mutation")
+        return False
     if not automation_repair_mutation_allowed(
         automation_control.ACTION_CONFIG_EDIT,
         target="catchup-node-runtime",

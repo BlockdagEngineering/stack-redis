@@ -21,6 +21,7 @@ from pool_ops import collect_status_cached
 
 DEFAULT_STATUS_URL = "http://127.0.0.1:8088/api/status"
 DEFAULT_TIMEOUT_SECONDS = float(os.environ.get("BDAG_STATUS_SOURCE_TIMEOUT", "20"))
+REPAIR_STATUS_REQUIRED_KEYS = ("failures", "warnings", "overall")
 
 
 class StackStatusUnavailable(RuntimeError):
@@ -73,6 +74,21 @@ def fetch_http_status(url: str, timeout: float = DEFAULT_TIMEOUT_SECONDS) -> dic
     return payload
 
 
+def validate_repair_status_payload(payload: dict[str, Any], source: str) -> None:
+    """Reject compact dashboard payloads that are not safe for repair actors."""
+    missing: list[str] = []
+    if not isinstance(payload.get("failures"), list):
+        missing.append("failures")
+    if not isinstance(payload.get("warnings"), list):
+        missing.append("warnings")
+    if not str(payload.get("overall") or "").strip():
+        missing.append("overall")
+    if missing:
+        raise StackStatusUnavailable(
+            f"status payload from {source} is missing repair schema key(s): {', '.join(missing)}"
+        )
+
+
 def collect_stack_status(
     *,
     include_logs: bool = True,
@@ -101,7 +117,9 @@ def collect_stack_status(
         urls = [collector_url] if collector_url else _env_urls()
         for url in [item for item in urls if item]:
             try:
-                return _annotate(fetch_http_status(url, timeout=timeout), "status-http", errors)
+                payload = fetch_http_status(url, timeout=timeout)
+                validate_repair_status_payload(payload, url)
+                return _annotate(payload, "status-http", errors)
             except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError, StackStatusUnavailable) as exc:
                 errors.append(f"status API {url}: {exc}")
 

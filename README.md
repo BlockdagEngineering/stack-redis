@@ -291,12 +291,41 @@ is behind peers or while the selected backend is not mineable/submit-ready.
 using `iowait`, `io_some`, and `io_full` pressure signals; a production node
 more than `BDAG_CATCHUP_PAUSE_THRESHOLD_BLOCKS=300` blocks behind peers is the
 backup trigger when pressure signals are missing or delayed.
-The status sampler stops the pool, disables node mining/template runtime churn,
-raises the node cache toward `BDAG_CATCHUP_NODE_CACHE_MB` within the host memory
-budget, and recreates only the node service when that runtime change is needed.
-The dashboard reports this as a deliberate catch-up pause, not a pool failure,
-and tells operators to leave miners configured until I/O pressure drops, peer lag
-is back inside the safe window, and template health is ready.
+The status sampler leaves the pool container running for share/session
+continuity, pauses pool-side template work, disables node mining/template runtime
+churn, and may raise the node cache toward `BDAG_CATCHUP_NODE_CACHE_MB` within
+the host memory budget. It must not recreate the node while the pool is live or
+accepted-block history exists. The dashboard reports this as a deliberate
+catch-up pause, not a pool failure, and tells operators to leave miners
+configured until I/O pressure drops, peer lag is back inside the safe window, and
+template health is ready.
+
+Native P2P freshness remains the mining hard gate. A zero-peer native P2P sample
+blocks new mining work immediately, but `BDAG_WATCHDOG_NATIVE_P2P_PEER_LOSS_REPAIR_SECONDS=300`
+prevents the watchdog from restarting the node until peer loss is sustained and
+fresh paid-block evidence has expired. Chain-state restore is stricter than
+catch-up display state: it requires native peer-lag evidence and ignores
+EVM/public-reference lag by itself.
+
+EVM/public-reference lag is advisory only after native mining proof is complete:
+`getTemplateHealth` or backend metrics must prove current chain, fresh P2P,
+fresh consensus peer floor, peer lead inside the configured safety window,
+template readiness, and submit readiness. Unknown peer count or unknown peer
+lead fails closed. When miners are connected, zero ready miner lanes keeps
+`can_submit_blocks=false` unless fresh paid-block evidence proves the submit
+path is already converting work.
+
+Node config edits and service recreates are cold/idle operations. Before the
+pool is live, automation may prepare missing node mining/template support only
+after native safety gates pass. Once `pool` is running, or once any
+accepted-block history exists, automation must not rewrite node
+mining/template flags, peer lists, cache settings, or recreate `node`. Recovery
+should fail closed by pausing templates, preserving the existing node
+identity/data path, and waiting for native `getTemplateHealth` to prove
+`chain_current`, `p2p_mining_fresh`, `mineable_now`, and `submit_ready`. If
+chain data must be restored, stop the mining path deliberately, quarantine the
+old datadir, preserve `network.key`, restore a verified raw datadir or
+snapshot, and restart the existing `node` container without a Compose recreate.
 
 Dashboard block height is sourced from chain RPC `getBlockCount`; template
 height, logs, and main-order values are shown only as

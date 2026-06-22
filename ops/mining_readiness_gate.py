@@ -24,6 +24,12 @@ DEFAULT_TIMEOUT_SECONDS = 1.5
 DEFAULT_SAMPLE_COUNT = 3
 DEFAULT_SAMPLE_INTERVAL_SECONDS = 10.0
 DEFAULT_MAX_REFERENCE_LAG = 120
+DEFAULT_STRICT_REFERENCE_LAG = os.environ.get("BDAG_STRICT_REFERENCE_LAG", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 DEFAULT_LOG_LOOKBACK_MINUTES = 15
 DEFAULT_POW_TYPE = 10
 JSON_RPC_CONTENT_TYPE = "application/json"
@@ -454,6 +460,7 @@ def probe_backend_once(
     timeout: float = DEFAULT_TIMEOUT_SECONDS,
     after_chain_incident: bool = False,
     max_reference_lag: int = DEFAULT_MAX_REFERENCE_LAG,
+    strict_reference_lag: bool = DEFAULT_STRICT_REFERENCE_LAG,
     allow_reference_unavailable: bool = False,
     pow_type: int = DEFAULT_POW_TYPE,
     mining_address: str = "",
@@ -553,7 +560,7 @@ def probe_backend_once(
             warnings,
             health,
             "p2p_mining_fresh",
-            required=False,
+            required=True,
             required_after_incident=True,
             after_chain_incident=after_chain_incident,
         )
@@ -613,13 +620,21 @@ def probe_backend_once(
         if height is not None and reference_height is not None:
             lag = int(reference_height) - int(height)
             if lag > max_reference_lag:
-                failures.append(f"reference_height_lag_{lag}_gt_{max_reference_lag}")
+                reason = f"reference_height_lag_{lag}_gt_{max_reference_lag}"
+                if strict_reference_lag:
+                    failures.append(reason)
+                else:
+                    warnings.append(reason)
         reference_main_order = reference.get("main_order")
         main_order = sample.get("main_order")
         if main_order is not None and reference_main_order is not None:
             lag = int(reference_main_order) - int(main_order)
             if lag > max_reference_lag:
-                failures.append(f"reference_main_order_lag_{lag}_gt_{max_reference_lag}")
+                reason = f"reference_main_order_lag_{lag}_gt_{max_reference_lag}"
+                if strict_reference_lag:
+                    failures.append(reason)
+                else:
+                    warnings.append(reason)
 
     if not failures:
         sample["ok"] = True
@@ -638,6 +653,7 @@ def evaluate_backend(
     sample_interval_seconds: float = DEFAULT_SAMPLE_INTERVAL_SECONDS,
     after_chain_incident: bool = False,
     max_reference_lag: int = DEFAULT_MAX_REFERENCE_LAG,
+    strict_reference_lag: bool = DEFAULT_STRICT_REFERENCE_LAG,
     allow_reference_unavailable: bool = False,
     pow_type: int = DEFAULT_POW_TYPE,
     mining_address: str = "",
@@ -668,6 +684,7 @@ def evaluate_backend(
             timeout=timeout,
             after_chain_incident=after_chain_incident,
             max_reference_lag=max_reference_lag,
+            strict_reference_lag=strict_reference_lag,
             allow_reference_unavailable=allow_reference_unavailable,
             pow_type=pow_type,
             mining_address=mining_address,
@@ -839,6 +856,7 @@ def evaluate_gate(
     sample_interval_seconds: float = DEFAULT_SAMPLE_INTERVAL_SECONDS,
     after_chain_incident: bool = False,
     max_reference_lag: int = DEFAULT_MAX_REFERENCE_LAG,
+    strict_reference_lag: bool = DEFAULT_STRICT_REFERENCE_LAG,
     allow_reference_unavailable: bool = False,
     log_sources: list[str] | None = None,
     log_lookback_minutes: int = DEFAULT_LOG_LOOKBACK_MINUTES,
@@ -860,6 +878,7 @@ def evaluate_gate(
             sample_interval_seconds=sample_interval_seconds,
             after_chain_incident=after_chain_incident,
             max_reference_lag=max_reference_lag,
+            strict_reference_lag=strict_reference_lag,
             allow_reference_unavailable=allow_reference_unavailable,
             pow_type=pow_type,
             mining_address=resolved_mining_address,
@@ -898,6 +917,7 @@ def evaluate_gate(
             "timeout_seconds": timeout,
             "after_chain_incident": after_chain_incident,
             "max_reference_lag": max_reference_lag,
+            "strict_reference_lag": strict_reference_lag,
             "allow_reference_unavailable": allow_reference_unavailable,
             "pow_type": pow_type,
             "mining_address_present": bool(resolved_mining_address),
@@ -917,6 +937,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--samples", type=int, default=DEFAULT_SAMPLE_COUNT)
     parser.add_argument("--sample-interval", type=float, default=DEFAULT_SAMPLE_INTERVAL_SECONDS)
     parser.add_argument("--max-reference-lag", type=int, default=DEFAULT_MAX_REFERENCE_LAG)
+    parser.add_argument(
+        "--strict-reference-lag",
+        action="store_true",
+        default=DEFAULT_STRICT_REFERENCE_LAG,
+        help="Fail readiness on public reference lag instead of recording it as advisory",
+    )
     parser.add_argument("--pow-type", type=int, default=DEFAULT_POW_TYPE)
     parser.add_argument("--mining-address", default=None)
     parser.add_argument(
@@ -951,6 +977,7 @@ def main(argv: list[str] | None = None) -> int:
         sample_interval_seconds=args.sample_interval,
         after_chain_incident=args.after_chain_incident,
         max_reference_lag=args.max_reference_lag,
+        strict_reference_lag=args.strict_reference_lag,
         allow_reference_unavailable=args.allow_reference_unavailable,
         log_sources=args.log_source,
         log_lookback_minutes=args.log_lookback_minutes,

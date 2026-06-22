@@ -23,15 +23,19 @@ from mining_health_triage import build_mining_health_triage
 from stack_status_source import collect_stack_status
 from pool_ops import (
     LOG_DIR,
+    MINER_HASHRATE_PROBE_TIMEOUT,
     NODES,
     POOL_CONTAINER,
     POOL_ENV_FILE,
     PROJECT_ROOT,
     RUNTIME_DIR,
     action_log_path,
+    collect_pool_job_state_activity,
     configure_miner,
     default_miner_pool_settings,
     ensure_runtime,
+    get_miner_cgminer_devs,
+    get_miner_pools,
     is_lan_ipv4,
     now_iso,
     record_earnings_snapshot,
@@ -69,6 +73,12 @@ DEFAULT_SYNCING_RESTART_COOLDOWN = int(os.environ.get("BDAG_SYNCING_RESTART_COOL
 DEFAULT_ACTIVE_SYNC_IMPORT_GRACE_SECONDS = int(
     os.environ.get("BDAG_WATCHDOG_ACTIVE_SYNC_IMPORT_GRACE_SECONDS", "300")
 )
+DEFAULT_NATIVE_P2P_PEER_LOSS_REPAIR_SECONDS = int(
+    os.environ.get("BDAG_WATCHDOG_NATIVE_P2P_PEER_LOSS_REPAIR_SECONDS", "300")
+)
+DEFAULT_ACTIVE_MINING_NODE_RESTART_INHIBIT_SECONDS = int(
+    os.environ.get("BDAG_WATCHDOG_ACTIVE_MINING_NODE_RESTART_INHIBIT_SECONDS", "900")
+)
 DEFAULT_SHARE_STALL_THRESHOLD = int(os.environ.get("BDAG_WATCHDOG_SHARE_STALL_THRESHOLD", "2"))
 DEFAULT_SHARE_STALL_RESTART_COOLDOWN = int(
     os.environ.get("BDAG_WATCHDOG_SHARE_STALL_RESTART_COOLDOWN", os.environ.get("BDAG_SYNCING_RESTART_COOLDOWN", "900"))
@@ -95,6 +105,12 @@ DEFAULT_ASIC_API_STALL_STALE_SECONDS = int(os.environ.get("BDAG_WATCHDOG_ASIC_AP
 DEFAULT_ASIC_API_STALL_CONFIRM_SECONDS = int(os.environ.get("BDAG_WATCHDOG_ASIC_API_STALL_CONFIRM_SECONDS", "120"))
 DEFAULT_ASIC_API_STALL_REPAIR_COOLDOWN = int(
     os.environ.get("BDAG_WATCHDOG_ASIC_API_STALL_REPAIR_COOLDOWN", str(DEFAULT_MINER_RESTART_COOLDOWN))
+)
+DEFAULT_ASIC_MISSING_LANE_CONFIRM_SECONDS = int(
+    os.environ.get("BDAG_WATCHDOG_ASIC_MISSING_LANE_CONFIRM_SECONDS", "45")
+)
+DEFAULT_ASIC_API_STALL_PROBE_TIMEOUT = float(
+    os.environ.get("BDAG_WATCHDOG_ASIC_API_STALL_PROBE_TIMEOUT", str(MINER_HASHRATE_PROBE_TIMEOUT))
 )
 DEFAULT_MINER_USEFUL_WORK_STALL_SECONDS = int(
     os.environ.get("BDAG_WATCHDOG_MINER_USEFUL_WORK_STALL_SECONDS", "150")
@@ -359,6 +375,94 @@ def float_or_none(value: Any) -> float | None:
         return None
 
 
+def list_or_empty(value: Any) -> list[Any]:
+    return list(value) if isinstance(value, list) else []
+
+
+def dict_or_empty(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def normalize_watchdog_status_payload(status: dict[str, Any]) -> dict[str, Any]:
+    """Make repair code fail-closed instead of crashing on compact status payloads."""
+    normalized = dict(status)
+    failures = list_or_empty(normalized.get("failures"))
+    stack_failures = list_or_empty(normalized.get("stack_failures"))
+    miner_failures = list_or_empty(normalized.get("miner_failures"))
+    if not failures and "failures" not in normalized and (stack_failures or miner_failures):
+        failures = [*stack_failures, *miner_failures]
+    if not stack_failures and "stack_failures" not in normalized:
+        stack_failures = list(failures)
+    normalized["failures"] = failures
+    normalized["stack_failures"] = stack_failures
+    normalized["miner_failures"] = miner_failures
+    normalized["warnings"] = list_or_empty(normalized.get("warnings"))
+    normalized["sync_warnings"] = list_or_empty(normalized.get("sync_warnings", normalized["warnings"]))
+    normalized["overall"] = str(normalized.get("overall") or normalized.get("status") or "unknown")
+    if not isinstance(normalized.get("pool_health"), dict) and isinstance(normalized.get("pool"), dict):
+        normalized["pool_health"] = normalized["pool"]
+    normalized["pool_health"] = dict_or_empty(normalized.get("pool_health"))
+    normalized["miner_health"] = dict_or_empty(normalized.get("miner_health"))
+    normalized["containers"] = dict_or_empty(normalized.get("containers"))
+    normalized["sync_health"] = dict_or_empty(normalized.get("sync_health"))
+    normalized["sync_progress"] = dict_or_empty(normalized.get("sync_progress"))
+    return normalized
+
+
+def native_p2p_peer_loss_reason(status: dict[str, Any]) -> str:
+    reasons: list[str] = []
+    min_fresh_peers = DEFAULT_MINER_USEFUL_WORK_MIN_HEALTHY_PEERS
+
+    def inspect_progress(progress: dict[str, Any], label: str) -> None:
+        status_text = str(progress.get("status") or "").strip().lower()
+        error_text = str(progress.get("error") or "").strip().lower()
+        if status_text == "p2p_down":
+            reasons.append(f"{label} native P2P status is p2p_down")
+        if "no active native p2p peers" in error_text or "syncing but no active peers" in error_text:
+            reasons.append(f"{label} reports no active native P2P peers")
+
+        peer_count = int_or_none(progress.get("peer_count"))
+        p2p_connections = int_or_none(progress.get("p2p_connections"))
+        explicit_zero_counts = [
+            name
+            for name, value in (("peer_count", peer_count), ("p2p_connections", p2p_connections))
+            if value == 0
+        ]
+        if explicit_zero_counts:
+            reasons.append(f"{label} has zero native P2P peer count ({', '.join(explicit_zero_counts)})")
+
+        health = dict_or_empty(progress.get("native_template_health"))
+        if not health:
+            return
+        if health.get("p2p_mining_fresh") is False:
+            reasons.append(f"{label} native template P2P freshness is false")
+        fresh_peers = int_or_none(health.get("p2p_fresh_consensus_peer_count"))
+        if fresh_peers is not None and fresh_peers < min_fresh_peers:
+            reasons.append(
+                f"{label} has {fresh_peers} fresh consensus peer(s), below required {min_fresh_peers}"
+            )
+
+    sync_progress = dict_or_empty(status.get("sync_progress"))
+    inspect_progress(sync_progress, "stack")
+    for node, progress in dict_or_empty(sync_progress.get("nodes")).items():
+        if isinstance(progress, dict):
+            inspect_progress(progress, str(node))
+
+    pool_health = dict_or_empty(status.get("pool_health", status.get("pool", {})))
+    if pool_health.get("source_selected_backend_p2p_fresh") is False:
+        reasons.append("selected backend native P2P freshness is false")
+    if pool_health.get("source_selected_backend_submit_ready") is False and pool_health.get("initial_download"):
+        reason = str(pool_health.get("source_selected_backend_unready_reason") or "").lower()
+        if "p2p" in reason or "peer" in reason:
+            reasons.append(f"selected backend is not submit-ready: {reason}")
+
+    deduped: list[str] = []
+    for reason in reasons:
+        if reason and reason not in deduped:
+            deduped.append(reason)
+    return "; ".join(deduped)
+
+
 def pool_initial_download_effective(status: dict[str, Any]) -> bool:
     pool_health = status.get("pool_health") if isinstance(status.get("pool_health"), dict) else {}
     if not pool_health.get("initial_download"):
@@ -387,6 +491,83 @@ def pool_has_recent_mining_work(status: dict[str, Any], freshness_seconds: int =
     block_age = int_or_none(pool_health.get("last_block_submit_age_seconds"))
     accepted_blocks = int_or_none(pool_health.get("block_submit_success_count")) or 0
     return bool(accepted_blocks > 0 and block_age is not None and block_age <= freshness_seconds)
+
+
+def native_mining_safety_current(status: dict[str, Any]) -> bool:
+    sync_health = status.get("sync_health") if isinstance(status.get("sync_health"), dict) else {}
+    if sync_health.get("selected_backend_mining_safe") or sync_health.get("native_chain_progress_safe"):
+        return True
+    safety = status.get("canonical_mining_safety")
+    if isinstance(safety, dict) and safety.get("safe") and not safety.get("public_chain_diverged"):
+        return True
+    progress = status.get("sync_progress") if isinstance(status.get("sync_progress"), dict) else {}
+    remaining = int_or_none(progress.get("remaining_blocks"))
+    if progress.get("status") == "synced" and (remaining is None or remaining <= 0):
+        return True
+    pool_health = status.get("pool_health") if isinstance(status.get("pool_health"), dict) else {}
+    return bool(
+        pool_health.get("source_selected_backend_mineable") is True
+        and pool_health.get("source_selected_backend_submit_ready") is True
+        and pool_health.get("source_selected_backend_p2p_fresh") is True
+    )
+
+
+def active_mining_node_restart_inhibitor(status: dict[str, Any]) -> str:
+    miner_health = status.get("miner_health") if isinstance(status.get("miner_health"), dict) else {}
+    connected = int_or_none(miner_health.get("connected_count_effective") or miner_health.get("connected_count")) or 0
+    if connected <= 0:
+        return ""
+    if not pool_has_recent_mining_work(status, DEFAULT_ACTIVE_MINING_NODE_RESTART_INHIBIT_SECONDS):
+        paid_state = status.get("sync_health", {}).get("pool_paid_work_state") if isinstance(status.get("sync_health"), dict) else {}
+        if not (
+            isinstance(paid_state, dict)
+            and int_or_none(paid_state.get("accepted_block_submissions")) is not None
+            and (int_or_none(paid_state.get("accepted_block_submissions")) or 0) > 0
+            and (float_or_none(paid_state.get("last_accepted_age_seconds")) or 999999)
+            <= DEFAULT_ACTIVE_MINING_NODE_RESTART_INHIBIT_SECONDS
+        ):
+            return ""
+    if not native_mining_safety_current(status):
+        return ""
+    return (
+        f"{connected} miner(s) connected, accepted block work exists inside "
+        f"{DEFAULT_ACTIVE_MINING_NODE_RESTART_INHIBIT_SECONDS}s, and native mining safety is current"
+    )
+
+
+def update_native_p2p_peer_loss_tracking(state: dict[str, Any], reason: str, now: int) -> int:
+    if not reason:
+        reset_native_p2p_peer_loss_tracking(state)
+        return 0
+
+    since = int(state.get("native_p2p_peer_loss_since_epoch") or now)
+    if since <= 0 or since > now:
+        since = now
+    state["native_p2p_peer_loss_since_epoch"] = since
+    state.setdefault("native_p2p_peer_loss_since_at", now_iso())
+    state["native_p2p_peer_loss_reason"] = reason
+    age = max(0, now - since)
+    state["native_p2p_peer_loss_age_seconds"] = age
+    return age
+
+
+def reset_native_p2p_peer_loss_tracking(state: dict[str, Any]) -> None:
+    for key in (
+        "native_p2p_peer_loss_since_epoch",
+        "native_p2p_peer_loss_since_at",
+        "native_p2p_peer_loss_reason",
+        "native_p2p_peer_loss_age_seconds",
+    ):
+        state.pop(key, None)
+
+
+def youngest_node_started_age_seconds(status: dict[str, Any], now: int) -> int | None:
+    ages = [
+        age
+        for node in NODES
+        if (age := container_started_age_seconds(status, node, now)) is not None
+    ]
+    return min(ages) if ages else None
 
 
 def pool_has_unpaid_template_loss(status: dict[str, Any]) -> bool:
@@ -552,6 +733,104 @@ ASIC_API_STALL_TEXT_FRAGMENTS = (
 )
 
 
+def active_pool_job_state_macs(status: dict[str, Any]) -> set[str]:
+    miners = ((status.get("miner_health") or {}).get("miners") or [])
+    macs = {
+        str(row.get("mac") or "").strip().lower()
+        for row in miners
+        if isinstance(row, dict)
+        and row.get("pool_job_state_authorized")
+        and str(row.get("mac") or "").strip()
+    }
+    if macs:
+        return macs
+    try:
+        activity = collect_pool_job_state_activity()
+    except Exception:
+        return set()
+    return {
+        str(row.get("mac") or "").strip().lower()
+        for row in activity
+        if isinstance(row, dict)
+        and row.get("pool_job_state_authorized")
+        and str(row.get("mac") or "").strip()
+    }
+
+
+def pool_active_lane_count(status: dict[str, Any], active_macs: set[str]) -> int:
+    pool_metrics = status.get("pool_metrics") if isinstance(status.get("pool_metrics"), dict) else {}
+    source_job_health = pool_metrics.get("source_job_health") if isinstance(pool_metrics.get("source_job_health"), dict) else {}
+    return max(
+        len(active_macs),
+        int_or_none(pool_metrics.get("active_connections")) or 0,
+        int_or_none(pool_metrics.get("authorized_miners")) or 0,
+        int_or_none(pool_metrics.get("ready_miners")) or 0,
+        int_or_none(source_job_health.get("authorized_miners")) or 0,
+        int_or_none(source_job_health.get("ready_miners")) or 0,
+    )
+
+
+def probe_missing_asic_api_stall(ip: str) -> str:
+    errors: list[str] = []
+    for label, probe in (("pools", get_miner_pools), ("cgminer-devs", get_miner_cgminer_devs)):
+        try:
+            probe(ip, timeout=DEFAULT_ASIC_API_STALL_PROBE_TIMEOUT)
+        except Exception as exc:  # noqa: BLE001 - watchdog records probe evidence, then uses restart policy.
+            errors.append(f"{label}: {exc}")
+    issue_text = " ".join(errors).lower()
+    if errors and any(fragment in issue_text for fragment in ASIC_API_STALL_TEXT_FRAGMENTS):
+        return "; ".join(errors)
+    return ""
+
+
+def missing_pool_lane_api_stall_miners(status: dict[str, Any]) -> list[dict[str, Any]]:
+    mining_address = str(status.get("mining_address") or "")
+    miners = ((status.get("miner_health") or {}).get("miners") or [])
+    managed_primary = [
+        row
+        for row in miners
+        if isinstance(row, dict)
+        and row.get("managed")
+        and row.get("device_type") == "asic"
+        and is_lan_ipv4(str(row.get("ip", "")))
+        and is_primary_pool_identity(row, mining_address)
+    ]
+    if len(managed_primary) <= 1:
+        return []
+
+    active_macs = active_pool_job_state_macs(status)
+    active_lanes = pool_active_lane_count(status, active_macs)
+    if active_lanes < max(1, DEFAULT_MINER_USEFUL_WORK_MIN_HEALTHY_PEERS):
+        return []
+    if active_lanes >= len(managed_primary):
+        return []
+
+    affected: list[dict[str, Any]] = []
+    for row in managed_primary:
+        mac = str(row.get("mac") or "").strip().lower()
+        if mac and mac in active_macs:
+            continue
+        if row.get("connected") or row.get("pool_active") is True or row.get("work_pool_active") is True:
+            continue
+        issue = probe_missing_asic_api_stall(str(row.get("ip")))
+        if not issue:
+            continue
+        item = dict(row)
+        item["api_stall_issue"] = issue
+        item["api_stall_stale_age_seconds"] = (
+            int_or_none(row.get("last_pool_seen_age_seconds"))
+            or int_or_none(row.get("last_share_age_seconds"))
+            or int_or_none(row.get("last_submit_age_seconds"))
+        )
+        item["api_stall_confirm_seconds"] = DEFAULT_ASIC_MISSING_LANE_CONFIRM_SECONDS
+        item["pool_job_state_missing_lane"] = True
+        item["active_pool_lane_count"] = active_lanes
+        item["expected_pool_lane_count"] = len(managed_primary)
+        item["restart_open_first"] = True
+        affected.append(item)
+    return affected
+
+
 def asic_api_stall_primary_miners(
     status: dict[str, Any],
     stale_seconds: int = DEFAULT_ASIC_API_STALL_STALE_SECONDS,
@@ -622,7 +901,15 @@ def asic_api_stall_primary_miners(
         item["api_stall_stale_age_seconds"] = stale_age
         item["restart_open_first"] = True
         affected.append(item)
-    return affected
+    by_identity: dict[str, dict[str, Any]] = {}
+    for item in [*affected, *missing_pool_lane_api_stall_miners(status)]:
+        key = miner_stall_identity_key(item)
+        if not key:
+            continue
+        existing = by_identity.get(key)
+        if existing is None or item.get("pool_job_state_missing_lane"):
+            by_identity[key] = item
+    return list(by_identity.values())
 
 
 def useful_work_stalled_primary_miners(
@@ -1459,6 +1746,26 @@ def suppress_sync_restart_for_active_import(
         return False
     if target_node and target_node not in active_nodes:
         return False
+    peer_loss_reason = native_p2p_peer_loss_reason(status)
+    if peer_loss_reason:
+        state["last_sync_repair_suppression_bypassed_epoch"] = int(time.time())
+        state["last_sync_repair_suppression_bypassed_at"] = now_iso()
+        state["last_sync_repair_suppression_bypassed_reason"] = peer_loss_reason
+        log(
+            "sync restart suppression bypassed because native P2P is not healthy "
+            f"target={target_node or 'stack'} active_nodes={','.join(active_nodes)} reason={peer_loss_reason}"
+        )
+        record_efficiency_event(
+            "repair_suppression_bypassed",
+            "warning",
+            "active import did not suppress repair because native P2P is not healthy",
+            {
+                "active_nodes": active_nodes,
+                "target_node": target_node,
+                "reason": peer_loss_reason,
+            },
+        )
+        return False
 
     pool_health = status.get("pool_health", status.get("pool", {}))
     sync_health = status.get("sync_health", {}) if isinstance(status.get("sync_health"), dict) else {}
@@ -1717,7 +2024,7 @@ def check_once(
     repair: bool = True,
 ) -> dict[str, Any]:
     state = read_state()
-    status = collect_stack_status(include_logs=True)
+    status = normalize_watchdog_status_payload(collect_stack_status(include_logs=True))
     stack_failures = status.get("stack_failures", status["failures"])
     miner_failures = status.get("miner_failures", [])
     failures = stack_failures + miner_failures
@@ -1740,6 +2047,18 @@ def check_once(
     )
     now = int(time.time())
     observe_sync_progress(status, state, now)
+    native_peer_loss_reason = native_p2p_peer_loss_reason(status)
+    native_peer_loss_age = update_native_p2p_peer_loss_tracking(state, native_peer_loss_reason, now)
+    node_started_age_seconds = youngest_node_started_age_seconds(status, now)
+    if (
+        native_peer_loss_reason
+        and node_started_age_seconds is not None
+        and native_peer_loss_age > node_started_age_seconds + 5
+    ):
+        reset_native_p2p_peer_loss_tracking(state)
+        state["native_p2p_peer_loss_reset_reason"] = "peer-loss timer predates current node start"
+        state["native_p2p_peer_loss_reset_at"] = now_iso()
+        native_peer_loss_age = update_native_p2p_peer_loss_tracking(state, native_peer_loss_reason, now)
     pool_started_age_seconds = container_started_age_seconds(status, POOL_CONTAINER, now)
     pool_in_startup_grace = bool(
         pool_started_age_seconds is not None
@@ -1916,7 +2235,7 @@ def check_once(
         return {"status": status, "watchdog_state": state}
 
     sync_pause_reason = sync_progress_pool_pause_reason(status)
-    if sync_pause_reason and container_running(status, POOL_CONTAINER):
+    if sync_pause_reason and container_running(status, POOL_CONTAINER) and not native_peer_loss_reason:
         state["consecutive_failures"] = 0
         state["consecutive_syncing"] = 0
         state["consecutive_share_stalls"] = 0
@@ -2156,15 +2475,16 @@ def check_once(
             ip = str(item.get("ip"))
             identity_key = miner_stall_identity_key(item)
             stalled_for = now - int(asic_api_stall_since.get(identity_key, now) or now)
+            confirm_seconds = int_or_none(item.get("api_stall_confirm_seconds")) or DEFAULT_ASIC_API_STALL_CONFIRM_SECONDS
             cooldown_remaining = DEFAULT_ASIC_API_STALL_REPAIR_COOLDOWN - (
                 now - int(miner_restart_by_ip.get(ip, 0) or 0)
             )
-            if stalled_for >= DEFAULT_ASIC_API_STALL_CONFIRM_SECONDS and cooldown_remaining <= 0:
+            if stalled_for >= confirm_seconds and cooldown_remaining <= 0:
                 eligible_miners.append(item)
             else:
                 waiting.append(
                     f"{identity_key or ip} ip={ip} stalled_for={stalled_for}s "
-                    f"confirm={DEFAULT_ASIC_API_STALL_CONFIRM_SECONDS}s "
+                    f"confirm={confirm_seconds}s "
                     f"cooldown_remaining={max(cooldown_remaining, 0)}s"
                 )
         reason = (
@@ -2852,16 +3172,23 @@ def check_once(
             state["last_share_repair_at"] = int(time.time())
             if ok:
                 state["consecutive_share_stalls"] = 0
-    elif status.get("sync_health", {}).get("needs_fast_sync_repair"):
-        sync_warnings = status.get("sync_warnings", status.get("warnings", []))
+    elif status.get("sync_health", {}).get("needs_fast_sync_repair") or native_peer_loss_reason:
+        sync_warnings = list_or_empty(status.get("sync_warnings", status.get("warnings", [])))
+        if native_peer_loss_reason and native_peer_loss_reason not in sync_warnings:
+            sync_warnings.append(native_peer_loss_reason)
         recent_mining_work = pool_has_recent_mining_work(status)
+        native_peer_loss_repair_ready = bool(
+            native_peer_loss_reason
+            and native_peer_loss_age >= DEFAULT_NATIVE_P2P_PEER_LOSS_REPAIR_SECONDS
+            and not recent_mining_work
+        )
         state["consecutive_failures"] = 0
-        if recent_mining_work:
+        if recent_mining_work and not native_peer_loss_reason:
             state["consecutive_syncing"] = 0
         else:
             state["consecutive_syncing"] = int(state.get("consecutive_syncing", 0) or 0) + 1
         state["consecutive_share_stalls"] = 0
-        state["last_status"] = "syncing"
+        state["last_status"] = "p2p_down" if native_peer_loss_reason else "syncing"
         state["last_failures"] = []
         state["last_sync_warnings"] = sync_warnings
         log(
@@ -2876,9 +3203,11 @@ def check_once(
             {
                 "consecutive_syncing": state["consecutive_syncing"],
                 "recent_mining_work": recent_mining_work,
+                "native_peer_loss_age_seconds": native_peer_loss_age if native_peer_loss_reason else 0,
+                "native_peer_loss_repair_seconds": DEFAULT_NATIVE_P2P_PEER_LOSS_REPAIR_SECONDS,
             },
         )
-        if repair and recent_mining_work:
+        if repair and recent_mining_work and not native_peer_loss_reason:
             log("sync repair suppressed because paid block submission is fresh")
             record_efficiency_event(
                 "repair_suppressed",
@@ -2889,9 +3218,47 @@ def check_once(
                     "freshness_seconds": 60,
                 },
             )
-        if repair and state["consecutive_syncing"] and should_restart_for_syncing(state, syncing_threshold, syncing_restart_cooldown):
+        elif repair and native_peer_loss_reason and not native_peer_loss_repair_ready:
+            log(
+                "native P2P repair suppressed until peer loss is sustained "
+                f"age={native_peer_loss_age}s threshold={DEFAULT_NATIVE_P2P_PEER_LOSS_REPAIR_SECONDS}s "
+                f"recent_mining_work={recent_mining_work}"
+            )
+            record_efficiency_event(
+                "repair_suppressed",
+                "warning",
+                "native P2P repair suppressed until peer loss is sustained",
+                {
+                    "native_peer_loss_reason": native_peer_loss_reason,
+                    "native_peer_loss_age_seconds": native_peer_loss_age,
+                    "native_peer_loss_repair_seconds": DEFAULT_NATIVE_P2P_PEER_LOSS_REPAIR_SECONDS,
+                    "recent_mining_work": recent_mining_work,
+                },
+            )
+        if (
+            repair
+            and state["consecutive_syncing"]
+            and (not native_peer_loss_reason or native_peer_loss_repair_ready)
+            and should_restart_for_syncing(state, syncing_threshold, syncing_restart_cooldown)
+        ):
             restart_node = template_nodes[0] if template_nodes else choose_lagging_node(status)
-            if suppress_sync_restart_for_active_import(status, state, "; ".join(sync_warnings), restart_node):
+            active_mining_inhibitor = active_mining_node_restart_inhibitor(status)
+            if active_mining_inhibitor and not native_peer_loss_reason:
+                ok = False
+                repair_attempted = False
+                state["last_sync_repair_suppressed_epoch"] = int(time.time())
+                state["last_sync_repair_suppressed_reason"] = active_mining_inhibitor
+                log(f"sync repair suppressed because active mining would be interrupted: {active_mining_inhibitor}")
+                record_efficiency_event(
+                    "repair_suppressed",
+                    "warning",
+                    "node restart suppressed because active mining is still safe",
+                    {
+                        "sync_warnings": sync_warnings,
+                        "active_mining_inhibitor": active_mining_inhibitor,
+                    },
+                )
+            elif suppress_sync_restart_for_active_import(status, state, "; ".join(sync_warnings), restart_node):
                 ok = False
                 repair_attempted = False
             elif restart_node:
@@ -2938,6 +3305,7 @@ def loop(
         "watchdog started "
         f"interval={interval}s threshold={threshold} clean_restore_cooldown={clean_restore_cooldown}s "
         f"syncing_threshold={syncing_threshold} syncing_restart_cooldown={syncing_restart_cooldown}s "
+        f"native_p2p_peer_loss_repair={DEFAULT_NATIVE_P2P_PEER_LOSS_REPAIR_SECONDS}s "
         f"miner_down_restart_seconds={miner_down_restart_seconds}s miner_restart_cooldown={miner_restart_cooldown}s "
         f"miner_useful_work_stall_seconds={DEFAULT_MINER_USEFUL_WORK_STALL_SECONDS}s "
         f"miner_useful_work_confirm={DEFAULT_MINER_USEFUL_WORK_STALL_CONFIRM_SECONDS}s "

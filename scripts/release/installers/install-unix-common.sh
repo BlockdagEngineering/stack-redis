@@ -413,13 +413,28 @@ set_env_value() {
     local file="$1"
     local key="$2"
     local value="$3"
-    local escaped
-    escaped="$(sed_escape "$value")"
+    local line escaped
+    line="${key}=$(quote_env_value "$value")"
+    escaped="$(sed_escape "$line")"
     if grep -q "^${key}=" "$file"; then
-        inplace_sed "s|^${key}=.*|${key}=${escaped}|" "$file"
+        inplace_sed "s|^${key}=.*|${escaped}|" "$file"
     else
-        printf '\n%s=%s\n' "$key" "$value" >> "$file"
+        printf '\n%s\n' "$line" >> "$file"
     fi
+}
+
+quote_env_value() {
+    local value="$1"
+    case "$value" in
+        *[!A-Za-z0-9_./:@,%+=-]*)
+            printf '"'
+            printf '%s' "$value" | sed 's/[\\$"`]/\\&/g'
+            printf '"'
+            ;;
+        *)
+            printf '%s' "$value"
+            ;;
+    esac
 }
 
 env_file_value() {

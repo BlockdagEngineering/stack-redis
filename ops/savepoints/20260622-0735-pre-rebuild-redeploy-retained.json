@@ -1,0 +1,105 @@
+{
+  "savepoint_id": "20260622-0735-pre-rebuild-redeploy-retained",
+  "created_at": "2026-06-22T07:35:00+02:00",
+  "retained": true,
+  "purpose": "Rollback target before rebuilding and redeploying current pool and redis-dash source changes.",
+  "repos": {
+    "stack_redis_branch": "codex/native-safe-mining-20260620-stack",
+    "stack_redis_head": "efb6e26",
+    "pool_branch": "codex/native-safe-mining-20260620-pool",
+    "pool_head": "a890d5c",
+    "redis_dash_branch": "codex/native-safe-mining-20260620-dashboard",
+    "redis_dash_head": "915d5c2"
+  },
+  "source_guards": {
+    "forbidden_peer_module_grep": "passed before this savepoint: no active peer-module hits in stack-redis live startup, examples, defaults, generated configs, tests, or compose paths",
+    "live_node_module_invariant": "Blockdag and miner modules only with explicit mining address; do not deploy node in this change"
+  },
+  "rollback_tags": {
+    "pool": "stack-pool:20260622-0735-pre-rebuild-redeploy",
+    "dashboard": "stack-dashboard:20260622-0735-pre-rebuild-redeploy",
+    "node": "stack-node:20260622-0735-pre-rebuild-redeploy",
+    "status_sampler": "stack-status-sampler:20260622-0735-pre-rebuild-redeploy"
+  },
+  "live_image_ids": {
+    "pool": "sha256:c102be94afedbf98a51ce9362809198725b290979682e902096f0619a7e74c50",
+    "dashboard_running": "sha256:21e9bf98ae9a60e44c379cde8b29a2ddf40fc061dc987aebd3d6db741a18529b",
+    "dashboard_latest_before_deploy": "sha256:272a4534b1e9372488805e7ec8ad79db44effaf285062b89c773aa120488d8a3",
+    "node": "sha256:c1b1c24457dc052f0d4352e16cbfbf99144633d5bc3f5f7cf17fb57475933845",
+    "status_sampler": "sha256:6e45c75e084826a9ec44f0bd101b124610b450f31908396b9972d99685cd7739"
+  },
+  "live_baseline": {
+    "dashboard_api": {
+      "overall": "ok",
+      "mode": "mining",
+      "can_accept_shares": true,
+      "can_submit_blocks": true,
+      "source": "redis-live",
+      "sync_status": "synced",
+      "native_is_current": true,
+      "p2p_connections": 5,
+      "p2p_network_gap": 0,
+      "ready_miners": 4,
+      "accepted_block_submissions": 10359,
+      "accepted_block_submissions_delta": 2,
+      "accepted_block_recent": true
+    },
+    "pool_job_state": {
+      "status": "ok",
+      "reason_code": "ok",
+      "active_connections": 4,
+      "authorized_connections": 4,
+      "ready_connections": 4,
+      "stale_current_job_connections": 0,
+      "invalid_current_job_connections": 0,
+      "expired_current_job_connections": 0,
+      "current_template_seq": 32568,
+      "last_broadcast_age_ms": 1032,
+      "router_node_reason": "ok"
+    },
+    "host_pressure": {
+      "node_memory": "4.352GiB / 15.31GiB",
+      "pool_memory": "37.58MiB / 15.31GiB",
+      "dashboard_memory": "57.97MiB / 15.31GiB"
+    }
+  },
+  "rollback_commands": [
+    "cd /home/jeremy/blockdag-source/stack-redis",
+    "docker image tag stack-dashboard:20260622-0735-pre-rebuild-redeploy stack-dashboard:latest && docker compose up -d --no-deps --no-build dashboard",
+    "docker compose stop pool && docker image tag stack-pool:20260622-0735-pre-rebuild-redeploy stack-pool:latest && docker compose up -d --no-deps --no-build pool",
+    "Node rollback should be avoided for this deploy; if required, stop pool first, tag stack-node:20260622-0735-pre-rebuild-redeploy as stack-node:latest, restore node deliberately, verify native health/fresh peers, then restart pool."
+  ],
+  "deployment_attempt": {
+    "attempted_at": "2026-06-22T07:37:00+02:00",
+    "candidate_images": {
+      "pool": "stack-pool:latest sha256:00f2570674171002557f5980332431263062534c03641ed8f728f9553cf3c9f5",
+      "dashboard": "stack-dashboard:latest sha256:7730e6213b1f49eba3f2ef4b8141acb7c03c1aae6f1fc3d722ebf0a7de6dec97"
+    },
+    "dashboard_stage": {
+      "result": "passed",
+      "method": "docker compose up -d --no-deps --no-build dashboard",
+      "observation": "Dashboard health became healthy; pool stayed ok/ok with 4 ready lanes and accepted submissions advanced from 10471 to 10495 during the 60 second gate."
+    },
+    "pool_stage": {
+      "result": "failed_safety_gate_and_rolled_back",
+      "method": "docker compose up -d --no-deps --no-build pool",
+      "unsafe_window": "From 2026-06-22T07:40:26+02:00 through rollback decision, pool job-state degraded to invalidated_current_job, ready_connections=0, dashboard degraded to node_syncing/mining, submit=false, backend P2P mining fresh=0, and accepted submissions stalled at 10.",
+      "rollback": "Tagged pre-rebuild pool and dashboard images back to latest and recreated both services. Node and chain data were not restarted or modified.",
+      "asic_recovery": "After rollback, ASIC 192.168.1.105 / MAC 28:e2:97:4d:44:3a repeatedly connected then closed before subscribe/authorize; /mcb/pools and cgminer port-80 reads timed out while /mcb/status and /mcb/setting responded. An authenticated restart of only that ASIC restored the fourth ready lane.",
+      "final_state": "At 2026-06-22T07:48:17+02:00, running images were back to pre-rebuild digests, dashboard was ok/mining, can_submit_blocks=true, native current=true, backend mineable=1, submit_ready=1, P2P mining fresh=1, pool job-state ok/ok with 4 active/authorized/ready lanes, and accepted submissions were advancing.",
+      "dashboard_projection_caveat": "After rollback, old dashboard /api/status could still briefly project ready_miners=0 and backend mineable/submit_ready=0 while direct pool /health/job-state and /metrics showed pool_job_health_ready_miners=4, backend mineable=1, submit_ready=1, and accepted submissions rising. Future deploy gates must verify direct pool/router metrics before acting on the rolled-back dashboard projection.",
+      "post_record_confirmation": "At the final 2026-06-22T07:56+02:00 check, direct pool API on 127.0.0.1:9090 stayed ok with 4 active/authorized/ready ASIC lanes, backend mineable=1, submit_ready=1, P2P mining fresh=1, and pool_block_submit_outcomes_total{outcome=accepted,reason=ok} increased from 425 to 436 over 30 seconds."
+    },
+    "next_retry_requirement": "Do not retry pool deployment until the node_syncing/template-invalidation recovery path is fixed or the pool deploy protocol proves it can preserve or promptly refresh all ASIC jobs after a restart without entering sustained zero-ready invalidated state."
+  },
+  "unsafe_signals_for_revert": [
+    "p2p module appears live",
+    "node command/env diverges from Blockdag/miner-only invariant",
+    "node enters restart loop",
+    "dashboard health fails after dashboard-only deploy",
+    "pool ready miners drop and do not recover after sufficient observation",
+    "accepted submissions stop while ASICs have work",
+    "zero-coinbase or unsafe template reaches ASIC jobs",
+    "dashboard says ok while template/mining is unsafe"
+  ]
+}

@@ -13,8 +13,10 @@ The Compose files use:
 - Lower CPU and block IO weights for dashboard/control-plane services.
 - Large `nofile` limits for node and pool sockets.
 - Graceful stop windows for node and database shutdown.
-- Node cache, BD cache, DAG cache, reduced log verbosity, and no file logging
-  via `NODE_ARGS_APPEND`.
+- Node cache tuning plus reduced node log verbosity and no node file logging.
+  The entrypoint adds `--debuglevel=${BDAG_NODE_DEBUG_LEVEL:-warn}` and
+  `--nofilelogging` by default so catch-up does not write one Docker/file log
+  record per imported block.
 
 For the production node, apply:
 
@@ -33,7 +35,7 @@ environment:
     --cache=${BDAG_NODE_CACHE_MB:-4096}
     --bdcachesize=${BDAG_NODE_BD_CACHE_SIZE:-8192}
     --dagcachesize=${BDAG_NODE_DAG_CACHE_SIZE:-8192}
-    --debuglevel=${BDAG_NODE_DEBUG_LEVEL:-error}
+    --debuglevel=${BDAG_NODE_DEBUG_LEVEL:-warn}
     --evmtrietimeout=${BDAG_EVM_TRIE_TIMEOUT_SECONDS:-7200}
     --nofilelogging
 ```
