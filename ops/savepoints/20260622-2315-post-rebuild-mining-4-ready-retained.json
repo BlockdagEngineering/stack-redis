@@ -1,0 +1,129 @@
+{
+  "document_type": "stack_redis_savepoint",
+  "name": "20260622-2315-post-rebuild-mining-4-ready-retained",
+  "created_at": "2026-06-22T23:15:00+02:00",
+  "retention": "retain until Jeremy explicitly approves removal",
+  "purpose": "Post origin-sync rebuild checkpoint with pool, dashboard, and status-sampler redeployed and local mining restored to 4 ready ASIC lanes.",
+  "source_heads": {
+    "stack-redis": "b9c959a6461f01fb8d34aa88c2dac5f9a8133fc5",
+    "pool": "79ad00ee2fc5ee9391cef6ff3353e7304c27e54d",
+    "redis-dash": "915d5c24ebc0eb691e7149103a4ee4b33b86ac56",
+    "blockdag-corechain": "7426d7fa1b39a29b57b5e81f24dc2baaede0c54c"
+  },
+  "built_images": {
+    "stack-node:post-origin-rebuild-20260622-2310": "sha256:be62749da63d40fb8485f424774126294bcabee6187c7678d8c8b5b21937bd93",
+    "stack-pool:post-origin-rebuild-20260622-2310": "sha256:db2b71e180623acb1f9b75c6ccc92c68e61310876d658f814fa9dfab7070effb",
+    "stack-dashboard:post-origin-rebuild-20260622-2310": "sha256:146547f7130743efc0b237116af4c514303134e131bde1d7a464625bef31dc23",
+    "stack-status-sampler:post-origin-rebuild-20260622-2310": "sha256:7734115a60d761cae65408b92205a9d6ffd23a73d9a8db85e604470419a92828"
+  },
+  "live_images_after_redeploy": {
+    "node": {
+      "image_ref": "stack-node",
+      "image_id": "sha256:c1b1c24457dc052f0d4352e16cbfbf99144633d5bc3f5f7cf17fb57475933845",
+      "note": "Node was rebuilt and tagged but intentionally not restarted because mining was healthy and node restart was unnecessary risk."
+    },
+    "pool": {
+      "image_ref": "stack-pool",
+      "image_id": "sha256:db2b71e180623acb1f9b75c6ccc92c68e61310876d658f814fa9dfab7070effb"
+    },
+    "dashboard": {
+      "image_ref": "stack-dashboard",
+      "image_id": "sha256:146547f7130743efc0b237116af4c514303134e131bde1d7a464625bef31dc23"
+    },
+    "status-sampler": {
+      "image_ref": "stack-status-sampler",
+      "image_id": "sha256:7734115a60d761cae65408b92205a9d6ffd23a73d9a8db85e604470419a92828"
+    }
+  },
+  "live_config_after_redeploy": {
+    ".env_sha256": "df391ba0a263dfb6bb2147a758f5abd52c54b3a9c4f6134260415bb76c7c134c",
+    "node.conf_sha256": "d403a9f2b9b9bc1ebd625d3a9b79cdafd8a693b8546455d3b44fce3a4f69af62",
+    "docker-compose.yml_sha256": "0a789362c087010c4c23bb8f639af5350a00c1e929b82d434f76c7c66810b1a1",
+    "docker-compose.override.yml_sha256": "2597fc0b686e0597d4c23c6979ecb20942777e27fada2e29aee40d8aca3058f8",
+    "asic_mac_overrides": {
+      "192.168.1.101": "2a:71:c7:f5:1f:1e",
+      "192.168.1.14": "28:e2:97:3e:39:63",
+      "192.168.1.105": "28:e2:97:1e:c0:b5",
+      "192.168.1.106": "28:e2:97:4d:44:3a"
+    }
+  },
+  "validation": {
+    "tests": [
+      "pool: go test ./... -count=1",
+      "redis-dash: go test ./... -count=1",
+      "blockdag-corechain: go test ./... -count=1",
+      "stack-redis: python3 -m unittest discover -s ops/tests"
+    ],
+    "pytest_note": "python3 -m pytest ops/tests could not run because pytest is not installed; stdlib unittest discovery ran 540 tests successfully.",
+    "p2p_guard": "git grep found no active --modules=p2p, modules=p2p, or Blockdag,miner,p2p hits before build."
+  },
+  "live_health_after_redeploy": {
+    "docker": {
+      "dashboard": "Up healthy",
+      "node": "Up 23 hours on pre-existing image",
+      "pool": "Up on rebuilt image",
+      "status-sampler": "Up on rebuilt image"
+    },
+    "pool_metrics_60s_sample": {
+      "active_connections": 4,
+      "authorized_miners": 4,
+      "ready_miners": 4,
+      "miners_without_current_job": 0,
+      "job_health_ok": 1,
+      "node_mineable": 1,
+      "node_submit_ready": 1,
+      "template_coinbase_valid": 1,
+      "consensus_peers": 11,
+      "fresh_consensus_peers": 9,
+      "template_age_seconds": 0.434,
+      "accepted_blocks_after_pool_restart": 42,
+      "accepted_shares_after_pool_restart": 302
+    },
+    "dashboard": {
+      "state": "Mining",
+      "live_overall": "ok",
+      "miner_inventory": 4,
+      "ready_miner_jobs": 4,
+      "submit_ready": "yes",
+      "getting_fresh_work": "yes",
+      "recent_accepted_block": "yes"
+    },
+    "asic_rows": [
+      {
+        "mac": "2a:71:c7:f5:1f:1e",
+        "ip": "192.168.1.101",
+        "ready": "yes",
+        "health": "ok"
+      },
+      {
+        "mac": "28:e2:97:1e:c0:b5",
+        "ip": "192.168.1.105",
+        "ready": "yes",
+        "health": "ok"
+      },
+      {
+        "mac": "28:e2:97:4d:44:3a",
+        "ip": "192.168.1.106",
+        "ready": "yes",
+        "health": "ok"
+      },
+      {
+        "mac": "28:e2:97:3e:39:63",
+        "ip": "192.168.1.14",
+        "ready": "yes",
+        "health": "ok"
+      }
+    ]
+  },
+  "operator_notes": [
+    "The immediate mining loss after pool restart was caused by stale IP-to-MAC overrides after ASIC DHCP/IP movement, not by chain/node sync.",
+    "The fix was to update POOL_ASIC_MAC_OVERRIDES to the current ARP-observed ASIC map and recreate pool/dashboard/status-sampler.",
+    "Do not restart the live node just to satisfy a mechanical rebuild instruction while 4-ready mining is healthy; deploy the rebuilt node only during a controlled node-specific window."
+  ],
+  "rollback_commands": [
+    "docker tag sha256:c102be94afedbf98a51ce9362809198725b290979682e902096f0619a7e74c50 stack-pool:latest",
+    "docker tag sha256:21e9bf98ae9a60e44c379cde8b29a2ddf40fc061dc987aebd3d6db741a18529b stack-dashboard:latest",
+    "docker tag sha256:6e45c75e084826a9ec44f0bd101b124610b450f31908396b9972d99685cd7739 stack-status-sampler:latest",
+    "docker compose up -d --no-build --no-deps --force-recreate pool dashboard status-sampler"
+  ]
+}

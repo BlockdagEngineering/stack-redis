@@ -1,0 +1,103 @@
+{
+  "document_type": "stack_redis_savepoint",
+  "name": "20260622-2305-pre-rebuild-after-origin-merge-retained",
+  "created_at": "2026-06-22T23:05:00+02:00",
+  "retention": "retain until Jeremy explicitly approves removal",
+  "purpose": "Pre rebuild/redeploy/restart checkpoint after fetching origin refs and merging codex-memory.",
+  "github_sync_summary": {
+    "method": "gh auth setup-git followed by authenticated git fetch --prune origin; no force operations",
+    "memory_merge_commit": "2d96d73",
+    "source_branch_note": "pool, stack-redis, and redis-dash have origin-equivalent file trees but different SHAs because previous pushes used GitHub API-created equivalent commits; no no-op history merge was created."
+  },
+  "repo_heads": {
+    "stack-redis": {
+      "branch": "codex/native-safe-mining-20260620-stack",
+      "head": "b9c959a6461f01fb8d34aa88c2dac5f9a8133fc5"
+    },
+    "pool": {
+      "branch": "codex/native-safe-mining-20260620-pool",
+      "head": "79ad00ee2fc5ee9391cef6ff3353e7304c27e54d"
+    },
+    "redis-dash": {
+      "branch": "codex/native-safe-mining-20260620-dashboard",
+      "head": "915d5c24ebc0eb691e7149103a4ee4b33b86ac56"
+    },
+    "blockdag-corechain": {
+      "branch": "codex/native-safe-mining-20260620-corechain",
+      "head": "7426d7fa1b39a29b57b5e81f24dc2baaede0c54c"
+    },
+    "codex-memory": {
+      "branch": "main",
+      "head": "2d96d73",
+      "merge": "origin/main merged locally after regenerating memory/manifest.json"
+    }
+  },
+  "live_images_before_rebuild": {
+    "dashboard": "sha256:21e9bf98ae9a60e44c379cde8b29a2ddf40fc061dc987aebd3d6db741a18529b",
+    "pool": "sha256:c102be94afedbf98a51ce9362809198725b290979682e902096f0619a7e74c50",
+    "node": "sha256:c1b1c24457dc052f0d4352e16cbfbf99144633d5bc3f5f7cf17fb57475933845",
+    "status-sampler": "sha256:6e45c75e084826a9ec44f0bd101b124610b450f31908396b9972d99685cd7739"
+  },
+  "live_commands_before_rebuild": {
+    "dashboard": "[\"/usr/local/bin/dashboard\"]",
+    "pool": "[\"/usr/local/bin/mining-pool\"]",
+    "node": "[\"/usr/local/bin/docker-entrypoint-nodeworker.sh\",\"/usr/local/bin/nodeworker\",\"--node-binary=/usr/local/bin/blockdag-node\",\"--node-args=--configfile /etc/bdagStack/node.conf\",\"--rpc-url=ws://127.0.0.1:18546\",\"--dag-rpc-url=http://127.0.0.1:38131\",\"--persist-root=/var/lib/bdagStack/nodeworker\",\"--health-min-peers=2\",\"--rollout-window=30m\"]",
+    "status-sampler": "[\"/bin/sh\",\"-c\",\"exec python3 ops/status_sampler.py --loop --no-logs\"]"
+  },
+  "config_hashes_before_rebuild": {
+    ".env": "9c326f2a87529da99b4d0d3180627ba646fb30bc8c3ed00d1ba72ef496fc4eab",
+    "node.conf": "d403a9f2b9b9bc1ebd625d3a9b79cdafd8a693b8546455d3b44fce3a4f69af62",
+    "docker-compose.yml": "0a789362c087010c4c23bb8f639af5350a00c1e929b82d434f76c7c66810b1a1",
+    "docker-compose.override.yml": "2597fc0b686e0597d4c23c6979ecb20942777e27fada2e29aee40d8aca3058f8"
+  },
+  "mining_invariants": {
+    "live_node_modules": "Blockdag,miner",
+    "live_node_args_append": "--modules=Blockdag --modules=miner --miner --miningaddr=<pool payout address>",
+    "p2p_guard": "git grep found no active --modules=p2p, modules=p2p, or Blockdag,miner,p2p hits",
+    "local_p2p_port": 8155,
+    "pool_payout_address": "0x1719E0ee598c15957448D5E568948101DF78e7A0"
+  },
+  "live_health_before_rebuild": {
+    "docker_compose_ps": {
+      "dashboard": "Up 15 hours healthy",
+      "node": "Up 23 hours",
+      "pool": "Up 15 hours",
+      "postgres": "Up 25 hours healthy",
+      "status-sampler": "Restarting (137)"
+    },
+    "dashboard_api": {
+      "state": "Down",
+      "live_overall": "degraded",
+      "miner_activity": "no",
+      "accepting_shares": "no",
+      "submit_ready": "no",
+      "getting_fresh_work": "yes",
+      "node_height": 12315686,
+      "peer_main_order": 12315685,
+      "peers": 5
+    },
+    "pool_metrics": {
+      "job_health_ok": 1,
+      "authorized_miners": 3,
+      "ready_miners": 3,
+      "miners_without_current_job": 0,
+      "template_coinbase_valid": 1,
+      "template_age_seconds": 0.431,
+      "submit_accepted_total": 15337,
+      "submit_rejected_node_syncing_total": 294,
+      "shares_accepted_total": 22834
+    }
+  },
+  "rollback_commands": [
+    "docker tag sha256:c102be94afedbf98a51ce9362809198725b290979682e902096f0619a7e74c50 stack-pool:latest",
+    "docker tag sha256:21e9bf98ae9a60e44c379cde8b29a2ddf40fc061dc987aebd3d6db741a18529b stack-dashboard:latest",
+    "docker tag sha256:c1b1c24457dc052f0d4352e16cbfbf99144633d5bc3f5f7cf17fb57475933845 stack-node:latest",
+    "docker tag sha256:6e45c75e084826a9ec44f0bd101b124610b450f31908396b9972d99685cd7739 stack-status-sampler:latest",
+    "docker compose up -d --no-build pool dashboard status-sampler",
+    "Only restart node if the node image/config was actually changed and pool is stopped first."
+  ],
+  "notes": [
+    "This savepoint intentionally records a pre-existing status-sampler restart loop and dashboard/pool status contradiction.",
+    "Do not treat this as a fully healthy mining baseline; use it as the rollback source state for images/config if the rebuild worsens mining."
+  ]
+}
