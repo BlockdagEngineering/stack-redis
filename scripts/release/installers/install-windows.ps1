@@ -706,10 +706,10 @@ if ($nodeOnlyInstall) {
     Write-Host "=== Starting node ===" -ForegroundColor Cyan
     & docker compose up -d --no-build --pull never node
 } else {
-    Write-Host "=== Starting services ===" -ForegroundColor Cyan
+    Write-Host "=== Starting sync and repair services ===" -ForegroundColor Cyan
     & docker compose pull pool-db
     if ($LASTEXITCODE -ne 0) { throw "docker compose pull pool-db failed." }
-    & docker compose up -d --no-build --pull never pool-db node dashboard
+    & docker compose up -d --no-build --pull never pool-db node dashboard status-sampler watchdog sentinel
 }
 if ($LASTEXITCODE -ne 0) { throw "docker compose up failed." }
 

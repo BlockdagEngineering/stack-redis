@@ -90,9 +90,15 @@ class PayloadInstallerTests(unittest.TestCase):
         )
 
         self.assertIn("docker compose pull pool-db", unix)
-        self.assertIn("docker compose up -d --no-build --pull never pool-db node dashboard", unix)
+        self.assertIn(
+            "docker compose up -d --no-build --pull never pool-db node dashboard status-sampler watchdog sentinel",
+            unix,
+        )
         self.assertIn("docker compose pull pool-db", windows)
-        self.assertIn("docker compose up -d --no-build --pull never pool-db node dashboard", windows)
+        self.assertIn(
+            "docker compose up -d --no-build --pull never pool-db node dashboard status-sampler watchdog sentinel",
+            windows,
+        )
 
 
 class BootstrapPeerDefaultTests(unittest.TestCase):

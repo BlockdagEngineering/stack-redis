@@ -94,6 +94,10 @@ class StackDefaultsTests(unittest.TestCase):
             "POOL_BLOCK_TIMING_CONTROLLER_MAX_TEMPLATE_TTL_MS": "100",
             "POOL_AUTO_TUNE_BLOCK_CANDIDATE_JOB_AGE": "true",
             "POOL_AUTO_TUNE_BLOCK_CANDIDATE_MAX_AGE_MS": "8000",
+            "POOL_STRATUM_SERVER_FIRST_DIFFICULTY_PROBE": "false",
+            "POOL_MIN_PDIFF": "0.05",
+            "POOL_STARTING_PDIFF": "0.05",
+            "POOL_VARDIFF_TARGET_SHARES_PER_MINUTE": "20",
             "POOL_PREEMPTIVE_BLOCK_CANDIDATE_CLEAN_REISSUE_ENABLED": "false",
             "POOL_PREEMPTIVE_BLOCK_CANDIDATE_REFRESH_DELAY_MS": "0",
             "POOL_PREEMPTIVE_BLOCK_CANDIDATE_REFRESH_INTERVAL_MS": "20",
@@ -101,6 +105,24 @@ class StackDefaultsTests(unittest.TestCase):
             "BDAG_ENABLE_NODE_MINING": "0",
             "BDAG_NODE_MODULES": "Blockdag,miner",
             "BDAG_EVM_SYNC_BACKOFF_SECONDS": "60",
+            "BDAG_MINING_IMPERATIVE_REPAIR_ENABLED": "1",
+            "BDAG_MINING_IMPERATIVE_REPAIR_INTERVAL_SECONDS": "30",
+            "BDAG_MINING_IMPERATIVE_GUARD_CONTAINERS": "watchdog,sentinel",
+            "BDAG_WATCHDOG_MINER_DOWN_RESTART_SECONDS": "120",
+            "BDAG_WATCHDOG_MINER_RESTART_COOLDOWN": "300",
+            "BDAG_WATCHDOG_ASIC_HASHRATE_MIN_GHS": "180",
+            "BDAG_WATCHDOG_ASIC_HASHRATE_STALE_SECONDS": "120",
+            "BDAG_WATCHDOG_ASIC_HASHRATE_CONFIRM_SECONDS": "90",
+            "BDAG_WATCHDOG_ASIC_HASHRATE_REPAIR_COOLDOWN": "300",
+            "BDAG_WATCHDOG_ASIC_HASHRATE_STARTUP_GRACE_SECONDS": "180",
+            "BDAG_WATCHDOG_ASIC_API_STALL_STALE_SECONDS": "180",
+            "BDAG_WATCHDOG_ASIC_API_STALL_CONFIRM_SECONDS": "120",
+            "BDAG_WATCHDOG_ASIC_API_STALL_REPAIR_COOLDOWN": "300",
+            "BDAG_WATCHDOG_ASIC_EXTERNAL_POWER_CYCLE_RETRY_SECONDS": "1800",
+            "BDAG_WATCHDOG_ASIC_MISSING_LANE_CONFIRM_SECONDS": "45",
+            "BDAG_WATCHDOG_MINER_USEFUL_WORK_STALL_SECONDS": "150",
+            "BDAG_WATCHDOG_MINER_USEFUL_WORK_STALL_CONFIRM_SECONDS": "60",
+            "BDAG_WATCHDOG_MINER_USEFUL_WORK_STALL_REPAIR_COOLDOWN": "600",
         }
         for key, value in expected.items():
             self.assertEqual(defaults[key], value)
@@ -112,6 +134,23 @@ class StackDefaultsTests(unittest.TestCase):
             compose,
         )
         self.assertIn("POOL_COINBASE_ADDRESS: ${POOL_COINBASE_ADDRESS:-}", compose)
+
+    def test_release_installers_start_repair_guards_without_pool(self) -> None:
+        local_installer = (ROOT_DIR / "ops/release-install.sh").read_text(encoding="utf-8")
+        unix_installer = (
+            ROOT_DIR / "scripts/release/installers/install-unix-common.sh"
+        ).read_text(encoding="utf-8")
+        windows_installer = (
+            ROOT_DIR / "scripts/release/installers/install-windows.ps1"
+        ).read_text(encoding="utf-8")
+        expected_services = "pool-db node dashboard status-sampler watchdog sentinel"
+
+        self.assertIn(f"compose_cmd up -d --no-build --pull never {expected_services}", local_installer)
+        self.assertIn(f"docker compose up -d --no-build --pull never {expected_services}", unix_installer)
+        self.assertIn(f"docker compose up -d --no-build --pull never {expected_services}", windows_installer)
+        self.assertNotIn("pool-db node dashboard pool", local_installer)
+        self.assertNotIn("pool-db node dashboard pool", unix_installer)
+        self.assertNotIn("pool-db node dashboard pool", windows_installer)
 
     def test_stack_defaults_validator_passes(self) -> None:
         result = subprocess.run(

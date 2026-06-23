@@ -897,7 +897,7 @@ publish_p2p_snapshot_archive() {
 }
 
 start_stack() {
-  say "Starting BlockDAG sync services"
+  say "Starting BlockDAG sync and repair services"
   guard_runtime_compose
   python3 ops/automation_control.py ensure-normal \
     --owner release-installer \
@@ -908,7 +908,7 @@ start_stack() {
   else
     warn "Skipping implicit image pulls. Set BDAG_RELEASE_PULL_BASE_IMAGES=1 for an explicit base-image refresh."
   fi
-  compose_cmd up -d --no-build --pull never pool-db node dashboard
+  compose_cmd up -d --no-build --pull never pool-db node dashboard status-sampler watchdog sentinel
   compose_cmd ps
 }
 

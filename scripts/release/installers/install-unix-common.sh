@@ -1095,18 +1095,18 @@ if install_mode_is_node_only; then
 EOF
 else
     echo ""
-    echo "=== Starting sync services ==="
+    echo "=== Starting sync and repair services ==="
     python3 ops/automation_control.py ensure-normal \
         --owner release-installer \
         --owner-unit install-unix-common \
         --reason "Provision default automation control before sync-only first start" >/dev/null
     docker compose pull pool-db
-    docker compose up -d --no-build --pull never pool-db node dashboard
+    docker compose up -d --no-build --pull never pool-db node dashboard status-sampler watchdog sentinel
 
     cat <<'EOF'
 
 =================================================
-  BlockDAG Pool Stack sync services are running.
+  BlockDAG Pool Stack sync and repair services are running.
 =================================================
   Dashboard:  http://localhost:8088
   Stratum:    starts after chain safety gates pass

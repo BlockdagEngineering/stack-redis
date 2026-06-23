@@ -302,10 +302,16 @@ root 41658 41563 0 16:41 ? 00:00:00 /run/rosetta/rosetta /usr/sbin/runuser runus
         ).read_text(encoding="utf-8")
 
         self.assertIn("automation_control.py ensure-normal", local_installer)
-        self.assertIn("compose_cmd up -d --no-build --pull never pool-db node dashboard", local_installer)
+        self.assertIn(
+            "compose_cmd up -d --no-build --pull never pool-db node dashboard status-sampler watchdog sentinel",
+            local_installer,
+        )
         self.assertNotIn("compose_cmd up -d --no-build --pull never\n", local_installer)
         self.assertIn("automation_control.py ensure-normal", payload_installer)
-        self.assertIn("docker compose up -d --no-build --pull never pool-db node dashboard", payload_installer)
+        self.assertIn(
+            "docker compose up -d --no-build --pull never pool-db node dashboard status-sampler watchdog sentinel",
+            payload_installer,
+        )
         self.assertNotIn("docker compose up -d --no-build --pull never\n", payload_installer)
 
     def test_release_installer_extracts_preserved_chain_peer_evidence(self) -> None:
