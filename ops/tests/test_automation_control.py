@@ -424,6 +424,87 @@ class AutomationControlTests(unittest.TestCase):
         self.assertEqual("running", writes[0]["status"])
         self.assertEqual("ok", writes[-1]["status"])
 
+    def test_watchdog_api_stall_miner_restart_uses_cgminer_after_http_restart_resets(self) -> None:
+        self.write_state(
+            self.control_state(
+                "transition_hold",
+                allowed_mutations=[f"{automation_control.ACTION_ASIC_MINER_OPEN_RESTART}:*"],
+            )
+        )
+        action_log = self.root / "action-restart-miners.log"
+        lock_handle = unittest.mock.Mock()
+
+        with self.patch_default_control_paths(), unittest.mock.patch.object(
+            watchdog, "log", lambda _message: None
+        ), unittest.mock.patch.object(
+            watchdog, "record_efficiency_event", lambda *_args, **_kwargs: None
+        ), unittest.mock.patch.object(
+            watchdog, "read_miner_admin_password", return_value="redacted"
+        ), unittest.mock.patch.object(
+            watchdog, "acquire_lock", return_value=lock_handle
+        ), unittest.mock.patch.object(
+            watchdog, "action_log_path", return_value=action_log
+        ), unittest.mock.patch.object(
+            watchdog, "write_action_state", lambda _payload: None
+        ), unittest.mock.patch.object(
+            watchdog, "restart_miner_open", side_effect=RuntimeError("connection reset by peer")
+        ), unittest.mock.patch.object(
+            watchdog, "restart_miner", side_effect=RuntimeError("login connection reset by peer")
+        ), unittest.mock.patch.object(
+            watchdog, "restart_miner_cgminer", return_value={"ip": "192.168.1.16", "status": "ok", "response": {}}
+        ) as cgminer_restart, unittest.mock.patch.object(
+            watchdog, "configure_miner", side_effect=AssertionError("API-stall repair must not rewrite config first")
+        ):
+            result = watchdog.run_miner_restarts(
+                [{"ip": "192.168.1.16", "configured": False, "restart_open_first": True}],
+                "ASIC API-stall watchdog: local API timed out",
+            )
+
+        self.assertEqual("ok", result["status"])
+        self.assertEqual("restart-cgminer-fallback", result["results"][0]["action"])
+        self.assertEqual("connection reset by peer", result["results"][0]["open_restart_error"])
+        self.assertEqual("login connection reset by peer", result["results"][0]["auth_restart_error"])
+        cgminer_restart.assert_called_once_with("192.168.1.16")
+        lock_handle.close.assert_called_once()
+
+    def test_watchdog_api_stall_miner_restart_marks_power_cycle_required_after_all_paths_fail(self) -> None:
+        self.write_state(
+            self.control_state(
+                "transition_hold",
+                allowed_mutations=[f"{automation_control.ACTION_ASIC_MINER_OPEN_RESTART}:*"],
+            )
+        )
+        action_log = self.root / "action-restart-miners.log"
+        lock_handle = unittest.mock.Mock()
+
+        with self.patch_default_control_paths(), unittest.mock.patch.object(
+            watchdog, "log", lambda _message: None
+        ), unittest.mock.patch.object(
+            watchdog, "record_efficiency_event", lambda *_args, **_kwargs: None
+        ), unittest.mock.patch.object(
+            watchdog, "read_miner_admin_password", return_value="redacted"
+        ), unittest.mock.patch.object(
+            watchdog, "acquire_lock", return_value=lock_handle
+        ), unittest.mock.patch.object(
+            watchdog, "action_log_path", return_value=action_log
+        ), unittest.mock.patch.object(
+            watchdog, "write_action_state", lambda _payload: None
+        ), unittest.mock.patch.object(
+            watchdog, "restart_miner_open", side_effect=RuntimeError("connection reset by peer")
+        ), unittest.mock.patch.object(
+            watchdog, "restart_miner", side_effect=RuntimeError("login connection reset by peer")
+        ), unittest.mock.patch.object(
+            watchdog, "restart_miner_cgminer", side_effect=RuntimeError("cgminer returned no data")
+        ):
+            result = watchdog.run_miner_restarts(
+                [{"ip": "192.168.1.16", "configured": False, "restart_open_first": True}],
+                "ASIC API-stall watchdog: local API timed out",
+            )
+
+        self.assertEqual("failed", result["status"])
+        self.assertTrue(result["results"][0]["external_power_cycle_required"])
+        self.assertIn("cgminer returned no data", result["results"][0]["cgminer_restart_error"])
+
     def test_watchdog_flags_missing_managed_asic_lane_when_api_stalls(self) -> None:
         worker = "0x1719E0ee598c15957448D5E568948101DF78e7A0"
         expected_url = pool_ops.default_miner_pool_settings()["pool_url"]

@@ -324,6 +324,9 @@ services:
       BDAG_MINING_IMPERATIVE_REPAIR_INTERVAL_SECONDS: ${BDAG_MINING_IMPERATIVE_REPAIR_INTERVAL_SECONDS:-30}
       # systemd unit checks do not apply inside a container; empty lists skip them.
       BDAG_MINING_IMPERATIVE_GUARD_UNITS: ""
+      # Keep the containerised repair loop alive when compose-managed guard
+      # containers are manually stopped or killed.
+      BDAG_MINING_IMPERATIVE_GUARD_CONTAINERS: ${BDAG_MINING_IMPERATIVE_GUARD_CONTAINERS:-watchdog,sentinel}
       # Compose deployments run self-heal directly inside this ops container.
       BDAG_CHAIN_STATE_SELF_HEAL_UNIT: ""
       BDAG_CHAIN_STATE_SELF_HEAL_COMMAND: ${BDAG_CHAIN_STATE_SELF_HEAL_COMMAND:-ops/chain-state-self-heal.sh --from-systemd}

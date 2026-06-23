@@ -180,6 +180,67 @@ class WatchdogMinerSourceCountTests(unittest.TestCase):
         pool_fault_status["pool_health"]["expired_job_reconnect_failed_no_share"] = True
         self.assertEqual([], watchdog.asic_api_stall_primary_miners(pool_fault_status, stale_seconds=180))
 
+    def test_api_stall_detector_repairs_missing_lanes_when_only_one_asic_is_ready(self) -> None:
+        active = api_stalled_asic_row("192.168.1.106", mac="28:e2:97:4d:44:3a")
+        active.update(
+            {
+                "configured": True,
+                "connected": True,
+                "status": "ok",
+            }
+        )
+        missing = [
+            api_stalled_asic_row("192.168.1.101", mac="2a:71:c7:f5:1f:1e"),
+            api_stalled_asic_row("192.168.1.105", mac="28:e2:97:1e:c0:b5"),
+            api_stalled_asic_row("192.168.1.14", mac="28:e2:97:3e:39:63"),
+        ]
+        for row in missing:
+            row["configured"] = True
+            row["debug"] = {}
+            row["debug_error"] = ""
+            row["issue"] = ""
+            row["status"] = "not_connected"
+        for row in [*missing, active]:
+            row["configured_pool_url"] = row.pop("expected_pool_url")
+            row["intended_wallet"] = row.pop("expected_worker_user")
+        status = {
+            "mining_address": ADDRESS,
+            "pool_health": {
+                "initial_download": False,
+                "valid_share_count": 200,
+            },
+            "pool_metrics": {
+                "active_connections": 1,
+                "authorized_miners": 1,
+                "current_template_seq": 34058,
+                "ready_miners": 1,
+            },
+            "pool_job_state": {
+                "clients": [
+                    {
+                        "asic_mac": "28:e2:97:4d:44:3a",
+                        "authorized": True,
+                        "ready": True,
+                    }
+                ]
+            },
+            "sync_progress": {"remaining_blocks": 0, "status": "synced"},
+            "miner_health": {"connected_count": 1, "managed_count": 4, "miners": [*missing, active]},
+        }
+
+        with mock.patch.object(watchdog, "get_miner_pools", side_effect=TimeoutError("connection reset")), mock.patch.object(
+            watchdog, "get_miner_cgminer_devs", side_effect=TimeoutError("connection reset")
+        ):
+            affected = watchdog.asic_api_stall_primary_miners(status, stale_seconds=180)
+
+        self.assertEqual(
+            ["192.168.1.101", "192.168.1.105", "192.168.1.14"],
+            [item["ip"] for item in affected],
+        )
+        self.assertTrue(all(item["restart_open_first"] for item in affected))
+        self.assertTrue(all(item["pool_job_state_missing_lane"] for item in affected))
+        self.assertTrue(all(item["active_pool_lane_count"] == 1 for item in affected))
+
     def test_api_stall_watchdog_restarts_one_asic_open_first_after_confirmation(self) -> None:
         row = api_stalled_asic_row()
         status = {
@@ -238,6 +299,65 @@ class WatchdogMinerSourceCountTests(unittest.TestCase):
         self.assertEqual({"192.168.1.16": self.now}, result["watchdog_state"]["last_miner_restart_at_by_ip"])
         self.assertEqual({}, result["watchdog_state"]["asic_api_stall_since"])
         self.assertTrue(written)
+
+    def test_api_stall_watchdog_suppresses_retry_until_external_power_cycle_window_expires(self) -> None:
+        row = api_stalled_asic_row()
+        status = {
+            "failures": [],
+            "stack_failures": [],
+            "miner_failures": ["miner request failed for 192.168.1.16/mcb/cgminer?cgminercmd=devs: timed out"],
+            "mining_address": ADDRESS,
+            "nodes": {},
+            "sync_health": {},
+            "sync_progress": {"status": "synced", "remaining_blocks": 0, "nodes": {}},
+            "pool_health": {
+                "initial_download": False,
+                "job_notify_count": 1,
+                "valid_share_count": 20,
+            },
+            "miner_health": {
+                "connected_count": 1,
+                "connected_count_effective": 1,
+                "managed_count": 1,
+                "miners": [row],
+            },
+        }
+        state = {
+            "asic_api_stall_since": {"mac:28:e2:97:4d:44:3a": self.now - 180},
+            "external_power_cycle_required_by_ip": {"192.168.1.16": self.now - 60},
+        }
+        restarts: list[tuple[list[dict[str, object]], str]] = []
+
+        with mock.patch.object(watchdog, "read_state", return_value=state), mock.patch.object(
+            watchdog, "write_state", lambda _payload: None
+        ), mock.patch.object(
+            watchdog, "collect_stack_status", return_value=status
+        ), mock.patch.object(
+            watchdog, "lock_is_held", return_value=False
+        ), mock.patch.object(
+            watchdog, "record_earnings_snapshot", return_value={}
+        ), mock.patch.object(
+            watchdog, "status_payload_has_tracking_gap", return_value=False
+        ), mock.patch.object(
+            watchdog, "node_mining_template_support_should_repair", return_value=False
+        ), mock.patch.object(
+            watchdog, "record_efficiency_event", lambda *_args, **_kwargs: None
+        ), mock.patch.object(
+            watchdog, "log", lambda _message: None
+        ), mock.patch.object(
+            watchdog,
+            "run_miner_restarts",
+            side_effect=lambda targets, reason: restarts.append((targets, reason))
+            or {"status": "ok", "target_count": len(targets), "results": []},
+        ):
+            result = watchdog.check_once(3, 1800, 5, 900, repair=True)
+
+        self.assertEqual("asic_api_stall", result["watchdog_state"]["last_status"])
+        self.assertEqual([], restarts)
+        self.assertEqual(
+            {"192.168.1.16": self.now - 60},
+            result["watchdog_state"]["external_power_cycle_required_by_ip"],
+        )
 
     def test_failed_expired_job_reconnect_without_clients_restarts_pool(self) -> None:
         state: dict[str, object] = {}

@@ -1,0 +1,8 @@
+{
+  "savepoint_id": "20260623-080147-pre-asic-4028-restart-test",
+  "created_at": "2026-06-23T08:01:47+02:00",
+  "purpose": "Before sending one cgminer/gsminer API restart command over port 4028 to failed ASIC 192.168.1.101 only.",
+  "target": "192.168.1.101",
+  "scope": "failed ASIC hardware command only; no healthy ASIC, node, pool, dashboard, container restart",
+  "rollback": ["No software rollback for hardware command; if harmful, power-cycle only target ASIC 192.168.1.101"]
+}

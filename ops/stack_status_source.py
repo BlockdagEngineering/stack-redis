@@ -89,6 +89,32 @@ def validate_repair_status_payload(payload: dict[str, Any], source: str) -> None
         )
 
 
+def normalize_repair_status_payload(payload: dict[str, Any], source: str) -> dict[str, Any]:
+    """Accept Redis live dashboard payloads that carry repair-grade ASIC data.
+
+    Older dashboard payloads were too compact for repair actors and must still
+    fall back to in-process collection. Redis live status includes full
+    miner_health/pool health, but not the legacy failures/warnings keys.
+    """
+    if isinstance(payload.get("failures"), list) and isinstance(payload.get("warnings"), list):
+        return payload
+    if str(payload.get("source") or "") != "redis-live":
+        return payload
+    if not isinstance(payload.get("miner_health"), dict):
+        return payload
+    if not str(payload.get("overall") or "").strip():
+        return payload
+    result = dict(payload)
+    result.setdefault("failures", [])
+    result.setdefault("warnings", result.get("degraded_reasons") if isinstance(result.get("degraded_reasons"), list) else [])
+    if not isinstance(result.get("failures"), list):
+        result["failures"] = []
+    if not isinstance(result.get("warnings"), list):
+        result["warnings"] = []
+    result["repair_schema_normalized_from"] = source
+    return result
+
+
 def collect_stack_status(
     *,
     include_logs: bool = True,
@@ -117,7 +143,7 @@ def collect_stack_status(
         urls = [collector_url] if collector_url else _env_urls()
         for url in [item for item in urls if item]:
             try:
-                payload = fetch_http_status(url, timeout=timeout)
+                payload = normalize_repair_status_payload(fetch_http_status(url, timeout=timeout), url)
                 validate_repair_status_payload(payload, url)
                 return _annotate(payload, "status-http", errors)
             except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError, StackStatusUnavailable) as exc:

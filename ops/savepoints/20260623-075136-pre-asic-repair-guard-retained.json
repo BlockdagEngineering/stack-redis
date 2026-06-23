@@ -1,0 +1,121 @@
+{
+  "document_type": "stack_redis_savepoint",
+  "savepoint_id": "20260623-075136-pre-asic-repair-guard-retained",
+  "created_at": "2026-06-23T07:51:36+02:00",
+  "timezone": "Africa/Johannesburg",
+  "purpose": "Retained pre-mitigation savepoint before starting guard containers and allowing ASIC-only software recovery for three Goldshell controller/API stalled lanes.",
+  "retain_until_user_explicitly_removes": true,
+  "source_refs": {
+    "stack_redis": {
+      "path": "/home/jeremy/blockdag-source/stack-redis",
+      "head": "c2ce7fb99ce1cd01855af8a21060ee84ba0de28c",
+      "branch_status": "codex/native-safe-mining-20260620-stack...origin/codex/native-safe-mining-20260620-stack ahead 17 behind 14",
+      "dirty_summary": [
+        "docker-compose.yml",
+        "ops/status_sampler.py",
+        "ops/stack_status_source.py",
+        "ops/tests/test_stack_status_source.py",
+        "ops/tests/test_status_sampler_mining_imperative.py",
+        "ops/tests/test_watchdog_miner_source_counts.py",
+        "ops/watchdog.py"
+      ]
+    },
+    "redis_dash": {
+      "path": "/home/jeremy/blockdag-source/redis-dash",
+      "head": "8e82f0bc75907c0d8db9c9adbba4cb99c4db771b",
+      "dirty_summary": [
+        "main.go",
+        "status_test.go"
+      ]
+    }
+  },
+  "validated_source_changes_before_live_mitigation": {
+    "stack_redis_tests": [
+      "python3 -m unittest ops.tests.test_watchdog_miner_source_counts ops.tests.test_status_sampler_mining_imperative",
+      "python3 -m unittest ops.tests.test_automation_control ops.tests.test_stack_naming_coherence ops.tests.test_deployment_portability",
+      "python3 -m unittest ops.tests.test_stack_status_source ops.tests.test_watchdog_miner_source_counts"
+    ],
+    "redis_dash_tests": [
+      "gofmt -w main.go status_test.go",
+      "go test ./..."
+    ],
+    "result": "all listed tests passed before live guard-container start; patched dry-run with BDAG_STATUS_SOURCE_URL=http://127.0.0.1:8088/api/status selected last_status=asic_api_stall for the three stalled ASIC lanes"
+  },
+  "live_state_before_mitigation": {
+    "docker_compose_ps": {
+      "node": "running",
+      "pool": "running",
+      "dashboard": "running healthy",
+      "status_sampler": "running",
+      "postgres": "running healthy",
+      "watchdog": "exited 137 since 2026-06-21T19:52:33Z",
+      "sentinel": "exited 137 since 2026-06-21T19:52:33Z",
+      "miner_route": "exited 137 since 2026-06-21T19:52:33Z"
+    },
+    "image_ids": {
+      "node": "sha256:8509e30ad24d5241e35b57accd4996afd7e8f5bb1d0aa46e6c93202f65e156b1",
+      "pool": "sha256:256a94ba6e487cc9bcea85649b717a8a26f4fe668faaf68fbacb0d1da4ad7b05",
+      "dashboard": "sha256:bd8652fe9c1b57ac38117b503b8c64e838d30bf00a1e8f4ac73e269b2748a27d",
+      "status_sampler": "sha256:819fbe594a499e24ed71efdad4e938e73896d5e3ce5c28c2793742df933211dc",
+      "watchdog": "sha256:355e333d19d056bd6e5ed8f9b7231747bd0ad72ca26743a796065f842ccddf51",
+      "sentinel": "sha256:1c1e14c011edba83f7a45a24382cebefca8017e9fd23f1109bfd6cc6f774aa80"
+    },
+    "node_entrypoint": "/usr/local/bin/docker-entrypoint-nodeworker.sh /usr/local/bin/nodeworker --node-binary=/usr/local/bin/blockdag-node --node-args=--configfile /etc/bdagStack/node.conf",
+    "pool_entrypoint": "/usr/local/bin/mining-pool",
+    "dashboard_entrypoint": "/usr/local/bin/dashboard",
+    "status_sampler_entrypoint": "python3 ops/status_sampler.py --loop --no-logs",
+    "watchdog_entrypoint": "python3 ops/automation_control.py ensure-normal ... && exec python3 ops/watchdog.py --loop",
+    "sentinel_entrypoint": "python3 ops/automation_control.py ensure-normal ... && while true; do python3 ops/stack_sentinel.py; sleep ...; done"
+  },
+  "asic_condition_before_mitigation": {
+    "expected_managed_asics": 4,
+    "ready_or_authorized_lanes": "1 authorized lane, sometimes 0 ready during transient invalidated-current-job windows",
+    "productive_lane": {
+      "ip": "192.168.1.106",
+      "mac": "28:e2:97:4d:44:3a",
+      "telemetry": "Goldshell X100 API healthy, active pool set to local stratum, accepted blocks recent"
+    },
+    "stalled_lanes": [
+      {
+        "ip": "192.168.1.101",
+        "mac": "2a:71:c7:f5:1f:1e",
+        "evidence": "ARP reachable; Goldshell MCB endpoints reset; Stratum connects then closes before subscribe/authorize"
+      },
+      {
+        "ip": "192.168.1.105",
+        "mac": "28:e2:97:1e:c0:b5",
+        "evidence": "ARP reachable; Goldshell MCB endpoints reset; Stratum connects then closes before subscribe/authorize"
+      },
+      {
+        "ip": "192.168.1.14",
+        "mac": "28:e2:97:3e:39:63",
+        "evidence": "ARP reachable; Goldshell MCB endpoints reset/EOF; Stratum connects then closes before subscribe/authorize"
+      }
+    ],
+    "pool_backend": "accepted blocks continuing; native chain synced/current; pool/node path not the primary current fault"
+  },
+  "source_fix_intent": {
+    "watchdog": "Detect ASIC API-stall/missing-lane failures from current pool metrics without legacy job_notify_count, and allow one-at-a-time ASIC open restart even when only one ASIC lane remains healthy.",
+    "status_sampler": "Compose deployments can keep watchdog/sentinel guard containers alive with BDAG_MINING_IMPERATIVE_GUARD_CONTAINERS=watchdog,sentinel.",
+    "stack_status_source": "Accept Redis live dashboard status as repair-grade only when source=redis-live, overall is present, and miner_health exists; this preserves per-ASIC rows for watchdog repairs.",
+    "dashboard": "Report Mining Degraded when expected configured ASIC fleet is not ready, instead of showing full Mining OK for one productive lane."
+  },
+  "allowed_live_mitigation_from_this_savepoint": [
+    "Start watchdog and sentinel only.",
+    "Allow watchdog to attempt one ASIC open restart at a time for confirmed stalled ASIC lanes.",
+    "Do not restart node or pool for this ASIC-controller failure.",
+    "Do not rewrite ASIC pool configuration unless MCB /mcb/pools later becomes readable and proves it is wrong."
+  ],
+  "rollback_commands": [
+    "docker compose stop watchdog sentinel",
+    "docker start watchdog sentinel can be undone by docker stop watchdog sentinel",
+    "No node/pool/dashboard/image rollback is required for the planned guard-container start because node, pool, dashboard, and status-sampler are not changed by that action.",
+    "If source changes need to be reverted before commit, use git diff to inspect and git restore only the files listed in source_refs.dirty_summary after confirming with the user."
+  ],
+  "hard_safety_rules": [
+    "Do not start live node with p2p module.",
+    "Do not restart node or pool to repair ASIC MCB/API reset stalls.",
+    "Protect the productive 192.168.1.106 / 28:e2:97:4d:44:3a lane while repairing failed lanes one at a time.",
+    "A dashboard status of Mining OK is not sufficient when expected ASIC ready count is below configured count."
+  ]
+}

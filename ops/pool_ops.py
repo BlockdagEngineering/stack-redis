@@ -14,6 +14,7 @@ import platform
 import re
 import shlex
 import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -346,6 +347,7 @@ NODE_LOG_TS_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})\|(\d{2}:\d{2}:\d{2})(?:\.(\d{
 
 MINER_BACKUP_DIR = RUNTIME_DIR / "miner-backups"
 MINER_HTTP_TIMEOUT = env_float("BDAG_MINER_HTTP_TIMEOUT", 2.5, minimum=0.1)
+MINER_CGMINER_PORT = env_int("BDAG_MINER_CGMINER_PORT", 4028, minimum=1)
 MINER_HASHRATE_PROBE_TIMEOUT = env_float("BDAG_MINER_HASHRATE_PROBE_TIMEOUT", 1.0, minimum=0.1)
 MINER_HASHRATE_PROBE_WORKERS = env_int("BDAG_MINER_HASHRATE_PROBE_WORKERS", 8, minimum=1)
 MINER_SCAN_TIMEOUT = env_float("BDAG_MINER_SCAN_TIMEOUT", 0.8, minimum=0.1)
@@ -2678,7 +2680,12 @@ def get_miner_settings(ip: str, timeout: float = MINER_HTTP_TIMEOUT) -> dict[str
 
 
 def get_miner_cgminer_devs(ip: str, timeout: float = MINER_HTTP_TIMEOUT) -> dict[str, Any]:
-    response = miner_request(ip, "/mcb/cgminer?cgminercmd=devs", timeout=timeout)
+    try:
+        response = miner_request(ip, "/mcb/cgminer?cgminercmd=devs", timeout=timeout)
+    except MinerAPIError:
+        direct = get_miner_cgminer_devs_direct(ip, timeout=timeout)
+        direct["direct_cgminer_api"] = True
+        return direct
     body = response["body"]
     if not isinstance(body, dict):
         raise MinerAPIError(f"{ip} did not return cgminer device data")
@@ -2686,6 +2693,73 @@ def get_miner_cgminer_devs(ip: str, timeout: float = MINER_HTTP_TIMEOUT) -> dict
     if not isinstance(data, list) or not data or not isinstance(data[0], dict):
         raise MinerAPIError(f"{ip} cgminer device data was empty")
     return data[0]
+
+
+def cgminer_request(ip: str, command: str, timeout: float = MINER_HASHRATE_PROBE_TIMEOUT) -> dict[str, Any]:
+    if not is_lan_ipv4(ip):
+        raise MinerAPIError(f"refusing non-LAN miner address: {ip}")
+    payload = json.dumps({"command": command, "id": 1}).encode("utf-8")
+    try:
+        with socket.create_connection((ip, MINER_CGMINER_PORT), timeout=timeout) as sock:
+            sock.settimeout(timeout)
+            sock.sendall(payload)
+            chunks: list[bytes] = []
+            while True:
+                try:
+                    chunk = sock.recv(65536)
+                except TimeoutError:
+                    break
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                if len(b"".join(chunks)) > 1_000_000:
+                    break
+    except (OSError, TimeoutError) as exc:
+        raise MinerAPIError(f"miner cgminer request failed for {ip}:{MINER_CGMINER_PORT} {command}: {exc}") from exc
+    raw = b"".join(chunks).rstrip(b"\x00").decode("utf-8", "replace").strip()
+    if not raw:
+        raise MinerAPIError(f"miner cgminer request returned no data for {ip}:{MINER_CGMINER_PORT} {command}")
+    try:
+        body = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise MinerAPIError(f"miner cgminer request returned invalid JSON for {ip}:{MINER_CGMINER_PORT} {command}") from exc
+    if not isinstance(body, dict):
+        raise MinerAPIError(f"miner cgminer request returned unexpected data for {ip}:{MINER_CGMINER_PORT} {command}")
+    return body
+
+
+def get_miner_cgminer_devs_direct(ip: str, timeout: float = MINER_HASHRATE_PROBE_TIMEOUT) -> dict[str, Any]:
+    body = cgminer_request(ip, "devs", timeout=timeout)
+    devs = body.get("DEVS")
+    if not isinstance(devs, list) or not devs or not isinstance(devs[0], dict):
+        raise MinerAPIError(f"{ip} direct cgminer device data was empty")
+    dev = devs[0]
+    fan0 = dev.get("fan0")
+    fan1 = dev.get("fan1")
+    temp = dev.get("tstemp-0") or dev.get("temp")
+    return {
+        "minerstatus": dev.get("Status") or dev.get("Status".upper()),
+        "hashrate": dev.get("MHS 20s") or dev.get("MHS rolling") or dev.get("hashrate"),
+        "av_hashrate": dev.get("MHS av") or dev.get("av_hashrate"),
+        "accepted": dev.get("Accepted") or dev.get("accepted"),
+        "rejected": dev.get("Rejected") or dev.get("rejected"),
+        "hwerrors": dev.get("Hardware Errors") or dev.get("hwerrors"),
+        "hwerr_ration": dev.get("hwerr-ration") or dev.get("hwerr_ration"),
+        "temp": f"{temp} °C" if temp is not None and "°" not in str(temp) else temp,
+        "fanspeed": f"{fan0} rpm / {fan1} rpm" if fan0 is not None and fan1 is not None else dev.get("fanspeed"),
+        "valid": dev.get("valid") or dev.get("Enabled"),
+        "time": dev.get("Device Elapsed") or dev.get("time"),
+        "powerplan": dev.get("powerplan"),
+        "clock": dev.get("clock"),
+        "voltage": dev.get("voltage"),
+        "direct_cgminer_api": True,
+        "raw_status": dev.get("Status"),
+    }
+
+
+def restart_miner_cgminer(ip: str, timeout: float = MINER_HTTP_TIMEOUT) -> dict[str, Any]:
+    response = cgminer_request(ip, "restart", timeout=timeout)
+    return {"ip": ip, "status": "ok", "response": response, "cgminer_port": MINER_CGMINER_PORT}
 
 
 def discover_miner(ip: str, timeout: float = MINER_SCAN_TIMEOUT) -> dict[str, Any] | None:

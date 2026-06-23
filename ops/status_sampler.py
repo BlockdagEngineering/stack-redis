@@ -81,6 +81,7 @@ MINING_IMPERATIVE_GUARD_UNITS = split_env_list(
     "BDAG_MINING_IMPERATIVE_GUARD_UNITS",
     "bdag-stack-sentinel.timer,bdag-watchdog.service",
 )
+MINING_IMPERATIVE_GUARD_CONTAINERS = split_env_list("BDAG_MINING_IMPERATIVE_GUARD_CONTAINERS", "")
 MINING_IMPERATIVE_START_POOL_ENABLED = env_bool("BDAG_MINING_IMPERATIVE_START_POOL_ENABLED", True)
 MINING_IMPERATIVE_START_IDLE_SYNCED_POOL = env_bool("BDAG_MINING_IMPERATIVE_START_IDLE_SYNCED_POOL", False)
 MINING_IMPERATIVE_MINER_TRACKING_REPAIR_ENABLED = env_bool(
@@ -470,6 +471,71 @@ def ensure_user_unit(unit: str, payload: dict[str, Any]) -> bool:
         "mining_imperative_user_unit_repair_failed",
         "critical",
         f"Mining imperative guard could not repair {unit}",
+        details,
+        payload,
+    )
+    return False
+
+
+def guard_container_running(container: str) -> tuple[bool, dict[str, Any]]:
+    result = run(["docker", "inspect", "-f", "{{.State.Running}} {{.State.Status}}", container], timeout=20)
+    text = result.stdout.strip()
+    return result.ok and text.split()[:1] == ["true"], {
+        "container": container,
+        "inspect": result.as_dict(),
+        "inspect_state": text,
+    }
+
+
+def ensure_guard_container(container: str, payload: dict[str, Any]) -> bool:
+    container = container.strip()
+    if not container:
+        return False
+    running, details = guard_container_running(container)
+    if running:
+        return False
+    if not automation_repair_mutation_allowed(
+        automation_control.ACTION_CONTAINER_START,
+        target=container,
+        reason=f"repair mining guard container {container}",
+        payload=payload,
+        event_type="mining_imperative_guard_container_start_blocked",
+        message=f"Mining imperative left {container} stopped because automation control blocked container start",
+        severity="warning",
+    ):
+        return False
+    compose = run(
+        docker_compose_command("up", "-d", "--no-deps", "--no-build", "--pull", "never", container),
+        timeout=180,
+    )
+    details["compose"] = compose.as_dict()
+    if compose.ok:
+        log(f"mining imperative started guard container {container}")
+        record_incident(
+            "mining_imperative_started_guard_container",
+            "critical",
+            f"Mining imperative started guard container {container}",
+            details,
+            payload,
+        )
+        return True
+    fallback = run(["docker", "start", container], timeout=60)
+    details["docker_start"] = fallback.as_dict()
+    if fallback.ok:
+        log(f"mining imperative started guard container {container} with docker start fallback")
+        record_incident(
+            "mining_imperative_started_guard_container",
+            "critical",
+            f"Mining imperative started guard container {container} with docker start fallback",
+            details,
+            payload,
+        )
+        return True
+    log(f"mining imperative could not start guard container {container}: compose_rc={compose.returncode}")
+    record_incident(
+        "mining_imperative_guard_container_start_failed",
+        "critical",
+        f"Mining imperative could not start guard container {container}",
         details,
         payload,
     )
@@ -2059,6 +2125,9 @@ def mining_imperative_repair(payload: dict[str, Any]) -> dict[str, Any]:
     for unit in MINING_IMPERATIVE_GUARD_UNITS:
         if ensure_user_unit(unit, payload):
             actions.append(f"repaired_unit:{unit}")
+    for container in MINING_IMPERATIVE_GUARD_CONTAINERS:
+        if ensure_guard_container(container, payload):
+            actions.append(f"repaired_guard_container:{container}")
 
     divergence_reasons = public_chain_divergence_reasons(payload)
     if divergence_reasons:

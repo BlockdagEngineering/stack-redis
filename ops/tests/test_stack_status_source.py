@@ -60,6 +60,30 @@ class StackStatusSourceTests(unittest.TestCase):
         self.assertEqual("status-http", status["stack_status_source"]["source"])
         self.assertEqual("ok", status["overall"])
 
+    def test_redis_live_http_status_is_normalized_for_repair_actors(self) -> None:
+        http_payload = {
+            "source": "redis-live",
+            "overall": "ok",
+            "miner_health": {"configured_count": 4, "miners": []},
+            "pool_health": {"source_job_health": {"ready_miners": 1}},
+        }
+
+        with mock.patch.object(stack_status_source, "_fixture_payload", return_value=None), mock.patch.object(
+            stack_status_source, "_env_urls", return_value=["http://dashboard:8088/api/status"]
+        ), mock.patch.object(
+            stack_status_source, "fetch_http_status", return_value=http_payload
+        ), mock.patch.object(
+            stack_status_source,
+            "collect_status_cached",
+            side_effect=AssertionError("redis live HTTP status should be normalized, not discarded"),
+        ):
+            status = stack_status_source.collect_stack_status()
+
+        self.assertEqual("status-http", status["stack_status_source"]["source"])
+        self.assertEqual([], status["failures"])
+        self.assertEqual([], status["warnings"])
+        self.assertEqual("http://dashboard:8088/api/status", status["repair_schema_normalized_from"])
+
 
 if __name__ == "__main__":
     unittest.main()

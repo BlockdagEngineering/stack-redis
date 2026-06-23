@@ -22,6 +22,7 @@ class StatusSamplerMiningImperativeTests(unittest.TestCase):
             name: getattr(status_sampler, name)
             for name in (
                 "MINING_IMPERATIVE_REPAIR_ENABLED",
+                "MINING_IMPERATIVE_GUARD_CONTAINERS",
                 "MINING_IMPERATIVE_GUARD_UNITS",
                 "MINING_IMPERATIVE_START_POOL_ENABLED",
                 "MINING_IMPERATIVE_START_IDLE_SYNCED_POOL",
@@ -79,6 +80,7 @@ class StatusSamplerMiningImperativeTests(unittest.TestCase):
         status_sampler.config_value = lambda name, default="": os.environ.get(name, default)
         status_sampler.log = lambda _message: None
         status_sampler.MINING_IMPERATIVE_REPAIR_ENABLED = True
+        status_sampler.MINING_IMPERATIVE_GUARD_CONTAINERS = []
         status_sampler.MINING_IMPERATIVE_START_POOL_ENABLED = True
         status_sampler.MINING_IMPERATIVE_START_IDLE_SYNCED_POOL = False
         status_sampler.MINING_IMPERATIVE_MINER_TRACKING_REPAIR_ENABLED = True
@@ -927,6 +929,29 @@ class StatusSamplerMiningImperativeTests(unittest.TestCase):
 
         self.assertIn(["systemctl", "--user", "enable", "--now", "bdag-stack-sentinel.timer"], commands)
         self.assertIn("repaired_unit:bdag-stack-sentinel.timer", repair["actions"])
+
+    def test_restarts_stopped_guard_container_in_compose_mode(self) -> None:
+        commands = []
+        status_sampler.MINING_IMPERATIVE_GUARD_UNITS = []
+        status_sampler.MINING_IMPERATIVE_GUARD_CONTAINERS = ["watchdog", "sentinel"]
+
+        def fake_run(command: list[str], timeout: int = 20):
+            commands.append(command)
+            if command[:4] == ["docker", "inspect", "-f", "{{.State.Running}} {{.State.Status}}"]:
+                if command[-1] == "watchdog":
+                    return self.command_result(command, 0, "false exited\n", "")
+                return self.command_result(command, 0, "true running\n", "")
+            return self.command_result(command)
+
+        status_sampler.run = fake_run
+        payload = self.stopped_pool_payload(sync_status="synced", remaining_blocks=0)
+        payload["containers"][status_sampler.POOL_CONTAINER]["running"] = True
+
+        repair = status_sampler.mining_imperative_repair(payload)
+
+        self.assertIn("repaired_guard_container:watchdog", repair["actions"])
+        self.assertNotIn("repaired_guard_container:sentinel", repair["actions"])
+        self.assertTrue(any("watchdog" in command and "up" in command for command in commands))
 
     def test_repairs_missing_tracked_miners_from_pool_activity(self) -> None:
         status_sampler.MINING_IMPERATIVE_GUARD_UNITS = []
