@@ -1,0 +1,51 @@
+{
+  "savepoint_id": "20260623-202511-pre-redis-dash-dashboard-redeploy",
+  "created_at": "2026-06-23T20:25:11+02:00",
+  "purpose": "Before rebuilding and recreating only the redis-dash dashboard service from the pulled redis-dash origin/main state.",
+  "live_mutation_scope": "dashboard service only; do not restart node, pool, pool-db, status-sampler, watchdog, sentinel, or ASICs",
+  "source_refs": {
+    "stack_redis": {
+      "path": "/home/jeremy/blockdag-source/stack-redis",
+      "branch": "codex/native-safe-mining-20260620-stack",
+      "head": "cbb783b",
+      "status": "clean and aligned with origin/codex/native-safe-mining-20260620-stack"
+    },
+    "redis_dash": {
+      "path": "/home/jeremy/blockdag-source/redis-dash",
+      "branch": "main",
+      "head": "acc8a96",
+      "status": "clean and aligned with origin/main"
+    }
+  },
+  "predeploy_dashboard": {
+    "container": "dashboard",
+    "container_id": "db3beba054220ff8fa96045f0145cc32dcbdc3ae00435c39f97a82160344ceef",
+    "image_tag": "stack-dashboard",
+    "image_id": "sha256:bd8652fe9c1b57ac38117b503b8c64e838d30bf00a1e8f4ac73e269b2748a27d",
+    "created_at": "2026-06-22T21:41:46.612134685Z",
+    "state": "running",
+    "health": "healthy",
+    "bind": "127.0.0.1:8088->8088/tcp",
+    "api_status": {
+      "url": "http://127.0.0.1:8088/api/status",
+      "overall": "degraded",
+      "mode": "waiting_for_live_data",
+      "sync_status": "synced"
+    }
+  },
+  "predeploy_stack_notes": {
+    "node": "running; do not touch",
+    "pool": "running; do not touch",
+    "pool_db": "running healthy; do not touch",
+    "status_sampler": "running; do not touch",
+    "sentinel": "running; do not touch",
+    "watchdog": "pre-existing restarting state with exit 137; not caused by this dashboard redeploy and not in scope for this mutation"
+  },
+  "rollback_commands": [
+    "cd /home/jeremy/blockdag-source/stack-redis",
+    "docker tag sha256:bd8652fe9c1b57ac38117b503b8c64e838d30bf00a1e8f4ac73e269b2748a27d stack-dashboard:latest",
+    "docker compose up -d --no-deps --no-build --pull never --force-recreate dashboard",
+    "curl -fsS http://127.0.0.1:8088/ >/dev/null",
+    "docker compose ps dashboard"
+  ]
+}
