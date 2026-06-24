@@ -1,0 +1,81 @@
+{
+  "savepoint_id": "20260624-200756-pre-local-pool-repair",
+  "created_at": "2026-06-24T20:07:56+02:00",
+  "purpose": "Before repairing the local pool after the live stack came up with only node and pool-db running, pool/dashboard/ops stopped, and node mounted to the wrong datadir.",
+  "source_ref": {
+    "repo": "/home/jeremy/blockdag-source/stack-redis",
+    "branch": "codex/native-safe-mining-20260620-stack",
+    "head": "aed8abe",
+    "status": "clean and aligned with origin/codex/native-safe-mining-20260620-stack"
+  },
+  "observed_live_state": {
+    "dashboard": "exited 0 about 4 hours before repair",
+    "pool": "exited 0 about 4 hours before repair",
+    "status_sampler": "exited 137 about 4 hours before repair",
+    "watchdog": "exited 137 about 4 hours before repair",
+    "sentinel": "exited 137 about 4 hours before repair",
+    "node": "running from stale repair/container create path",
+    "pool_db": "running healthy"
+  },
+  "critical_fault": {
+    "live_node_bind": "/home/jeremy/blockdag-source/stack-redis/data/node:/var/lib/bdagStack/node:rw",
+    "rendered_compose_node_bind": "/home/jeremy/blockdag-source/stack/data/node:/var/lib/bdagStack/node",
+    "risk": "node is running from the wrong datadir, so pool must not mine from this node state"
+  },
+  "live_images_before_repair": {
+    "node": "sha256:8509e30ad24d5241e35b57accd4996afd7e8f5bb1d0aa46e6c93202f65e156b1",
+    "pool": "sha256:256a94ba6e487cc9bcea85649b717a8a26f4fe668faaf68fbacb0d1da4ad7b05",
+    "dashboard": "sha256:1b957c552aca87894f99a91a7bced29b6e26f994dcf2948a1576b572030ad95d",
+    "status_sampler": "sha256:819fbe594a499e24ed71efdad4e938e73896d5e3ce5c28c2793742df933211dc",
+    "watchdog": "sha256:355e333d19d056bd6e5ed8f9b7231747bd0ad72ca26743a796065f842ccddf51",
+    "sentinel": "sha256:1c1e14c011edba83f7a45a24382cebefca8017e9fd23f1109bfd6cc6f774aa80"
+  },
+  "repair_intent": [
+    "Rebuild ops images from current stack-redis source so sentinel/watchdog/status-sampler include commit aed8abe compose override handling.",
+    "Force-recreate node from current rendered compose only, restoring the correct /home/jeremy/blockdag-source/stack/data/node bind.",
+    "Start dashboard/status-sampler/watchdog/sentinel and pool after node RPC is reachable.",
+    "Verify native sync, template health, pool job-state, ASIC readiness, and accepted block flow."
+  ],
+  "post_repair_observation": {
+    "observed_at": "2026-06-24T20:35:30+02:00",
+    "node_bind_after_recreate": "/home/jeremy/blockdag-source/stack/data/node:/var/lib/bdagStack/node:rw",
+    "node_compose_version_label_after_recreate": "2.40.3",
+    "template_health": {
+      "reason_code": "ok",
+      "mineable_now": true,
+      "submit_ready": true,
+      "template_coinbase_valid": true,
+      "template_coinbase_address": "0x1719E0ee598c15957448D5E568948101DF78e7A0",
+      "p2p_mining_fresh": true
+    },
+    "pool_job_state": {
+      "status": "ok",
+      "reason_code": "ok",
+      "active_connections": 4,
+      "authorized_connections": 4,
+      "ready_connections": 4,
+      "current_template_seq": 632,
+      "last_broadcast_age_ms": 155,
+      "ready_lanes": [
+        "192.168.1.105 28:e2:97:1e:c0:b5",
+        "192.168.1.14 28:e2:97:3e:39:63",
+        "192.168.1.106 28:e2:97:4d:44:3a",
+        "192.168.1.101 2a:71:c7:f5:1f:1e"
+      ]
+    },
+    "dashboard_status_window": [
+      "2026-06-24T20:31:51+02:00 ok/mining synced submit_success=51 submit_errors=0 valid_shares=343",
+      "2026-06-24T20:35:12+02:00 ok/mining synced submit_success=147 submit_errors=0 valid_shares=737"
+    ],
+    "notes": [
+      "The pool recovered by rebuilding stale ops images, recreating node from current compose, and waiting for native node catch-up; no unsafe mining was forced.",
+      "The node briefly returned Node is Syncing to getBlockTemplate after first reaching the tip; during this interval pool correctly held/invalidated unsafe jobs and later resumed when getTemplateHealth returned ok.",
+      "ASIC 192.168.1.101 reached the pool after backend safety recovered; its own /mcb/pools config already pointed at stratum+tcp://192.168.1.100:3334 with the configured payout user."
+    ]
+  },
+  "manual_rollback_notes": [
+    "This savepoint records the broken pre-repair state for evidence, not as a desired mining rollback.",
+    "Do not restore the wrong node datadir bind unless explicitly investigating the failure offline.",
+    "If the repair worsens live state, stop pool first, then recreate node from docker compose config with the correct bind, and keep pool gated until getTemplateHealth is ok."
+  ]
+}
